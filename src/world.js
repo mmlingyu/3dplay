@@ -9,6 +9,7 @@ import { CreationWorld } from './creation-world.js';
 import { BOUNCE_ISLAND, PARK_NAME, PLAY_MODES, bounceSurface, onBounceIsland, parkPadAt, playBounce, playMode } from './bounce-data.js';
 import { BALLOON_BASE, BALLOON_CONTROL, BALLOON_NAME, balloonAngleFrom, balloonHomeAngle, balloonHomeDuration, balloonLook, balloonNearBase, balloonReturnPose, balloonScaleFrom, balloonSteer, balloonTourPoint, onBalloonLawn } from './balloon-data.js';
 import { chooseDockSite } from './realm-data.js';
+import { ballGravity, playerFall } from './motion-gravity.js';
 import { trackListeners, trackWorldCreated, trackWorldReleased } from './scene-stats.js';
 
 const C = { grass: '#a8bf7a', leaf: '#789957', leafLight: '#b6c785', soil: '#b48d64', wood: '#b97944', stone: '#8b9c9b', cream: '#fff5db', roof: '#c98063', water: '#8ebdc0', green: '#426b58' };
@@ -1080,8 +1081,8 @@ export class RiverWorld {
   updateBalls(dt){
     const steps=3,step=dt/steps;
     for(const ball of this.balls){ball.age+=dt;for(let k=0;k<steps;k++){const h=this.surfaceAt(ball.p.x,ball.p.z),r=.22;
-        if(ball.p.y<=h+r+.025&&ball.v.y<=0){ball.p.y=h+r;ball.v.y=0;const e=.035;let gx=clamp((this.surfaceAt(ball.p.x+e,ball.p.z)-this.surfaceAt(ball.p.x-e,ball.p.z))/(e*2),-3,3),gz=clamp((this.surfaceAt(ball.p.x,ball.p.z+e)-this.surfaceAt(ball.p.x,ball.p.z-e))/(e*2),-3,3);const f=(5/7)*9.8/(1+gx*gx+gz*gz);ball.v.x-=gx*f*step;ball.v.z-=gz*f*step;ball.v.x*=Math.exp(-BALL_RULES.rollingDrag*step);ball.v.z*=Math.exp(-BALL_RULES.rollingDrag*step);if(Math.hypot(gx,gz)<.01&&Math.hypot(ball.v.x,ball.v.z)<BALL_RULES.sleepSpeed){ball.v.x=0;ball.v.z=0;}}
-        else ball.v.y-=9.8*step;
+        if(ball.p.y<=h+r+.025&&ball.v.y<=0){ball.p.y=h+r;ball.v.y=0;const e=.035;let gx=clamp((this.surfaceAt(ball.p.x+e,ball.p.z)-this.surfaceAt(ball.p.x-e,ball.p.z))/(e*2),-3,3),gz=clamp((this.surfaceAt(ball.p.x,ball.p.z+e)-this.surfaceAt(ball.p.x,ball.p.z-e))/(e*2),-3,3);const g=ballGravity(this.realmId||'he');const f=(5/7)*g/(1+gx*gx+gz*gz);ball.v.x-=gx*f*step;ball.v.z-=gz*f*step;ball.v.x*=Math.exp(-BALL_RULES.rollingDrag*step);ball.v.z*=Math.exp(-BALL_RULES.rollingDrag*step);if(Math.hypot(gx,gz)<.01&&Math.hypot(ball.v.x,ball.v.z)<BALL_RULES.sleepSpeed){ball.v.x=0;ball.v.z=0;}}
+        else ball.v.y-=ballGravity(this.realmId||'he')*step;
         const nx=ball.p.x+ball.v.x*step,nz=ball.p.z+ball.v.z*step,nh=this.surfaceAt(nx,nz);
         if(nh>ball.p.y+r*.3&&nh-h>.35){if(this.surfaceAt(nx,ball.p.z)>ball.p.y)ball.v.x*=-.32;if(this.surfaceAt(ball.p.x,nz)>ball.p.y)ball.v.z*=-.32;}else{
           if(isPointOpen(this.state?.land,nx,ball.p.z,LAND_RULES.ballMargin))ball.p.x=nx;else ball.v.x*=-.32;
@@ -1163,6 +1164,7 @@ export class RiverWorld {
     this.balloon.t = 0;
     this.balloon.realmId = realmId;
     this.balloon.arrived = false;
+    this.balloon.scripted = realmId === 'xing';
     this.callbacks.onBalloonLook?.(this.balloonLook());
     return true;
   }
@@ -1201,7 +1203,9 @@ export class RiverWorld {
     if (!silent) this.callbacks.onBalloonStop?.();
   }
   balloonLook() {
-    return balloonLook(this.balloon?.phase || 'idle', this.balloon?.angle || 0, this.balloon?.mode || 'orbit');
+    const phase = this.balloon?.phase || 'idle';
+    const destination = phase === 'voyage' ? (this.balloon?.realmId || 'ri') : null;
+    return balloonLook(phase, this.balloon?.angle || 0, this.balloon?.mode || 'orbit', destination);
   }
   setBalloonMode(mode) {
     if (!this.balloon || this.balloon.phase === 'home' || this.balloon.phase === 'descend' || this.balloon.phase === 'voyage') return false;
@@ -1285,7 +1289,7 @@ export class RiverWorld {
     } else if (ride.phase === 'voyage') {
       ride.height = Math.min(BALLOON_CONTROL.maxHeight, (ride.height || home.cruiseHeight) + BALLOON_CONTROL.climbSpeed * dt);
       this.balloonCraft.position.y = ride.height + bob;
-      if (ride.height >= BALLOON_CONTROL.maxHeight - 0.05) {
+      if (ride.height >= BALLOON_CONTROL.maxHeight - 0.05 && !ride.scripted) {
         this.completeVoyage();
         return;
       }
@@ -1367,7 +1371,7 @@ export class RiverWorld {
         this.playerPosition.y=ground;
         if(bouncing){if(this.bounce.stop){this.bounce=null;this.velocityY=0;this.locomotion='walk';this.callbacks.onBounceStop?.();}else this.landBounce();}
         else this.velocityY=0;
-      }else{this.velocityY-=(bouncing?16:12)*dt;this.playerPosition.y+=this.velocityY*dt;if(this.playerPosition.y<=ground){
+      }else{this.velocityY-=playerFall(this.realmId||'he',bouncing)*dt;this.playerPosition.y+=this.velocityY*dt;if(this.playerPosition.y<=ground){
         this.playerPosition.y=ground;
         if(bouncing){if(this.bounce.stop){this.bounce=null;this.velocityY=0;this.locomotion='walk';this.callbacks.onBounceStop?.();}else this.landBounce();}
         else this.velocityY=0;

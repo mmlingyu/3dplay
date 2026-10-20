@@ -7,6 +7,7 @@ import { BUILD_CASES, PACK_ITEMS, WORKSHOP_FOLDS, combinationTree, lackHint, lac
 import { Axle3D } from './axle-3d.js';
 import { createCreationStudio, CREATION_TITLES } from './creation-ui.js';
 import { AGE_BANDS, FOLD_NOTE, STAMPS, WASHI_NOTE } from './realm-data.js';
+import { XING_STAMPS } from './xing-data.js';
 
 const escapeHTML = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 const BUILDABLE = new Set(['plank', 'stone', 'brick', 'ramp', 'post', 'chest', 'workbench', 'roof', 'window', 'door', 'bed', 'fence', 'pot', 'wreath', 'lantern', 'flag']);
@@ -439,14 +440,15 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
   }
   function stampsView() {
     const owned = new Set(game.state.travel?.stamps || []);
-    return `<div class="stamp-grid">${STAMPS.map((stamp) => `<article class="stamp-card ${owned.has(stamp.id) ? 'owned' : ''}">${svg(stamp.icon, 36)}<strong>${escapeHTML(stamp.name)}</strong><p>${owned.has(stamp.id) ? '已经盖上' : escapeHTML(stamp.how)}</p></article>`).join('')}</div>`;
+    const book = [...STAMPS, ...XING_STAMPS];
+    return `<div class="stamp-grid">${book.map((stamp) => `<article class="stamp-card ${owned.has(stamp.id) ? 'owned' : ''}">${svg(stamp.icon, 36)}<strong>${escapeHTML(stamp.name)}</strong><p>${owned.has(stamp.id) ? '已经盖上' : escapeHTML(stamp.how)}</p></article>`).join('')}</div>`;
   }
   function pauseView() {
     const saveInfo = game.storageError || (!game.storage?.setItem ? '这个窗口暂时保留世界，请下载存档备份。' : (game.accountId ? '背包物品、放下的建筑和设置记在当前登录的账号上。换一个人登录，会进入那个人自己的河谷。' : '还没登录，世界只在这台浏览器里。登录后会记到账号上。'));
     const age = game.state.settings?.ageBand || '';
     const away = (game.state.travel?.current || 'he') !== 'he';
     const ageOptions = [['', '不设置'], ...AGE_BANDS.map((item) => [item.id, item.label])].map(([id, label]) => `<option value="${id}" ${age === id ? 'selected' : ''}>${label}</option>`).join('');
-    return `<div class="panel-note">${svg('save', 32)}<span>${escapeHTML(saveInfo)}</span></div>${readButton(`${saveInfo}大人可以导出备份，也可以导入以前的存档。`)}<div class="panel-row">${button('save', '保存一下', { className: 'primary-btn' })}${button('close', '继续玩', { className: 'primary-btn' })}${away ? button('travel-home', '回家', { className: 'primary-btn', label: '回家' }) : ''}</div>${game.travelNotice ? `<p class="panel-notice" role="status">${escapeHTML(game.travelNotice)}</p>` : ''}<details class="panel-details" ${importPending ? 'open' : ''}><summary>给大人：备份与导入存档</summary><p>${game.accountId ? '已登录时，河谷存在这个账号下，换一台电脑登录也能回来。仍可以导出一份文件备份。' : '还没登录时，存档只在当前浏览器里。登录后会记到账号上。'}</p><label>年龄档（不记录生日）<select id="age-band">${ageOptions}</select></label><p>这只是打开对话时的默认长短。孩子随时可以换，不会扣东西。</p><div class="panel-row">${button('export', '下载存档 JSON')}${button('import-choose', '选择存档文件')}${backupBeforeImport ? button('export-backup', '下载导入前的备份') : ''}${game.getLegacyBackup?.()?button('export-legacy','下载升级前的备份'):''}${game.getTravelBackup?.()?button('export-travel','下载升级前的备份',{label:'下载旅行升级前的备份'}):''}</div><input id="save-import-input" type="file" accept=".json,application/json" hidden>${importPending ? `<div class="panel-note warning">已选：${escapeHTML(importPending.name)}。导入会替换当前世界；系统会先保留备份并检查存档。${button('import-confirm', '确认导入', { className: 'primary-btn' })}${button('import-cancel', '取消')}</div>` : ''}</details>${studio.pauseSection()}<p class="panel-notice" role="status">${escapeHTML(pauseNotice)}</p>`;
+    return `<div class="panel-note">${svg('save', 32)}<span>${escapeHTML(saveInfo)}</span></div>${readButton(`${saveInfo}大人可以导出备份，也可以导入以前的存档。`)}<div class="panel-row">${button('save', '保存一下', { className: 'primary-btn' })}${button('close', '继续玩', { className: 'primary-btn' })}${away ? button('travel-home', '回家', { className: 'primary-btn', label: '回家' }) : ''}</div>${game.travelNotice ? `<p class="panel-notice" role="status">${escapeHTML(game.travelNotice)}</p>` : ''}<details class="panel-details" ${importPending ? 'open' : ''}><summary>给大人：备份与导入存档</summary><p>${game.accountId ? '已登录时，河谷存在这个账号下，换一台电脑登录也能回来。仍可以导出一份文件备份。' : '还没登录时，存档只在当前浏览器里。登录后会记到账号上。'}</p><label>年龄档（不记录生日）<select id="age-band">${ageOptions}</select></label><p>这只是打开对话时的默认长短。孩子随时可以换，不会扣东西。</p><div class="panel-row">${button('export', '下载存档 JSON')}${button('import-choose', '选择存档文件')}${backupBeforeImport ? button('export-backup', '下载导入前的备份') : ''}${game.getLegacyBackup?.()?button('export-legacy','下载升级前的备份'):''}${game.getTravelBackup?.()?button('export-travel','下载升级前的备份',{label:'下载旅行升级前的备份'}):''}${game.getXingBackup?.()?button('export-xing','下载升级前的备份',{label:'下载外星谷升级前的备份'}):''}</div><input id="save-import-input" type="file" accept=".json,application/json" hidden>${importPending ? `<div class="panel-note warning">已选：${escapeHTML(importPending.name)}。导入会替换当前世界；系统会先保留备份并检查存档。${button('import-confirm', '确认导入', { className: 'primary-btn' })}${button('import-cancel', '取消')}</div>` : ''}</details>${studio.pauseSection()}<p class="panel-notice" role="status">${escapeHTML(pauseNotice)}</p>`;
   }
   function helpView() {
     const cards = [
@@ -823,6 +825,7 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
     }
     if(action==='export-legacy'){const text=game.getLegacyBackup?.();if(text)download(text,'我的河谷-生命升级前备份.json');else toast('暂时没有升级前备份。');return;}
     if(action==='export-travel'){const text=game.getTravelBackup?.();if(text)download(text,'我的河谷-旅行升级前备份.json');else toast('暂时没有旅行升级前的备份。');return;}
+    if(action==='export-xing'){const text=game.getXingBackup?.();if(text)download(text,'我的河谷-外星谷升级前备份.json');else toast('暂时没有外星谷升级前的备份。');return;}
     if(action==='travel-home'){onTravelHome();return;}
     if(action==='washi-start'){const result=game.startWashi();notifyResult(result);render();return;}
     if(action==='washi-claim'){const result=game.claimWashi();notifyResult(result);render();return;}

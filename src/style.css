@@ -143,9 +143,19 @@ button.world-label { min-width: 44px; min-height: 44px; }
 #travel-home, #travel-go { position: absolute; z-index: 24; min-height: 48px; min-width: 88px; }
 #travel-home { top: max(72px, calc(env(safe-area-inset-top) + 64px)); left: 50%; transform: translateX(-50%); }
 #travel-go { top: max(64px, calc(env(safe-area-inset-top) + 56px)); left: 50%; transform: translateX(-50%); }
-#travel-home[hidden], #travel-go[hidden], #ri-actions[hidden], #travel-cutscene[hidden], #letter-card[hidden] { display: none !important; }
-#ri-actions { position: absolute; right: 12px; top: 72px; z-index: 24; display: flex; flex-direction: column; gap: 8px; }
-#ri-actions button { min-height: 48px; min-width: 96px; }
+#travel-home[hidden], #travel-go[hidden], #ri-actions[hidden], #xing-actions[hidden], #travel-cutscene[hidden], #letter-card[hidden], #star-cutscene[hidden], #xing-sheet[hidden], #balloon-stars[hidden], #balloon-return[hidden] { display: none !important; }
+#ri-actions, #xing-actions { position: absolute; right: 12px; top: 72px; z-index: 24; display: flex; flex-direction: column; gap: 8px; }
+#ri-actions button, #xing-actions button, #balloon-stars, #balloon-return, #star-skip, .xing-choice { min-height: 48px; min-width: 96px; }
+#star-cutscene, #xing-sheet { position: absolute; left: 50%; top: 132px; transform: translateX(-50%); z-index: 28; width: min(440px, 92vw); padding: 16px; border-radius: 28px; background: #1d2744; color: #f7f3ea; box-shadow: var(--shadow); text-align: center; }
+#star-cutscene { overflow: hidden; }
+#star-cutscene::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 20% 30%, #fff 0 1px, transparent 2px), radial-gradient(circle at 70% 40%, #fff 0 1px, transparent 2px), radial-gradient(circle at 40% 75%, #d7e4ff 0 1px, transparent 2px); opacity: 0.85; animation: star-drift 8s linear infinite; pointer-events: none; }
+#star-cutscene strong, #star-cutscene p, #star-cutscene button, #xing-sheet button, #xing-sheet p, #xing-sheet strong { position: relative; }
+#xing-sheet { background: #fffaf0; color: #24344a; max-height: 70vh; overflow: auto; }
+.xing-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 8px 0; }
+.xing-note, .xing-steps { font-size: 15px; line-height: 1.45; }
+.xing-picture { font-size: 28px; }
+@keyframes star-drift { from { transform: translateY(0); } to { transform: translateY(-12px); } }
+@media (prefers-reduced-motion: reduce) { #star-cutscene::before { animation: none; } }
 #travel-cutscene, #letter-card { position: absolute; left: 50%; top: 18%; transform: translateX(-50%); z-index: 30; width: min(420px, 92vw); padding: 16px; border-radius: 24px; background: #fffaf0; color: #2e5343; border: 3px solid #c4a574; text-align: center; }
 #travel-cutscene p, #letter-card p { margin: 0 0 12px; font-size: 16px; line-height: 1.5; }
 #balloon-voyage { min-height: 48px; }
@@ -426,7 +436,8 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
   .modal-backdrop { padding: 22px; }
   .game-panel { max-height: calc(100dvh - 44px); }
   #travel-home, #travel-go { top: 112px; }
-  #ri-actions { top: 292px; }
+  #star-cutscene, #xing-sheet { top: 176px; max-height: 52vh; }
+  #ri-actions, #xing-actions { top: 292px; }
 }
 
 @media (max-width: 480px) {

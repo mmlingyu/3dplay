@@ -1,5 +1,8 @@
 /** Valley tutors, ages 4–12. Characters and quizzes come from the knowledge pack. */
 
+import { riTutorPack } from './ri-tutors.js';
+import { xingTutorPack } from './xing-tutors.js';
+
 const packs = {
   he: { audience: '4-12', subjects: [], characters: [] },
   ri: { audience: '4-12', subjects: [], characters: [] },
@@ -39,24 +42,41 @@ export function useTutorRealm(realm) {
   return packs[active];
 }
 
+function fetchPack(url, ms = 800) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
+function applyLocalPack(key) {
+  if (key === 'xing') return applyPack(xingTutorPack, 'xing');
+  return applyPack(riTutorPack, key);
+}
+
+async function refreshRemotePack(key) {
+  const url = key === 'he' ? '/api/knowledge/tutors' : `/api/knowledge/tutors?valley=${encodeURIComponent(key)}`;
+  try {
+    const response = await fetchPack(url);
+    if (!response.ok) return packs[key];
+    const pack = applyPack(await response.json(), key);
+    if (key !== 'he' && !pack.characters.length) return applyLocalPack(key);
+    return pack;
+  } catch {
+    return packs[key];
+  }
+}
+
+/** Apply the bundled pack immediately. The knowledge service may refresh it later. */
+export function primeTutorPack(realm = 'he') {
+  const key = realmKey(realm);
+  if (key === 'he') return packs.he;
+  return applyLocalPack(key);
+}
+
 export async function loadTutorPack(realm = 'he') {
   const key = realmKey(realm);
-  if (key === 'he') {
-    try {
-      const response = await fetch('/api/knowledge/tutors');
-      if (response.ok) return applyPack(await response.json(), 'he');
-    } catch { /* the home valley still plays from the scene itself */ }
-    return packs.he;
-  }
-  try {
-    const response = await fetch(`/api/knowledge/tutors?valley=${encodeURIComponent(key)}`);
-    if (response.ok) {
-      const pack = applyPack(await response.json(), key);
-      if (pack.characters.length) return pack;
-    }
-  } catch { /* the day valley still plays from the local pack */ }
-  const local = await import('./ri-tutors.js');
-  return applyPack(local.riTutorPack, key);
+  if (key !== 'he') primeTutorPack(key);
+  return refreshRemotePack(key);
 }
 
 export function tutors() {
