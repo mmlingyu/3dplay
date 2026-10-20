@@ -112,6 +112,15 @@ npm run test:browser
 
 浏览器检查默认使用 `http://127.0.0.1:5174`，可通过 `GAME_TEST_URL` 指定其他测试地址。它使用独立浏览器上下文，不清理正常使用者的存档。检查记录写入 `output/browser-verification.json`。
 
+GitHub Pages 预览由 `.github/workflows/preview.yml` 在旅行分支每次 push 时执行 `npm ci && npm run build`，`VITE_BASE=/3dplay/`，再发布到 `gh-pages`。地址是 https://mmlingyu.github.io/3dplay/ 。不设置 `VITE_BASE` 时，构建仍用相对路径，原来的 `/play/` 部署不变。预览没有后端时，游戏只用浏览器里的存档和仓库里的日谷角色，不弹连接失败。若 Pages 还没打开，这个地址会是 404。本机可以看同一份预览构建：
+
+```sh
+VITE_BASE=/3dplay/ npm run build
+VITE_BASE=/3dplay/ npm run preview
+```
+
+然后打开 http://127.0.0.1:4173/3dplay/ 。冒烟检查是 `PREVIEW_URL=http://127.0.0.1:4173/3dplay/ node test/preview-smoke.js`。
+
 核心逻辑在 `src/game-state.js`；配方与材料在 `src/game-data.js`；三维世界在 `src/world.js`；面板在 `src/panels.js`；操作与时钟在 `src/main.js`。模型、纹理和图标均为本项目用代码制作的原创资产。
 
 设计取舍及适合给同事讲解的 AI 开发过程见 `开发过程记录.md`。需求、事实边界和授权状态保存在 `PROJECT_MEMORY.md`。

@@ -8,7 +8,7 @@ import { POOL, inPoolReservedArea } from './water-data.js';
 import { floraStage, realMoment } from './life-data.js';
 import { realAnalogClock } from './clock-ui.js';
 import { nearbyFrontiers, LAND_RULES } from './land-data.js';
-import { currentUser } from './engine-client.js';
+import { accountSession } from './engine-client.js';
 import { startValleySync } from './valley-sync.js';
 import { BOUNCE_ISLAND, PARK_NAME, PLAY_MODES, SKIP_STEPS, TIMES_TABLES, bounceInfo, inNumberPark, onBounceIsland, playMode } from './bounce-data.js';
 import { BALLOON_BASE, BALLOON_NAME, onBalloonLawn } from './balloon-data.js';
@@ -314,15 +314,29 @@ function figureNames() {
 async function refreshAccount() {
   const chip = $('account-chip'), label = $('account-label'), dot = $('account-dot');
   if (!chip || !label) return;
-  const user = await currentUser();
+  const session = await accountSession();
+  const user = session.user;
   setPlayerName(user);
-  if (user?.name) {
+  if (!session.online) {
+    label.textContent = '本机';
+    chip.removeAttribute('href');
+    chip.removeAttribute('target');
+    delete chip.dataset.signedIn;
+    chip.title = '现在只记在这台浏览器里。';
+    if (dot) dot.style.background = '#84a369';
+  } else if (user?.name) {
     label.textContent = user.name;
+    chip.href = '/account';
+    chip.target = '_blank';
+    chip.rel = 'noopener';
     chip.dataset.signedIn = '1';
     chip.title = '已登录。建造、造物和设置记在这个账号上。';
     if (dot) dot.style.background = '#84a369';
   } else {
     label.textContent = '登录';
+    chip.href = '/account';
+    chip.target = '_blank';
+    chip.rel = 'noopener';
     delete chip.dataset.signedIn;
     chip.title = '还没登录。登录后，每个人会进入自己的河谷。';
     if (dot) dot.style.background = '#c98958';
@@ -857,11 +871,7 @@ function start() {
 }
 
 async function bootValley() {
-  try {
-    await loadTutorPack();
-  } catch (error) {
-    console.warn('知识引擎的角色名单没取到', error);
-  }
+  await loadTutorPack();
   try {
   const savedRealm = game.state.travel?.current === 'ri' ? 'ri' : 'he';
   await mountWorld(savedRealm);

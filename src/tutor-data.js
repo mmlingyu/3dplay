@@ -42,9 +42,11 @@ export function useTutorRealm(realm) {
 export async function loadTutorPack(realm = 'he') {
   const key = realmKey(realm);
   if (key === 'he') {
-    const response = await fetch('/api/knowledge/tutors');
-    if (!response.ok) throw new Error('知识包没取到');
-    return applyPack(await response.json(), 'he');
+    try {
+      const response = await fetch('/api/knowledge/tutors');
+      if (response.ok) return applyPack(await response.json(), 'he');
+    } catch { /* the home valley still plays from the scene itself */ }
+    return packs.he;
   }
   try {
     const response = await fetch(`/api/knowledge/tutors?valley=${encodeURIComponent(key)}`);

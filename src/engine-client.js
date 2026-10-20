@@ -19,14 +19,19 @@ export async function engineStatus() {
   catch { return { available: false }; }
 }
 
-export async function currentUser() {
+export async function accountSession() {
   try {
     const response = await fetch('/api/auth/me', { credentials: 'same-origin' });
-    if (!response.ok) return null;
-    return (await response.json()).user || null;
+    if (response.ok) return { online: true, user: (await response.json()).user || null };
+    if (response.status === 401 || response.status === 403) return { online: true, user: null };
+    return { online: false, user: null };
   } catch {
-    return null;
+    return { online: false, user: null };
   }
+}
+
+export async function currentUser() {
+  return (await accountSession()).user;
 }
 
 // Shared library: assets other children already made and the server validated.
