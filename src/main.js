@@ -1,0 +1,876 @@
+import './style.css';
+import { icon } from './icons.js';
+import { ITEMS, GUEST_PLAYER_NAME, playerDisplayName, setTutorGuards, roofSpan } from './game-data.js';
+import { GameState } from './game-state.js';
+import { createPanels } from './panels.js';
+import { RiverWorld } from './world.js';
+import { POOL, inPoolReservedArea } from './water-data.js';
+import { floraStage, realMoment } from './life-data.js';
+import { realAnalogClock } from './clock-ui.js';
+import { nearbyFrontiers, LAND_RULES } from './land-data.js';
+import { currentUser } from './engine-client.js';
+import { startValleySync } from './valley-sync.js';
+import { BOUNCE_ISLAND, PARK_NAME, PLAY_MODES, SKIP_STEPS, TIMES_TABLES, bounceInfo, inNumberPark, onBounceIsland, playMode } from './bounce-data.js';
+import { BALLOON_BASE, BALLOON_NAME, onBalloonLawn } from './balloon-data.js';
+import { gradeQuestion, loadTutorPack, nextQuestion, tutorById, tutors } from './tutor-data.js';
+import { renderA2UI } from './a2ui.js';
+import { npcTalkMessages, talkActivities } from './npc-surface.js';
+
+const $ = (id) => document.getElementById(id);
+document.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = icon(el.dataset.icon, 24); });
+const game = new GameState();
+const hotItems = ['plank', 'brick', 'door', 'window', 'roof', 'ramp'];
+const keys = new Set();
+const joystick = { x: 0, z: 0 };
+const cooldowns = new Map();
+let world, panels, started = false, mode = 'gather', selectedItem = 'plank';
+let rotation = 0, buildCell = null, chosenTarget = null, modelMenu = null, panelType = null, savedTime = 0;
+let lastFrame = performance.now(), uiTime = 0, completedWish = false, speechTimer;
+let tutorBand = 'little', tutorUsed = [], tutorCurrent = null, tutorPick = null, tutorStage = 'menu', tutorActivity = null, tutorPage = 0, tutorGreeted = new Set();
+let landHint=null;
+const dismissedFrontiers=new Set();
+let playerName = GUEST_PLAYER_NAME;
+
+function setPlayerName(user) {
+  playerName = playerDisplayName(user);
+  game.playerName = playerName;
+  const welcome = $('welcome-player-note');
+  if (welcome) welcome.textContent = playerName;
+  const map = $('minimap');
+  if (map) map.setAttribute('aria-label', `河谷地图，绿色点是${playerName}的位置`);
+}
+
+function toast(message, gain = false) {
+  const el = document.createElement('div'); el.className = `toast${gain ? ' gain-toast' : ''}`;
+  el.innerHTML = icon(gain ? 'sparkle' : 'leaf', 22);
+  const text = document.createElement('span'); text.textContent = message; el.append(text);
+  $('toast-root').append(el);
+  while ($('toast-root').children.length > 3) $('toast-root').firstChild.remove();
+  setTimeout(() => el.remove(), 3400);
+}
+function speak(text) {
+  if (!game.state.settings.sound || !('speechSynthesis' in window)) return;
+  clearTimeout(speechTimer);
+  speechTimer = setTimeout(() => {
+    const voices = speechSynthesis.getVoices();
+    const voice = voices.find(v => v.lang.startsWith('zh') && /Ting|婷婷|中文|Mandarin/.test(v.name)) || voices.find(v => v.lang.startsWith('zh'));
+    const utterance = new SpeechSynthesisUtterance(text); utterance.lang = 'zh-CN'; utterance.rate = .9; utterance.volume = .65;
+    if (voice) utterance.voice = voice;
+    speechSynthesis.cancel(); speechSynthesis.speak(utterance);
+  }, 80);
+}
+function speakBounce(info) {
+  if (!game.state.settings.sound || !('speechSynthesis' in window) || !info) return;
+  clearTimeout(speechTimer);
+  speechTimer = setTimeout(() => {
+    const voices = speechSynthesis.getVoices();
+    const en = voices.find(v => /^en/.test(v.lang));
+    const zh = voices.find(v => v.lang.startsWith('zh') && /Ting|婷婷|中文|Mandarin/.test(v.name)) || voices.find(v => v.lang.startsWith('zh'));
+    const englishText = info.speechEn || '';
+    const chineseText = info.speechZh || info.note || '';
+    const speakZh = () => {
+      if (!chineseText) return;
+      const chinese = new SpeechSynthesisUtterance(chineseText);
+      chinese.lang = 'zh-CN'; chinese.rate = 0.95; chinese.volume = 0.65;
+      if (zh) chinese.voice = zh;
+      speechSynthesis.speak(chinese);
+    };
+    speechSynthesis.cancel();
+    if (englishText) {
+      const english = new SpeechSynthesisUtterance(englishText);
+      english.lang = 'en-US'; english.rate = 0.85; english.volume = 0.72;
+      if (en) english.voice = en;
+      english.onend = speakZh;
+      speechSynthesis.speak(english);
+    } else speakZh();
+  }, 30);
+}
+function paintParkHud(info) {
+  const modes = $('bounce-modes');
+  const picks = $('bounce-picks');
+  if (!modes || !picks) return;
+  const current = info?.mode || world?.parkMode || 'count';
+  if (!modes.dataset.ready) {
+    modes.innerHTML = PLAY_MODES.map(mode => `<button type="button" class="bounce-chip" data-park="${mode.id}" aria-pressed="false">${mode.title}<small>${mode.ages}</small></button>`).join('');
+    modes.dataset.ready = '1';
+  }
+  for (const btn of modes.querySelectorAll('[data-park]')) btn.setAttribute('aria-pressed', btn.dataset.park === current ? 'true' : 'false');
+  if (current === 'skip') {
+    picks.hidden = false;
+    picks.innerHTML = SKIP_STEPS.map(step => `<button type="button" class="bounce-chip pick" data-skip="${step}" aria-pressed="${(info?.n ? world?.bounce?.step : world?.parkStep) === step ? 'true' : 'false'}">+${step}</button>`).join('');
+  } else if (current === 'times') {
+    picks.hidden = false;
+    const table = world?.bounce?.table || world?.parkTable || 2;
+    picks.innerHTML = TIMES_TABLES.map(item => `<button type="button" class="bounce-chip pick" data-table="${item}" aria-pressed="${table === item ? 'true' : 'false'}">${item}×</button>`).join('');
+  } else {
+    picks.hidden = true;
+    picks.innerHTML = '';
+  }
+}
+function showBounce(info) {
+  const hud = $('bounce-hud');
+  if (!hud || !info) return;
+  hud.hidden = false;
+  hud.dataset.tone = info.tone || 'plain';
+  paintParkHud(info);
+  $('bounce-count').textContent = info.n ? String(info.count) : '★';
+  $('bounce-word').textContent = info.word;
+  const formula = $('bounce-formula');
+  if (formula) {
+    formula.textContent = info.formula || '';
+    formula.hidden = !info.formula;
+  }
+  $('bounce-note').textContent = info.note;
+  hud.classList.remove('pop');
+  void hud.offsetWidth;
+  hud.classList.add('pop');
+  speakBounce(info);
+}
+function hideBounce() {
+  const hud = $('bounce-hud');
+  if (hud) hud.hidden = true;
+}
+function showBalloon(info) {
+  const hud = $('balloon-hud');
+  if (!hud || !info) return;
+  hud.hidden = false;
+  $('balloon-title').textContent = info.title || '热气球游览';
+  $('balloon-note').textContent = info.note || '转一圈看河谷';
+  const land = $('balloon-land');
+  if (land) {
+    land.disabled = !!info.landing;
+    land.textContent = info.landing ? '正在降落…' : '降落到草坪基地';
+  }
+  const modes = $('balloon-modes');
+  const height = $('balloon-height');
+  if (modes) modes.hidden = !!info.landing;
+  if (height) height.hidden = !!info.landing;
+  for (const btn of document.querySelectorAll('[data-balloon-mode]')) {
+    btn.setAttribute('aria-pressed', String(btn.dataset.balloonMode === (info.mode || 'orbit')));
+  }
+}
+function hideBalloon() {
+  const hud = $('balloon-hud');
+  if (hud) hud.hidden = true;
+  const land = $('balloon-land');
+  if (land) {
+    land.disabled = false;
+    land.textContent = '降落到草坪基地';
+  }
+}
+function storePlayer() {
+  if (!world) return;
+  const p = world.playerPosition; game.state.player = { x: p.x, y: p.y, z: p.z };
+  game.state.toys = world.serializeBalls();
+}
+function save() { storePlayer(); const result = game.save(); updateSaveStatus(); return result; }
+const valleySync = startValleySync(game);
+function figureNames() {
+  return (game.state.creation?.figures || []).map(item => item.figure?.name).filter(Boolean);
+}
+async function refreshAccount() {
+  const chip = $('account-chip'), label = $('account-label'), dot = $('account-dot');
+  if (!chip || !label) return;
+  const user = await currentUser();
+  setPlayerName(user);
+  if (user?.name) {
+    label.textContent = user.name;
+    chip.dataset.signedIn = '1';
+    chip.title = '已登录。建造、造物和设置记在这个账号上。';
+    if (dot) dot.style.background = '#84a369';
+  } else {
+    label.textContent = '登录';
+    delete chip.dataset.signedIn;
+    chip.title = '还没登录。登录后，每个人会进入自己的河谷。';
+    if (dot) dot.style.background = '#c98958';
+  }
+  const space = await valleySync.bind(user);
+  updateSaveStatus();
+  refreshWelcome();
+  if (!space?.changed || space.source === 'guest' || space.source === 'offline') return;
+  const names = figureNames().slice(0, 3);
+  if (space.source === 'backup') toast(names.length ? `找回了${names.join('、')}，已经记到这个账号上。` : '找回了以前的河谷，已经记到这个账号上。');
+  else if (space.switched) toast(names.length ? `这是你的河谷：${names.join('、')}。` : '这是你自己的河谷。');
+  else if (space.source === 'fresh') toast('这是你自己的河谷。建造和设置会记在这个账号上。');
+}
+function refreshWelcome() {
+  if (started) return;
+  const stats = game.state.stats || {};
+  const made = (game.state.creation?.figures?.length || 0) + (game.state.creation?.assemblies?.length || 0) + (game.state.blocks?.length || 0);
+  if (stats.built || stats.gathered || stats.crafted || made) $('start-button').innerHTML = `继续我的河谷 ${icon('arrow-right', 22)}`;
+}
+function updateSaveStatus() {
+  const error = game.storageError || !game.storage;
+  const onAccount = Boolean(game.accountId) && !error;
+  $('save-status').innerHTML = `<i class="save-dot" style="${error ? 'background:#c98958' : ''}"></i>${error ? '请导出备份' : (onAccount ? '已记到账号' : '自动保存')}`;
+  $('save-status').title = game.storageError || (!game.storage
+    ? '当前窗口无法持久保存，请在暂停菜单导出备份。'
+    : (game.accountId
+      ? '背包物品、放下的建筑和设置保存在当前登录账号上。换一个人登录，会进入那个人自己的河谷。'
+      : '还没登录，只保存在这台浏览器。登录后会记到账号上。'));
+}
+function resetInput() {
+  keys.clear(); joystick.x = joystick.z = 0;
+  document.querySelector('.joystick-knob').style.transform = '';
+  world?.stopWalking();
+  world?.cancelPointerGesture();
+}
+function openPanel(type, context = {}) {
+  if (!world) return;
+  hideModelMenu();
+  resetInput(); save(); panelType = type; panels.open(type, context);
+  updateContext();
+}
+function hideModelMenu() {
+  modelMenu = null;
+  const menu = $('model-menu');
+  if (menu) menu.hidden = true;
+}
+function showModelMenu(target) {
+  modelMenu = { id: target.id, figureId: target.figureId || null, assemblyId: target.assemblyId || null, name: target.name };
+  const menu = $('model-menu');
+  menu.hidden = false;
+  $('model-menu-name').textContent = target.name;
+  $('model-menu-recall').textContent = target.figureId ? '收回背包' : '送回实验室';
+  refreshModelMenu();
+  placeModelMenu();
+}
+function refreshModelMenu() {
+  if (!modelMenu) return;
+  $('model-menu-act').textContent = world.creation.actionLabel(modelMenu.id) || '做个动作';
+  const guide = $('model-menu-guide');
+  if (guide) guide.textContent = world.modelFocus?.id === modelMenu.id
+    ? '点「退出近看」，或再双击一次，回到原来的视角。'
+    : '双击靠近看看。再双击一次，或点「退出近看」。';
+}
+function placeModelMenu() {
+  const menu = $('model-menu');
+  if (!menu || menu.hidden || !modelMenu || !world) return;
+  const live = world.targets.find(t => t.id === modelMenu.id);
+  if (!live) { hideModelMenu(); chosenTarget = null; world.select(null); return; }
+  const point = live.position.clone();
+  point.y += 1.7;
+  point.project(world.camera);
+  const w = world.canvas.clientWidth, h = world.canvas.clientHeight;
+  if (point.z > 1) { menu.style.visibility = 'hidden'; return; }
+  menu.style.visibility = '';
+  const px = (point.x + 1) * w / 2;
+  const py = (-point.y + 1) * h / 2;
+  const menuW = 210;
+  let x = px + 78;
+  if (x + menuW > w - 12) x = px - menuW - 28;
+  x = Math.min(Math.max(12, x), Math.max(12, w - menuW));
+  const y = Math.min(Math.max(76, py - 36), Math.max(76, h - 210));
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+}
+function recallFromMenu() {
+  if (!modelMenu) return;
+  const { id, figureId, assemblyId } = modelMenu;
+  const result = figureId ? game.recallFigure(figureId) : assemblyId ? game.recallAssembly(assemblyId) : null;
+  if (!result) return;
+  toast(result.message, result.ok);
+  if (!result.ok) return;
+  if (world.modelFocus?.id === id) world.modelFocus = null;
+  chosenTarget = null;
+  world.select(null);
+  hideModelMenu();
+  updateContext();
+}
+function editFromMenu() {
+  if (!modelMenu) return;
+  const { figureId, assemblyId } = modelMenu;
+  hideModelMenu();
+  if (figureId) openPanel('lab', { figureId });
+  else if (assemblyId) openPanel('lab', { blueprintId: game.assembly(assemblyId)?.blueprintId });
+}
+function actFromMenu() {
+  const target = world.targets.find(t => t.id === modelMenu?.id);
+  if (!target) return;
+  interact(target);
+  refreshModelMenu();
+}
+// Figures go a step in front of the player, falling back to nearby open land.
+function placeFigureNearby(figureId){
+  if(!started)return {ok:false,message:'先进入河谷，再把造物放出来。'};
+  const p=world.playerPosition,f=world.facing;
+  let last=null;
+  for(const [dist,turn] of [[1.6,0],[1.6,.8],[1.6,-.8],[2.4,0],[1.2,1.6],[1.2,-1.6],[2.4,Math.PI]]){
+    const x=p.x+Math.sin(f+turn)*dist,z=p.z+Math.cos(f+turn)*dist;
+    last=game.placeFigure(figureId,{x,z,rotY:f+Math.PI});
+    if(last.ok){world.sync(game.state);world.celebrate({x,y:p.y,z});return last;}
+  }
+  return last;
+}
+function reclaimNearby(cx,cz){
+  storePlayer();
+  if(!started)return {ok:false,message:'先进入河谷，走到边界看看吧。'};
+  const result=game.reclaim(cx,cz);
+  if(result.ok){resetInput();chosenTarget=null;world.select(null);world.celebrate(world.playerPosition);}
+  updateContext();
+  return result;
+}
+function updateLandGuidance(){
+  const nearby=nearbyFrontiers(game.state.land,world.playerPosition);
+  for(const id of dismissedFrontiers)if(!nearby.some(p=>p.id===id))dismissedFrontiers.delete(id);
+  landHint=started&&mode==='gather'&&!panels?.isOpen()&&!document.hidden?nearby.find(p=>!dismissedFrontiers.has(p.id))??null:null;
+  const question=$('land-question');question.hidden=!landHint;question.dataset.chunk=landHint?.id??'';
+  if(landHint){
+    $('land-question-detail').textContent=`身边的${landHint.direction}草地 · ${LAND_RULES.chunkSize} × ${LAND_RULES.chunkSize} 格`;
+    $('context-text').textContent='到了边界 · 可以整理身边草地，也可以转身继续玩';
+  }
+  world.setFrontier(landHint);
+}
+function changeMode(next) {
+  world?.cancelPointerGesture();
+  mode = next; buildCell = null; chosenTarget = null; hideModelMenu(); world?.select(null); world?.stopWalking();
+  updateUI(); updateContext();
+}
+function selectItem(item) {
+  if (!ITEMS[item]) return;
+  if (!game.state.inventory[item]) { toast(`${ITEMS[item].name}暂时没有，去采集或在工坊制作吧。`); return; }
+  selectedItem = item; changeMode('build');
+}
+function feel(pattern = 12) {
+  try { navigator.vibrate?.(pattern); } catch { /* 这台设备没有震动 */ }
+}
+function selectTarget(target) { chosenTarget = target; world.select(target); updateContext(); }
+function onPick(pick) {
+  if (!started || !pick?.target) return;
+  selectTarget(pick.target);
+  const button = $('action-button');
+  if (button) { button.classList.remove('attention'); void button.offsetWidth; button.classList.add('attention'); }
+  feel(12);
+}
+function approach(target, action = false) {
+  if (!started || panels.isOpen()) return;
+  selectTarget(target);
+  if (world.distanceTo(target) > 2.8) world.walkTo(target.position, action ? () => interact(target) : null);
+  else if (action) interact(target);
+}
+function tutorOpen() {
+  return $('tutor-card') && !$('tutor-card').hidden;
+}
+function tutorResult() {
+  if (tutorStage !== 'play') return { picked: '', result: '' };
+  if (tutorActivity?.play === 'pick' || tutorActivity?.play === 'quiz') {
+    return { picked: tutorPick?.choiceId || '', result: tutorPick ? (tutorPick.ok ? 'ok' : 'no') : '' };
+  }
+  return { picked: '', result: tutorPick?.seen ? 'seen' : '' };
+}
+function beginActivity(tutor, activity) {
+  tutorActivity = activity;
+  tutorStage = 'play';
+  tutorPick = null;
+  tutorPage = 0;
+  tutorUsed = [];
+  tutorCurrent = activity?.play === 'quiz' ? nextQuestion(tutor.id, tutorBand, tutorUsed) : null;
+}
+function paintTutor() {
+  const tutor = tutorById($('tutor-card').dataset.tutor);
+  const surface = $('npc-surface');
+  if (!tutor || !surface) return;
+  const marked = tutorResult();
+  renderA2UI(surface, npcTalkMessages({
+    tutor,
+    stage: tutorStage,
+    activity: tutorActivity,
+    band: tutorBand,
+    question: tutorActivity?.play === 'pick' ? { ask: tutorActivity.ask, choices: tutorActivity.choices } : tutorCurrent,
+    page: tutorPage,
+    picked: marked.picked,
+    result: marked.result,
+  }), (action) => {
+    if (action.name === 'close') { closeTutor(); return; }
+    if (action.name === 'menu') {
+      tutorStage = 'menu';
+      tutorActivity = null;
+      tutorPick = null;
+      tutorPage = 0;
+      paintTutor();
+      return;
+    }
+    if (action.name === 'done') {
+      tutorPick = { seen: true };
+      speak('看完了');
+      paintTutor();
+      return;
+    }
+    if (action.name === 'page') {
+      tutorPage = Math.max(0, Number(action.context?.page) || 0);
+      paintTutor();
+      return;
+    }
+    if (action.name === 'band') {
+      tutorBand = action.context?.band === 'bigger' ? 'bigger' : 'little';
+      tutorUsed = [];
+      tutorPick = null;
+      tutorCurrent = nextQuestion(tutor.id, tutorBand, tutorUsed);
+      paintTutor();
+      return;
+    }
+    if (action.name === 'next') {
+      tutorPick = null;
+      tutorCurrent = nextQuestion(tutor.id, tutorBand, tutorUsed);
+      paintTutor();
+      return;
+    }
+    if (action.name !== 'choose' || tutorPick) return;
+    if (tutorStage !== 'play') {
+      const activity = talkActivities(tutor).find((item) => item.id === action.context?.value);
+      if (!activity) return;
+      beginActivity(tutor, activity);
+      paintTutor();
+      return;
+    }
+    const graded = gradeQuestion(
+      tutorActivity?.play === 'pick' ? { choices: tutorActivity.choices } : tutorCurrent,
+      action.context?.value,
+    );
+    tutorPick = { ok: graded.ok, choiceId: action.context?.value };
+    if (tutorCurrent?.id) tutorUsed.push(tutorCurrent.id);
+    speak(graded.ok ? '对了' : '再选一次');
+    paintTutor();
+  });
+}
+function openTutor(tutorId) {
+  const tutor = tutorById(tutorId);
+  if (!tutor || tutorOpen()) return;
+  tutorUsed = [];
+  tutorPick = null;
+  tutorPage = 0;
+  tutorStage = 'menu';
+  tutorActivity = null;
+  tutorCurrent = nextQuestion(tutor.id, tutorBand, tutorUsed);
+  $('tutor-card').hidden = false;
+  $('tutor-card').dataset.tutor = tutor.id;
+  paintTutor();
+  world?.stopWalking();
+}
+function closeTutor() {
+  if ($('tutor-card')) $('tutor-card').hidden = true;
+  tutorCurrent = null;
+}
+function interact(target = null) {
+  if (!started || panels.isOpen() || tutorOpen()) return;
+  if (!target && mode === 'build') return build();
+  target ||= chosenTarget || world.nearestTarget(2.8);
+  if(mode!=='remove'&&world.locomotion==='swim'&&world.pool&&(!target||target.type==='pool')){
+    chosenTarget=null;world.select(null);world.walkTo({x:POOL.x,z:POOL.entryZ});toast('朝木坡道游，上岸后可以继续走。');return;
+  }
+  if (!target) { toast(mode === 'remove' ? '先点选自己放的方块，再点取回。' : '走近木料、石料或工坊，就能操作啦。'); return; }
+  selectTarget(target);
+  const placedModel = Boolean(target.figureId || target.assemblyId);
+  if (world.distanceTo(target) > 2.8 && !placedModel && !world.balloon) { world.walkTo(target.position, () => interact(target)); return; }
+  if (target.type === 'ball') { world.recallBall(target.id); chosenTarget = null; world.select(null); updateContext(); return; }
+  if (mode === 'remove') {
+    if (target.type !== 'block') { toast('这些是大家的设施，自己放的方块可以取回。'); return; }
+    const result = game.removeBlock(target.id); toast(result.message, result.ok);
+    if (result.ok) { chosenTarget = null; world.select(null); world.celebrate(target.position); updateUI(); }
+    return;
+  }
+  if (target.type === 'resource') {
+    const now = performance.now();
+    if (now - (cooldowns.get(target.id) || -10000) < 1500) { toast('刚取过啦，材料很快补好。'); return; }
+    const result = game.harvest(target.item); toast(result.message, result.ok);
+    if (result.ok) { cooldowns.set(target.id, now); world.celebrate(target.position, ITEMS[target.item].color); }
+  } else if(target.type==='encounter'){
+    const result=game.claimEncounter(target.id);toast(result.message,result.ok);
+    chosenTarget=null;world.select(null);if(result.ok)world.celebrate(target.position);updateContext();
+  } else if (target.type === 'pool') { world.walkTo({x:POOL.x,z:POOL.z}); toast('从木坡道入水，游向池沿就能上岸。'); }
+  else if (target.type === 'bounce') {
+    if (world.bounce) { world.stopBounce(); toast('停下来啦。想再跳，再走上小岛。'); }
+    else world.walkTo(target.position);
+  } else if (target.type === 'tutor') {
+    openTutor(target.tutorId);
+  } else if (target.type === 'balloon') {
+    if (world.balloon) {
+      if (world.requestBalloonLand()) { toast('好，热气球自己飞回草坪基地。'); speak('热气球飞回草坪基地。'); }
+    }
+    else world.startBalloon();
+  } else if (target.type === 'guide') {
+    world.walkTo(BALLOON_BASE);
+    toast('顺着小路再往南，就到热气球草场。');
+  } else if (target.type === 'park') {
+    world.setParkMode(target.park);
+    if (!world.bounce) world.walkTo(BOUNCE_ISLAND);
+  }
+  else if (target.panel) openPanel(target.panel, target.context || {});
+  else if (target.type === 'creation') { const message = world.creation.tryOut(target.id) || `${target.name}很开心！`; world.celebrate(target.position); toast(message); speak(message); updateContext(); }
+  else if (target.type === 'experiment') { world.releaseBall(); }
+  else if (target.type === 'block') { toast(`${target.name}，可以接着搭建，也可以点“取回”。`); }
+}
+function build() {
+  if (!buildCell) { toast('先点场景选位置，看看预览，再确认放置。'); return; }
+  const cell = buildCell, item = selectedItem;
+  world.cancelPointerGesture();
+  const problem = placementIssue(cell);
+  if (problem) { toast(problem); speak(problem); return; }
+  if (Math.hypot(cell.x - world.playerPosition.x, cell.z - world.playerPosition.z) > 3.7) {
+    toast(`${playerName}走近后放在选好的位置。`);
+    world.walkTo(cell, () => { if (mode === 'build' && buildCell === cell && selectedItem === item && !panels.isOpen()) build(); });
+    return;
+  }
+  if (selectedItem === 'ball') {
+    if(world.releaseBall(cell)) buildCell = null; updateContext(); return;
+  }
+  const result = game.placeBlock(selectedItem, { ...cell, rotation });
+  toast(result.message, result.ok);
+  if (result.ok) { world.celebrate({ x: cell.x, y: cell.y, z: cell.z }, ITEMS[selectedItem].color); buildCell = null; updateUI(); updateContext(); }
+}
+function placementIssue(cell) {
+  if (!game.state.inventory[selectedItem]) return `${ITEMS[selectedItem].name}用完了，换一种材料吧。`;
+  if (selectedItem === 'ball') return null;
+  if (world.pool && inPoolReservedArea(cell.x,cell.z,.5)) return '这里是公共泳池和入口，给大家留出空间。';
+  if (inNumberPark(cell.x, cell.z, 0.6)) return `这里是${PARK_NAME}，给蹦床和玩法石留出空间。`;
+  if (onBalloonLawn(cell.x, cell.z, 0.4)) return `这里是${BALLOON_NAME}，给热气球和草坪留出空间。`;
+  const problem = game.placementProblem(selectedItem, { ...cell, rotation });
+  if (problem) return problem;
+  const footprint = selectedItem === 'roof' ? roofSpan(game.state.blocks, cell) : { x: cell.x, z: cell.z, w: 1, d: 1 };
+  for (let dx = 0; dx < footprint.w; dx++) for (let dz = 0; dz < footprint.d; dz++) {
+    const cx = footprint.x + dx, cz = footprint.z + dz;
+    if (Math.abs(cx - world.playerPosition.x) < .7 && Math.abs(cz - world.playerPosition.z) < .7 && cell.y <= world.playerPosition.y + .8) return `这里站着${playerName}，选旁边的空格吧。`;
+  }
+  return null;
+}
+function usesTap(target) {
+  if (!target) return false;
+  if (target.figureId || target.assemblyId || target.type === 'ball') return false;
+  if (target.type === 'block' && !target.panel) return false;
+  return true;
+}
+function onTap(pick) {
+  if (!started || panels?.isOpen()) return;
+  if (mode === 'remove') {
+    hideModelMenu();
+    if (pick.target?.type === 'block') { approach(pick.target, true); feel(12); return; }
+    if (pick.target) { toast('这些是大家的设施，自己放的方块可以取回。'); return; }
+    chosenTarget = null; world.select(null); world.walkTo(pick.point);
+    return;
+  }
+  if (pick.target?.figureId || pick.target?.assemblyId) {
+    if (mode === 'build') changeMode('gather');
+    selectTarget(pick.target);
+    showModelMenu(pick.target);
+    feel(12);
+    return;
+  }
+  if (pick.target?.type === 'tutor' && mode !== 'build') {
+    hideModelMenu();
+    approach(pick.target, true);
+    feel(12);
+    return;
+  }
+  hideModelMenu();
+  if (pick.target?.type === 'ball') { if(mode==='build') changeMode('gather'); approach(pick.target); return; }
+  if (mode === 'build') { world.stopWalking(); buildCell = pick.cell; updateContext(); }
+  else if (pick.target && usesTap(pick.target)) approach(pick.target, true);
+  else if (pick.target) approach(pick.target);
+  else { chosenTarget = null; world.select(null); world.walkTo(pick.point); }
+}
+function onQuickPlace(pick) {
+  if (!started || mode !== 'build' || panels?.isOpen()) return;
+  onTap(pick); build();
+}
+function updateUI() {
+  if (!$('hotbar').children.length) $('hotbar').innerHTML = hotItems.map((item, i) => `<button class="slot" data-item="${item}"><span class="slot-key">${i + 1}</span><span class="slot-count"></span>${icon(item, 31)}<span class="slot-name">${ITEMS[item].name}</span><span class="slot-selected" aria-hidden="true">✓</span></button>`).join('');
+  for (const el of $('hotbar').children) {
+    const item = el.dataset.item, count = game.state.inventory[item], selected = selectedItem === item && mode === 'build';
+    el.classList.toggle('selected', selected); el.classList.toggle('empty', !count);
+    el.setAttribute('aria-label', `选择${ITEMS[item].name}，现有${count}份`);
+    el.setAttribute('aria-pressed', String(selected));
+    el.querySelector('.slot-count').textContent = count ? `×${count}` : '暂无';
+  }
+  document.querySelectorAll('[data-mode]').forEach(el => { el.classList.toggle('active', el.dataset.mode === mode); el.setAttribute('aria-pressed', String(el.dataset.mode === mode)); });
+  $('sound-button').innerHTML = icon(game.state.settings.sound ? 'sound' : 'mute', 23);
+  $('sound-button').setAttribute('aria-label', game.state.settings.sound ? '关闭声音' : '打开声音');
+  $('undo-button').disabled = !game.history.length;
+  $('rotate-button').disabled = mode !== 'build';
+  updateSaveStatus(); updateWish();
+}
+function updateWish() {
+  const count = game.state.blocks.filter(b => b.item === 'plank' && b.y === 0 && b.x >= -7 && b.x <= -2 && b.z >= 4 && b.z <= 7).length;
+  $('wish-progress').innerHTML = Array.from({ length: 6 }, (_, i) => icon(i < count ? 'check' : 'plank', 18)).join('') + `<span>${Math.min(count, 6)} / 6</span>`;
+  if (count >= 6 && !completedWish) {
+    completedWish = true;
+    $('wish-title').textContent = '小院铺好啦！'; $('wish-description').textContent = '想加一面墙，还是去看看小球？接下来由你决定。';
+    if (started) { toast('自己的小院，完成啦！', true); world.celebrate(world.playerPosition); }
+  }
+  if (count < 6 && completedWish) {
+    completedWish = false; $('wish-title').textContent = '铺一块自己的小院'; $('wish-description').textContent = '试着铺 6 格木地板。也可以先去逛逛。';
+  }
+}
+function updateContext() {
+  if (!world) return;
+  if ($('focus-exit')) $('focus-exit').hidden = !world.modelFocus;
+  if (chosenTarget && !world.targets.some(t => t.id === chosenTarget.id)) chosenTarget = null;
+  const near = world.nearestTarget(2.8);
+  const target = chosenTarget || near;
+  $('placement-controls').hidden = !started || mode !== 'build' || panels?.isOpen();
+  if (panels?.isOpen()) hideModelMenu();
+  $('action-button').disabled = false;
+  document.querySelector('.action-controls').classList.toggle('building', mode === 'build');
+  if (mode === 'build') {
+    const problem = buildCell ? placementIssue(buildCell) : null;
+    const ready = !!buildCell && !problem;
+    $('placement-item').textContent = `${ITEMS[selectedItem].name} ×${game.state.inventory[selectedItem]}`;
+    const touch = matchMedia('(pointer: coarse)').matches;
+    $('placement-status').textContent = problem || (touch
+      ? ready ? '按住预览拖动 · 松手放置' : '点场景选位置 · 再拖动预览'
+      : ready ? '双击场景直接放置 · R 旋转' : '单击预览 · 双击直接放置');
+    $('placement-controls').classList.toggle('invalid', !!problem);
+    $('placement-confirm').disabled = !ready;
+    $('placement-confirm').textContent = !buildCell ? '先选位置' : problem ? '换个位置' : selectedItem === 'ball' ? '放小球' : '确认放置';
+    $('action-button').disabled = !ready;
+    $('action-icon').innerHTML = icon(selectedItem === 'ball' ? 'ball' : 'hammer', 30);
+    $('action-name').textContent = selectedItem === 'ball' ? '放小球' : '放这里';
+    $('context-text').textContent = '电脑双击放置 · 触屏拖动预览松手放置 · 也可以按确认';
+    world.setPreview(selectedItem, rotation, buildCell, !problem, game.state.blocks);
+  } else {
+    world.setPreview(selectedItem, rotation, null);
+    $('action-icon').innerHTML = icon(mode === 'remove' ? 'pickaxe' : target?.item || (target?.type === 'station' ? 'hammer' : 'hand'), 30);
+    if (modelMenu && target?.id === modelMenu.id) {
+      const label = world.creation.actionLabel(modelMenu.id);
+      if (label) target.action = label;
+    }
+    $('action-name').textContent = mode === 'remove' ? '取回来' : target?.action || '采集';
+    const focused = world.modelFocus;
+    $('focus-exit').hidden = !focused;
+    $('context-text').textContent = mode === 'remove' ? '点自己放的方块，马上拆下来 · 材料完整返还' : focused
+      ? `正在靠近看${world.targets.find(t => t.id === focused.id)?.name || ''}。点「退出近看」，或再双击一次。`
+      : modelMenu
+      ? (world.modelFocus?.id === modelMenu.id ? '再双击，或点退出近看。' : '点旁边的菜单。双击靠近看，再双击或点退出近看。')
+      : target?.hint || '左边摇杆走一走 · 点地点标签前往 · 拖动画面转视角';
+    if (world.bounce) {
+      const look = world.bounceLook() || bounceInfo(world.bounce.count);
+      const trampoline = world.targets.find(t => t.id === 'bounce-island');
+      if (trampoline) trampoline.action = '停下来';
+      $('action-name').textContent = '停下来';
+      $('action-icon').innerHTML = icon('jump', 30);
+      const title = playMode(look.mode).title;
+      $('context-text').textContent = `${PARK_NAME} · ${title} · ${look.n ? `${look.count} · ${look.word}` : look.note}。点停下来才停止。`;
+    } else if(world.locomotion==='swim'){
+      $('context-text').textContent='游泳中 · 摇杆划水 · 游向池沿，或点上岸';
+      if(mode!=='remove'&&world.pool&&(!target||target.type==='pool')){$('action-name').textContent='上岸';$('action-icon').innerHTML=icon('footsteps',30);}
+    }
+    else if(world.locomotion==='wade') $('context-text').textContent='浅水里慢慢走 · 水深了才需要游泳';
+    if (world.balloon) {
+      const look = world.balloonLook();
+      const craft = world.targets.find(t => t.id === 'balloon-craft' || t.id === 'balloon-base');
+      if (craft) craft.action = look.landing ? '正在降落' : '降落到草坪基地';
+      $('action-name').textContent = look.landing ? '正在降落' : '降落到草坪基地';
+      $('action-icon').innerHTML = icon('balloon', 30);
+      $('context-text').textContent = look.landing
+        ? `${look.title} · ${look.note}`
+        : `${look.title} · ${look.note} · 摇杆开热气球，升高降低看远近。`;
+    }
+  }
+  const tutorNear = world.targets.find((item) => item.type === 'tutor' && world.distanceTo(item) <= (item.reach || 2.7));
+  if (tutorNear && !tutorGreeted.has(tutorNear.id) && !tutorOpen() && !panels?.isOpen()) {
+    tutorGreeted.add(tutorNear.id);
+    toast(tutorNear.hello || `${tutorNear.name}在等你。`);
+    speak(tutorNear.hello || `${tutorNear.name}在等你。`);
+  }
+  const p = world.playerPosition;
+  $('location-name').textContent = world.balloon ? (world.balloonLook().landing ? '飞回草坪基地' : '热气球上看河谷') : tutorNear ? `${tutorNear.name}的${tutorNear.place || '身边'}` : onBalloonLawn(p.x, p.z, 1.2) || p.z > 16 ? BALLOON_NAME : inNumberPark(p.x, p.z, 1.2) ? PARK_NAME : p.x > 5 ? (p.z < 0 ? '溪边球道' : '豆苗的东岸') : p.z < -2 ? '林间小工坊' : '河谷小院';
+  const clock=realMoment();
+  const hh=String(clock.hour).padStart(2,'0'),mm=String(clock.minute).padStart(2,'0');
+  $('clock-label').textContent=`${clock.period} ${hh}:${mm} · ${clock.season}`;
+  $('clock-drawing').innerHTML=realAnalogClock(54);
+  $('life-button').setAttribute('aria-label',`现在${clock.dateLabel}${clock.season}，${clock.weather.label}，${clock.period}，看季节与植物`);
+  updateLandGuidance();
+}
+function start() {
+  if (!world) return;
+  started = true; $('welcome').hidden = true; resetInput(); save();
+  toast('去逛逛吧！左边摇杆走路，点材料，再点右边采集。');
+  speak('欢迎来到河谷。想去哪里，由你决定。');
+  updateContext();
+  if (game.storageError) toast(game.storageError);
+}
+
+async function bootValley() {
+  try {
+    await loadTutorPack();
+  } catch (error) {
+    console.warn('知识引擎的角色名单没取到', error);
+  }
+  setTutorGuards(tutors());
+  try {
+  world = new RiverWorld($('world-canvas'), {
+    tutors: tutors(),
+    onTap, onPick, onQuickPlace, onPreviewDrag: onTap,
+    canDragPreview: () => started && mode === 'build' && !!buildCell && !!game.state.inventory[selectedItem] && !panels?.isOpen(),
+    onBall: (message) => { if (started) { toast(message); save(); } },
+    onWater: message => { if(started)toast(message); },
+    onModelFocus: target => { if ($('focus-exit')) $('focus-exit').hidden = !target; if (!started) return; feel(target ? [10, 24, 16] : 8); toast(target ? `靠近看${target.name}。点退出近看可以回来。` : '回到原来的视角。'); refreshModelMenu(); updateContext(); },
+    canFocusModel: () => started && mode !== 'build' && mode !== 'remove' && !panels?.isOpen(),
+    onBounce: info => { if (!started) return; showBounce(info); updateContext(); },
+    onParkMode: info => { if (!started) return; if (world.bounce) showBounce(info); const mode = playMode(info.mode); toast(`${mode.title} · ${mode.ages}`); updateContext(); },
+    onBounceStop: () => { hideBounce(); const trampoline = world.targets.find(t => t.id === 'bounce-island'); if (trampoline) trampoline.action = '跳上去'; updateContext(); toast('停下来啦。走下来，再走上去，会重新从 1 开始。也可以先点一块玩法石。'); },
+    onBalloonStart: info => { if (!started) return; hideBounce(); showBalloon(info); toast('坐稳，热气球起飞啦。转一圈看整个河谷。'); speak('坐上热气球，飞起来看整个河谷。'); updateContext(); },
+    onBalloonLook: info => { if (!started) return; showBalloon(info); updateContext(); },
+    onBalloonStop: () => { hideBalloon(); toast('已经降落到草坪基地。想再看，再点乘坐。'); updateContext(); },
+  });
+  world.sync(game.state); world.facing = 0;
+  panels = createPanels({ game, icon, toast, speak, onSelect: selectItem, onReclaim:reclaimNearby, onPlaceFigure: placeFigureNearby, onChanged: () => { world.sync(game.state); updateUI(); }, onClose: () => { panelType = null; resetInput(); save(); updateContext(); } });
+  world.createLabels((target) => approach(target, true));
+  game.subscribe(() => { if (world.state !== game.state) { chosenTarget = null; buildCell = null; dismissedFrontiers.clear(); world.select(null); } world.sync(game.state); updateUI(); if (panelType === 'garden' || panelType==='life') panels.refresh(); else if (panelType === 'kiln') panels.touchKiln(); });
+  if (game.state.stats.built || game.state.stats.gathered || game.state.stats.crafted) $('start-button').innerHTML = `继续我的河谷 ${icon('arrow-right', 22)}`;
+  updateUI(); updateContext();
+  } catch (error) {
+    console.error('河谷启动失败', error);
+    $('webgl-fallback').hidden = false; $('welcome').hidden = true;
+  }
+}
+bootValley();
+
+$('start-button').addEventListener('click', start);
+$('welcome-help').addEventListener('click', () => openPanel('help'));
+$('help-button').addEventListener('click', () => openPanel('help'));
+$('life-button').addEventListener('click',()=>openPanel('life'));
+$('land-button').addEventListener('click',()=>openPanel('land'));
+$('land-question-open').addEventListener('click',()=>{
+  const id=$('land-question').dataset.chunk,candidate=nearbyFrontiers(game.state.land,world.playerPosition).find(p=>p.id===id);
+  if(!candidate||panels.isOpen()||mode!=='gather'){updateContext();return;}
+  const result=reclaimNearby(candidate.cx,candidate.cz);toast(result.message,result.ok);
+});
+$('land-question-skip').addEventListener('click',()=>{
+  for(const p of nearbyFrontiers(game.state.land,world.playerPosition))dismissedFrontiers.add(p.id);
+  resetInput();updateContext();
+});
+$('pause-button').addEventListener('click', () => openPanel('pause'));
+$('craft-button').addEventListener('click', () => openPanel('craft'));
+$('inventory-button').addEventListener('click', () => openPanel('inventory'));
+$('sound-button').addEventListener('click', () => { game.mutate(s => { s.settings.sound = !s.settings.sound; }); if (!game.state.settings.sound) { clearTimeout(speechTimer); window.speechSynthesis?.cancel(); } else speak('声音打开了。点喇叭可以听说明。'); });
+$('wish-dismiss').addEventListener('click', () => { $('wish-card').hidden = true; });
+$('wish-read').addEventListener('click', () => speak(`${$('wish-title').textContent}。${$('wish-description').textContent}`));
+$('action-button').addEventListener('click', () => interact());
+$('focus-exit').addEventListener('click', () => {
+  if (!world?.modelFocus) return;
+  world.toggleModelFocus(null);
+  feel(8);
+});
+$('model-menu').addEventListener('dblclick', event => {
+  if (event.target.closest('button') || !modelMenu) return;
+  const target = world.targets.find(t => t.id === modelMenu.id);
+  if (target) world.toggleModelFocus({ target });
+});
+$('model-menu-act').addEventListener('click', () => actFromMenu());
+$('model-menu-edit').addEventListener('click', () => editFromMenu());
+$('model-menu-recall').addEventListener('click', () => recallFromMenu());
+$('placement-confirm').addEventListener('click', () => { if (started && !panels.isOpen() && mode === 'build') build(); });
+$('placement-cancel').addEventListener('click', () => changeMode('gather'));
+$('jump-button').addEventListener('click', () => { if (started && !panels.isOpen()) world.jump(); });
+$('bounce-stop').addEventListener('click', () => { if (started) world.stopBounce(); });
+$('balloon-land')?.addEventListener('click', () => {
+  if (!started || !world?.requestBalloonLand()) return;
+  toast('好，热气球自己飞回草坪基地。');
+  speak('热气球飞回草坪基地。');
+});
+$('balloon-hud')?.addEventListener('click', event => {
+  const mode = event.target.closest('[data-balloon-mode]')?.dataset.balloonMode;
+  if (!started || !world?.balloon || !mode) return;
+  world.setBalloonMode(mode);
+  toast(mode === 'steer' ? '自己开啦。摇杆前后左右飞。' : '转一圈看河谷。');
+});
+function holdBalloonClimb(value) {
+  return event => {
+    event.preventDefault();
+    if (!started || !world?.balloon) return;
+    world.setBalloonClimb(event.type === 'pointerup' || event.type === 'pointercancel' ? 0 : value);
+  };
+}
+for (const [id, value] of [['balloon-up', 1], ['balloon-down', -1]]) {
+  const btn = $(id);
+  if (!btn) continue;
+  for (const name of ['pointerdown', 'pointerup', 'pointercancel']) btn.addEventListener(name, holdBalloonClimb(value));
+}
+$('bounce-hud')?.addEventListener('click', event => {
+  if (!started || !world) return;
+  const park = event.target.closest('[data-park]')?.dataset.park;
+  const skip = event.target.closest('[data-skip]')?.dataset.skip;
+  const table = event.target.closest('[data-table]')?.dataset.table;
+  if (park) world.setParkMode(park);
+  else if (skip) world.setParkMode('skip', { step: Number(skip) });
+  else if (table) world.setParkMode('times', { table: Number(table) });
+});
+$('rotate-button').addEventListener('click', () => { rotation = (rotation + 1) % 4; updateContext(); toast('转好了，再看看方向。'); });
+$('undo-button').addEventListener('click', () => { const result = game.undo(); toast(result.message, result.ok); updateUI(); });
+$('hotbar').addEventListener('click', e => { const item = e.target.closest('[data-item]')?.dataset.item; if (item) selectItem(item); });
+document.querySelectorAll('[data-mode]').forEach(el => el.addEventListener('click', () => changeMode(el.dataset.mode)));
+
+const pad = $('joystick'), knob = pad.querySelector('.joystick-knob'); let padPointer = null;
+function padMove(e) {
+  if (e.pointerId !== padPointer || !started || panels.isOpen()) return;
+  const r = pad.getBoundingClientRect(), dx = e.clientX - r.left - r.width / 2, dy = e.clientY - r.top - r.height / 2;
+  const d = Math.hypot(dx, dy), limit = 36, scale = d > limit ? limit / d : 1;
+  joystick.x = dx * scale / limit; joystick.z = dy * scale / limit;
+  knob.style.transform = `translate(${dx * scale}px, ${dy * scale}px)`;
+  world.cancelPointerGesture();
+  chosenTarget = null; buildCell = null; world.select(null);
+}
+pad.addEventListener('pointerdown', e => { if (!started || panels.isOpen()) return; e.preventDefault(); padPointer = e.pointerId; pad.setPointerCapture(e.pointerId); padMove(e); });
+pad.addEventListener('pointermove', padMove);
+for (const event of ['pointerup', 'pointercancel']) pad.addEventListener(event, e => { if (e.pointerId === padPointer) { padPointer = null; joystick.x = joystick.z = 0; knob.style.transform = ''; } });
+document.addEventListener('keydown', e => {
+  if (e.defaultPrevented || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName) || !started || panels?.isOpen()) return;
+  const key = e.key.toLowerCase();
+  if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright',' '].includes(key)) e.preventDefault();
+  if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(key)) { keys.add(key); chosenTarget = null; buildCell = null; world.select(null); world.cancelPointerGesture(); }
+  if (e.repeat) return;
+  if (key === ' ') world.jump();
+  else if (key === 'e') interact();
+  else if (key === 'b') openPanel('craft');
+  else if (key === 'i') openPanel('inventory');
+  else if (key === 'r' && mode === 'build') { rotation = (rotation + 1) % 4; updateContext(); }
+  else if (key === 'enter' && mode === 'build' && (!e.target.closest('button') || e.target.closest('.slot'))) { e.preventDefault(); build(); }
+  else if (key === 'escape') { if (mode === 'build') changeMode('gather'); else openPanel('pause'); }
+  else if (/^[1-6]$/.test(key)) selectItem(hotItems[Number(key) - 1]);
+});
+document.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
+window.addEventListener('blur', () => { resetInput(); if (started) save(); });
+document.addEventListener('visibilitychange', () => { resetInput(); lastFrame = performance.now(); if (started) save(); if(world)updateContext(); if (!document.hidden) refreshAccount(); });
+document.addEventListener('valley-account', () => refreshAccount());
+setPlayerName(null);
+refreshAccount();
+window.addEventListener('pagehide', () => { if (started) save(); });
+
+function frame(now) {
+  const elapsed = Math.max(0, Math.min((now - lastFrame) / 1000, 2));
+  const dt = Math.min(elapsed, .05); lastFrame = now;
+  if (world && !document.hidden) {
+    const input = { x: joystick.x + (keys.has('d') || keys.has('arrowright') ? 1 : 0) - (keys.has('a') || keys.has('arrowleft') ? 1 : 0), z: joystick.z + (keys.has('s') || keys.has('arrowdown') ? 1 : 0) - (keys.has('w') || keys.has('arrowup') ? 1 : 0) };
+    world.update(dt, input, !started || panels.isOpen()); storePlayer();
+    if (started && panelType !== 'pause') game.tick(elapsed);
+    uiTime += dt; savedTime += dt;
+    placeModelMenu();
+    if (uiTime > .15) { uiTime = 0; updateContext(); }
+    if (started && savedTime > 4) { savedTime = 0; save(); }
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// The browser checks inspect state and exercise the same actions used by the UI.
+window.__valley = { game, get world() { return world; }, get panels() { return panels; }, start, openPanel, selectItem, changeMode, interact, playerName: () => playerName, setBuildCell: cell => { buildCell = cell; updateContext(); } };
+window.render_game_to_text = () => JSON.stringify({
+  coords: 'world x/east, y/up, z/south; integer building grid',
+  started, mode, selectedItem, rotation, buildCell, panel: panels?.type() ?? null,
+  workshop: panels?.workshop()?.session.snapshot() ?? null,
+  axle: panels?.axle()?.session.snapshot() ?? null,
+  creation: { ...panels?.studio()?.snapshot(), engine: game.state.creation.settings.engine, drafts: game.state.creation.drafts.length, blueprints: game.state.creation.blueprints.map(b => b.id), parts: game.state.creation.parts.length, assemblies: game.state.creation.assemblies.map(a => ({ id: a.id, status: a.status, world: a.world })), figures: game.state.creation.figures.map(f => ({ id: f.id, name: f.figure.name, placed: f.placed })), inWorld: world?.creation.snapshot() ?? [], modelFocus: world?.modelFocus?.id ?? null },
+  player: game.state.player, inventory: game.state.inventory, blocks: game.state.blocks.length,
+  balls: world?.serializeBalls(),
+  locomotion: world?.locomotion,
+  balloon: world?.balloon ? { phase: world.balloon.phase, angle: world.balloon.angle } : null,
+  clock:game.state.clock,season:realMoment(),
+  flora:game.state.flora.map(p=>({...p,stage:floraStage(p,game.state.clock)})),
+  land:game.state.land,
+  landHint:landHint?{id:landHint.id,direction:landHint.direction,distance:landHint.distance}:null,
+});
+window.advanceTime = ms => new Promise(resolve => {
+  const start = performance.now();
+  function wait(now) { if(now-start>=ms) resolve(); else requestAnimationFrame(wait); }
+  requestAnimationFrame(wait);
+});

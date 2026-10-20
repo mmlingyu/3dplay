@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180" role="img" aria-label="">
+  <rect width="320" height="180" fill="#e7f3ea"/>
+  <path d="M40 20h70l20 140H60z" fill="#8ebdc0"/>
+  <path d="M70 20h24l8 140H78z" fill="#f4fbff" opacity=".8"/>
+  <path d="M20 150c50-16 90-8 140 6s80 10 140-8v32H20z" fill="#6f8f62"/>
+</svg>

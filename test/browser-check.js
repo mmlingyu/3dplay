@@ -1,0 +1,121 @@
+import { chromium } from 'playwright';
+import assert from 'node:assert/strict';
+import { mkdir, writeFile } from 'node:fs/promises';
+
+const url = process.env.GAME_TEST_URL || 'http://127.0.0.1:5174';
+await mkdir('output', { recursive: true });
+const browser = await chromium.launch({ headless: true });
+const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+const page = await context.newPage();
+const errors = [], passed = [];
+page.on('pageerror', error => errors.push(error.message));
+const check = (name, value) => { assert.ok(value, name); passed.push(name); console.log(`✓ ${name}`); };
+const inventory = () => page.evaluate(() => ({ ...__valley.game.state.inventory }));
+const close = () => page.locator('.panel-header [data-action="close"]').click();
+try {
+  await page.goto(url); await page.waitForFunction(() => window.__valley?.world);
+  check('三维世界启动，欢迎页可见', await page.locator('#start-button').isVisible());
+  await page.click('#start-button');
+  await page.evaluate(() => { __valley.game.state.settings.sound = false; });
+  const woodBefore = (await inventory()).wood;
+  await page.getByRole('button', { name: '前往林间木料', exact: true }).click();
+  await page.waitForFunction(before => __valley.game.state.inventory.wood === before + 2, woodBefore, { timeout: 25000 });
+  check('点击世界标签后自动走近并采集，不需要答题', (await inventory()).wood === woodBefore + 2);
+
+  await page.click('#craft-button');
+  await page.click('[data-action="workshop-flat"]');
+  const beforeCraft = await inventory();
+  await page.click('[data-action="craft-material"][data-item="wood"]');
+  await page.click('[data-action="craft-slot"][data-x="0"][data-y="0"]');
+  check('试摆材料时库存不变', JSON.stringify(await inventory()) === JSON.stringify(beforeCraft));
+  await page.click('[data-action="craft-confirm"]');
+  check('木料加工为四块木板', (await inventory()).wood === beforeCraft.wood - 1 && (await inventory()).plank === beforeCraft.plank + 4);
+  await page.click('[data-action="craft-material"][data-item="plank"]');
+  for (const [x,y] of [[0,0],[1,0],[0,1],[1,1]]) await page.click(`[data-action="craft-slot"][data-x="${x}"][data-y="${y}"]`);
+  check('同格子有两种产物时，需要主动选择', await page.locator('[data-action="craft-confirm"]').isDisabled());
+  await page.click('[data-action="craft-result"][data-recipe="workbench"]'); await page.click('[data-action="craft-confirm"]');
+  check('格子合成获得工作台', (await inventory()).workbench === 1);
+  await close();
+  await page.evaluate(() => { __valley.world.playerPosition.set(-5,0,5); __valley.world.stopWalking(); __valley.selectItem('workbench'); __valley.setBuildCell({x:-5,y:0,z:4}); });
+  await page.click('#placement-confirm');
+  await page.evaluate(() => { __valley.changeMode('gather'); __valley.interact(__valley.world.targets.find(t => t.item === 'workbench')); });
+  await page.click('[data-action="workshop-flat"]');
+  check('放置并打开工作台，使用三乘三格子', await page.locator('[data-action="craft-slot"]').count() === 9);
+  await page.locator('.panel-details summary').click();
+  await page.click('[data-action="craft-example"][data-recipe="chest"]');
+  await page.click('[data-action="craft-confirm"]');
+  check('中间留空的八块木板做储物箱', (await inventory()).chest === 1);
+  await close();
+
+  await page.evaluate(() => { __valley.world.playerPosition.set(-5,0,5); __valley.world.stopWalking(); __valley.selectItem('chest'); __valley.setBuildCell({x:-4,y:0,z:5}); });
+  await page.click('#placement-confirm');
+  const chestID = await page.evaluate(() => __valley.game.state.blocks.find(b => b.item === 'chest')?.id);
+  check('用材料栏旁的确认按钮放置建筑', Boolean(chestID));
+  await page.evaluate(id => __valley.openPanel('chest', { id }), chestID);
+  const stock = (await inventory()).wood;
+  await page.click('[data-action="chest-deposit"][data-item="wood"]');
+  check('箱子存放材料', (await inventory()).wood === stock - 1);
+  await close();
+  await page.evaluate(id => { __valley.changeMode('remove'); __valley.interact(__valley.world.targets.find(t => t.id === id)); }, chestID);
+  check('取回箱子完整返还箱子和内容', (await inventory()).wood === stock && (await inventory()).chest === 1);
+  await page.click('#undo-button');
+  check('撤销取回能恢复箱子及内容', await page.evaluate(id => !!__valley.game.state.chests[id] && __valley.game.state.chests[id].wood === 1, chestID));
+
+  await page.evaluate(() => __valley.openPanel('warehouse'));
+  const beforeAnswer = await inventory();
+  await page.click('[data-action="order-answer"][data-order="2"][data-answer="stone"]');
+  check('答错有提示且不扣材料', JSON.stringify(await inventory()) === JSON.stringify(beforeAnswer));
+  await page.click('[data-action="order-answer"][data-order="2"][data-answer="wood"]');
+  check('答对只增加可采集原料', (await inventory()).wood === beforeAnswer.wood + 2);
+  check('同一份补给不能重复领取', await page.locator('[data-action="order-answer"][data-order="2"]').first().isDisabled());
+  await close();
+
+  await page.evaluate(() => __valley.openPanel('kiln'));
+  await page.click('[data-action="kiln-start"][data-mode="normal"]');
+  await page.waitForTimeout(2300);
+  if (await page.locator('.panel-header [data-action="close"]').isVisible()) await close();
+  await page.click('#pause-button');
+  const elapsed = await page.evaluate(() => __valley.game.state.kiln.elapsed);
+  await page.waitForTimeout(1800);
+  check('暂停菜单真正停止加工', await page.evaluate(t => __valley.game.state.kiln.elapsed === t, elapsed));
+  await close(); await page.evaluate(() => __valley.openPanel('kiln'));
+  await page.waitForFunction(() => __valley.game.state.kiln.stage === 'ready', null, { timeout: 30000 });
+  check('查看窑炉时仍完成四阶段加工', await page.locator('[data-action="kiln-claim"]').isVisible());
+  await page.click('[data-action="kiln-claim"]');
+  check('冷却完成后领取两块砖', (await inventory()).brick === 2); await close();
+
+  await page.evaluate(() => __valley.openPanel('garden'));
+  await page.click('[data-action="garden-plant"][data-id="plot-1"]');
+  await page.click('[data-action="garden-water"][data-id="plot-1"]');
+  await page.click('[data-action="garden-water"][data-id="plot-1"]');
+  check('过量浇水形成积水状态', await page.evaluate(() => __valley.game.state.garden[0].moisture === 3));
+  await page.locator('[data-transplant-from="plot-1"]').selectOption('plot-3');
+  await page.click('[data-action="garden-transplant"][data-id="plot-1"]');
+  await page.evaluate(() => __valley.game.tick(8));
+  check('移到排水好的园地后积水退去', await page.evaluate(() => __valley.game.state.garden[2].planted && __valley.game.state.garden[2].moisture === 2));
+  await page.evaluate(() => __valley.game.tick(90));
+  await page.click('[data-action="garden-harvest"][data-id="plot-3"]');
+  check('成熟可收获并留种', (await inventory()).bean === 2); await close();
+
+  const motion = await page.evaluate(() => {
+    const w = __valley.world; w.balls = []; w.releaseBall(); const start = w.balls[0].p.toArray();
+    for (let i=0;i<120;i++) w.updateBalls(1/60);
+    return { start, end: w.balls[0].p.toArray() };
+  });
+  check('木球在重力作用下向低处滚动', motion.end[2] > motion.start[2] + 1 && motion.end[1] < motion.start[1] - .5);
+
+  await page.click('#help-button'); await page.click('[data-action="open-inspiration"]');
+  check('帮助页可打开AI建筑点子卡', await page.locator('#game-panel-title').innerText() === '建筑点子卡'); await close();
+  await page.click('#pause-button');
+  const snapshot = await page.evaluate(() => ({ inventory: { ...__valley.game.state.inventory }, blocks: [...__valley.game.state.blocks], player: { ...__valley.game.state.player } }));
+  await page.locator('.panel-details summary').click();
+  const downloadEvent = page.waitForEvent('download'); await page.click('[data-action="export"]');
+  const download = await downloadEvent; check('存档能下载为JSON文件', download.suggestedFilename().endsWith('.json'));
+  await page.reload(); await page.waitForFunction(() => window.__valley?.world);
+  check('重载恢复材料、建筑和人物位置', await page.evaluate(s => JSON.stringify(__valley.game.state.inventory) === JSON.stringify(s.inventory) && JSON.stringify(__valley.game.state.blocks) === JSON.stringify(s.blocks) && JSON.stringify(__valley.game.state.player) === JSON.stringify(s.player), snapshot));
+  check('重载后加工不会计算离线时间', await page.evaluate(() => __valley.game.state.kiln.stage === 'idle'));
+  await page.click('#start-button'); await page.waitForTimeout(3600);
+  await page.screenshot({ path: 'output/game-desktop.png' });
+  check('运行全流程没有未捕获页面错误', errors.length === 0);
+  await writeFile('output/browser-verification.json', JSON.stringify({ url, date: new Date().toISOString(), passed, errors, scope: '桌面 Chromium 集成；场景移动通过真实标签，时间推进通过真实帧；种植成熟与球道采用测试时间推进。实际儿童和真实平板尚未试用。' }, null, 2));
+} finally { await browser.close(); }

@@ -1,0 +1,182 @@
+import { isCreationReserved } from './creation-data.js';
+
+export const WORLD_SIZE = 32;
+export const MAX_BUILD_HEIGHT = 12;
+export const STORAGE_KEY = 'yuanyuan-river-valley-v1';
+export const GUEST_PLAYER_NAME = '小谷';
+
+export function playerDisplayName(user) {
+  const raw = typeof user?.name === 'string' ? user.name.replace(/\s+/g, ' ').trim() : '';
+  return raw || GUEST_PLAYER_NAME;
+}
+export const DAMAGED_BACKUP_KEY = `${STORAGE_KEY}-damaged-backup`;
+export const FIGURES_KEY = `${STORAGE_KEY}-figures`;
+export const LIFE_BACKUP_KEY = `${STORAGE_KEY}-before-life`;
+export const LAND_BACKUP_KEY = `${STORAGE_KEY}-before-expansion`;
+export const CRAFT_RULES = Object.freeze({ dragThreshold: 7 });
+
+// Integer y coordinates describe the bottom of a placed block.
+export function terrainHeight(x, z) {
+  return x >= 3 && x <= 5 ? -1 : 0;
+}
+
+const tutorGuards = [];
+
+export function setTutorGuards(list = []) {
+  tutorGuards.length = 0;
+  for (const tutor of list) {
+    const x = Number(tutor?.x);
+    const z = Number(tutor?.z);
+    const radius = Number(tutor?.guard);
+    if (!Number.isFinite(x) || !Number.isFinite(z)) continue;
+    tutorGuards.push({ x, z, radius: Number.isFinite(radius) ? radius : 1.4 });
+  }
+}
+
+export function isProtectedCell(x, z) {
+  if (!Number.isFinite(x) || !Number.isFinite(z)) return true;
+  // Shared facilities stay accessible, including their approach space.
+  const facilities = [
+    { x: -9, z: -7, radius: 1.1 },
+    { x: -10, z: -4, radius: 0.9 },
+    { x: -12.2, z: -6.2, radius: 0.9 },
+    { x: -4.2, z: -7.6, radius: 0.9 },
+    { x: -5.9, z: -4.2, radius: 0.9 },
+    { x: -2.6, z: -4.5, radius: 0.9 },
+    { x: -11.5, z: 3.8, radius: 0.9 },
+    { x: 10, z: 8.5, radius: 0.9 },
+    { x: 7, z: 5, radius: 0.9 },
+    { x: 3.1, z: 6.5, radius: 0.9 },
+    { x: 13.1, z: 1.15, radius: 3.6 },
+    { x: -4.2, z: 20.2, radius: 3.0 },
+  ];
+  return facilities.concat(tutorGuards).some(point => Math.hypot(x - point.x, z - point.z) <= point.radius)
+    || isCreationReserved(x, z)
+    || (x >= 2.1 && x <= 5.9 && z >= 1.65 && z <= 3.35)
+    || (x >= 7.5 && x <= 11.5 && z >= 4.2 && z <= 7.1)
+    // A placed cube extends half a cell beyond its center; include overlap.
+    || (Math.abs(x + 12) <= 1.6 + 0.5 && Math.abs(z + 1.5) <= 1.35 + 0.5)
+    || (Math.abs(x - 9) <= 1.55 / 2 + 0.5 && z >= -7.5 && z <= -2.5)
+    || (Math.abs(x - 9) <= 1.6 / 2 + 0.5 && Math.abs(z + 1.6) <= 1.3 / 2 + 0.5);
+}
+
+export const ITEMS = {
+  wood: { name: '木料', color: '#b57b48', emoji: '🪵', placeable: true, description: '采来的木料。把它分成木板是游戏约定，现实中需要工具加工。' },
+  plank: { name: '木板', color: '#dda66e', emoji: '🟨', placeable: true, description: '可以搭路、墙和小屋。格子合成的数量与形状是游戏约定。' },
+  stick: { name: '木棍', color: '#b77e4d', emoji: '🥢', placeable: false, description: '加工后的木棍，与树上采来的树枝不同。' },
+  stone: { name: '石块', color: '#a5b7ba', emoji: '🪨', placeable: true, description: '从石堆采来，可用于建造。两份泥土不会直接变成石块。' },
+  clay: { name: '制砖黏土', color: '#c99c85', emoji: '🟫', placeable: true, description: '这里提供的是适合制砖的黏土原料；并非随便一把泥土都适合。' },
+  branch: { name: '树枝', color: '#8e6749', emoji: '🌿', placeable: false, description: '地上捡到的树枝，在工坊里用作燃料。' },
+  soil: { name: '种植土', color: '#977755', emoji: '🟤', placeable: true, description: '这里是适合种植的土，和制砖黏土的用途不同。' },
+  water: { name: '清水', color: '#76cbd7', emoji: '💧', placeable: false, description: '给植物浇水。植物需要适量水，积水也会妨碍生长。' },
+  seed: { name: '豆种', color: '#a9bf75', emoji: '🌱', placeable: false, description: '种在园地里，观察土的干湿与排水。' },
+  brick: { name: '砖块', color: '#dc8d6c', emoji: '🧱', placeable: true, description: '黏土经过成形、干燥、烧制和冷却得到的砖。时间在游戏中缩短了。' },
+  shard: { name: '试样碎片', color: '#ba8f7b', emoji: '🧩', placeable: false, description: '来自加工条件不合适的试样，可观察裂纹。不会变成高级材料。' },
+  workbench: { name: '工作台', color: '#c9895b', emoji: '🛠️', placeable: true, description: '四块木板组成工作台是游戏配方。放好后可以使用三乘三格子。' },
+  chest: { name: '储物箱', color: '#d19a58', emoji: '📦', placeable: true, description: '可以存放材料。挖回箱子时，箱内材料也会完整返还。' },
+  ramp: { name: '斜坡', color: '#e3b77e', emoji: '📐', placeable: true, description: '木板加石块做成斜坡。也可以当上台的台阶。数量是游戏约定。' },
+  post: { name: '挡板', color: '#b98c68', emoji: '🚧', placeable: true, description: '一根木棍做成挡板。放在球的路径上，观察碰撞如何改变方向。' },
+  ball: { name: '木球', color: '#f4c963', emoji: '🟡', placeable: false, description: '两块木板合成圆球是游戏约定，现实中还需要切削等加工。' },
+  roof: { name: '屋顶', color: '#c98063', emoji: '🏠', placeable: true, description: '三块木板拼成一片屋顶。用木板、篱笆、砖、门或窗把屋子围好，屋顶会自己变大或变小，盖住整间。中间可以后铺地板。这是游戏里的盖法，不判断真实承重。' },
+  window: { name: '窗', color: '#9ec9c4', emoji: '🪟', placeable: true, description: '木板加木棍做成窗。嵌在墙上，走不过去。' },
+  door: { name: '门', color: '#8f6238', emoji: '🚪', placeable: true, description: '两块木板加一根木棍做成门。所在格子可以走过去，是游戏约定。' },
+  bed: { name: '床', color: '#efe0b8', emoji: '🛏️', placeable: true, description: '两块木板做面，两根木棍做腿。放在屋里。' },
+  fence: { name: '篱笆', color: '#b97944', emoji: '🪵', placeable: true, description: '两根木棍围成篱笆，围院子用。' },
+  pot: { name: '花盆', color: '#c47a60', emoji: '🪴', placeable: true, description: '一份黏土捏成花盆。烧砖仍要去窑炉。' },
+  wreath: { name: '花环', color: '#5f8a48', emoji: '⭕', placeable: true, description: '一根树枝绕成花环，是游戏约定的装饰。' },
+  lantern: { name: '灯笼', color: '#e0a35a', emoji: '🏮', placeable: true, description: '木板加树枝做成灯笼。不会真的发光取暖。' },
+  flag: { name: '旗帜', color: '#d36b5a', emoji: '🚩', placeable: true, description: '木棍加树枝做成旗帜。旗面用树枝是游戏约定。' },
+  bean: { name: '豆子', color: '#b7d584', emoji: '🫘', placeable: false, description: '在适宜条件下长成的收获。成熟时间在游戏中缩短了。' },
+};
+
+export const COLLECTABLE_ITEMS = ['wood', 'stone', 'clay', 'branch', 'soil', 'water', 'seed'];
+export const ROOF_WALLS = ['plank', 'fence', 'post', 'brick', 'door', 'window', 'stone'];
+export const ROOF_LIMIT = 8;
+
+function roofSolid(list, x, z, y) {
+  return list.some(block => block.x === x && block.z === z && block.y <= y && block.y >= y - 1 && ROOF_WALLS.includes(block.item));
+}
+
+export function roofWallAt(blocks, x, z, y) {
+  const list = Array.isArray(blocks) ? blocks : [];
+  const here = list.filter(block => block.x === x && block.z === z && block.y <= y && block.y >= y - 1 && ROOF_WALLS.includes(block.item));
+  if (!here.length) return false;
+  if (here.some(block => block.item !== 'plank')) return true;
+  const underRoof = list.some(block => block.item === 'roof' && block.y === y && ((block.w || 1) > 1 || (block.d || 1) > 1) && x >= block.x && x < block.x + (block.w || 1) && z >= block.z && z < block.z + (block.d || 1));
+  if (underRoof) return false;
+  const around = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dz]) => roofSolid(list, x + dx, z + dz, y)).length;
+  return around < 4;
+}
+
+function roofFlood(blocks, { x, y, z }) {
+  const one = { x, z, w: 1, d: 1, enclosed: false };
+  const list = Array.isArray(blocks) ? blocks : [];
+  const isWall = (cx, cz) => roofWallAt(list, cx, cz, y);
+  if (isWall(x, z)) return one;
+  const seen = new Set();
+  const queue = [[x, z]];
+  const interior = [];
+  let leaked = false;
+  while (queue.length) {
+    const [cx, cz] = queue.pop();
+    const key = `${cx},${cz}`;
+    if (seen.has(key)) continue;
+    if (Math.abs(cx - x) > ROOF_LIMIT || Math.abs(cz - z) > ROOF_LIMIT) {
+      if (!isWall(cx, cz)) { leaked = true; break; }
+      continue;
+    }
+    seen.add(key);
+    if (isWall(cx, cz)) continue;
+    interior.push([cx, cz]);
+    queue.push([cx + 1, cz], [cx - 1, cz], [cx, cz + 1], [cx, cz - 1]);
+  }
+  const touches = interior.some(([cx, cz]) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => isWall(cx + dx, cz + dz)));
+  if (leaked || !touches || interior.length < 2) return one;
+  const xs = interior.map(([cx]) => cx);
+  const zs = interior.map(([, cz]) => cz);
+  const minX = Math.min(...xs);
+  const minZ = Math.min(...zs);
+  const w = Math.max(...xs) - minX + 1;
+  const d = Math.max(...zs) - minZ + 1;
+  if (interior.length !== w * d) return one;
+  return { x: minX, z: minZ, w, d, enclosed: true };
+}
+
+export function roofSpan(blocks, { x, y, z }) {
+  const direct = roofFlood(blocks, { x, y, z });
+  if (direct.enclosed || !roofWallAt(blocks, x, z, y)) return direct;
+  let best = null;
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const next = roofFlood(blocks, { x: x + dx, y, z: z + dz });
+    if (next.enclosed && (!best || next.w * next.d > best.w * best.d)) best = next;
+  }
+  return best || { x, z, w: 1, d: 1, enclosed: false };
+}
+
+export const RECIPES = [
+  { id: 'planks', name: '木板', pattern: [['wood']], output: { item: 'plank', count: 4 }, hint: '一份木料分成四块木板。数量是游戏约定。', group: '材料', kind: '切开', empty: '1 份切开成 4 块' },
+  { id: 'sticks', name: '木棍', pattern: [['plank']], output: { item: 'stick', count: 2 }, hint: '一块木板加倍成两根木棍。', group: '材料', kind: '加倍', empty: '1 变成 2' },
+  { id: 'post', name: '挡板', pattern: [['stick']], output: { item: 'post', count: 1 }, hint: '一根木棍做成挡板。', group: '玩具', kind: '一对一', empty: '一根做成一个' },
+  { id: 'fence', name: '篱笆', pattern: [['stick', 'stick']], output: { item: 'fence', count: 1 }, hint: '两根木棍围成篱笆。', group: '房子', kind: '相加', empty: '点左边的坑，放进去' },
+  { id: 'window', name: '窗', pattern: [['plank', 'stick']], output: { item: 'window', count: 1 }, hint: '木板加木棍做成窗。', group: '房子', kind: '两种材料', empty: '板做面，棍做框' },
+  { id: 'ramp', name: '斜坡', pattern: [['plank', 'stone']], output: { item: 'ramp', count: 1 }, hint: '木板加石块做成斜坡，也可以当台阶。', group: '房子', kind: '两种材料', empty: '板做坡，石块垫底' },
+  { id: 'roof', name: '屋顶', pattern: [['plank', 'plank'], ['plank', null]], output: { item: 'roof', count: 1 }, hint: '三块木板拼成一片屋顶。围墙变大或变小，屋顶会跟着改。', group: '房子', kind: '凑三', empty: '点左边的坑，放进去' },
+  { id: 'door', name: '门', pattern: [['plank', 'plank'], ['stick', null]], output: { item: 'door', count: 1 }, hint: '两块木板加一根木棍做成门。所在格可以走过去。', group: '房子', kind: '板加棍', empty: '两块板加一根闩' },
+  { id: 'bed', name: '床', pattern: [['plank', 'plank'], ['stick', 'stick']], output: { item: 'bed', count: 1 }, hint: '两块木板做面，两根木棍做腿。', group: '家具', kind: '板面棍腿', empty: '板做面，棍做腿' },
+  { id: 'workbench', name: '工作台', pattern: [['plank', 'plank'], ['plank', 'plank']], output: { item: 'workbench', count: 1 }, hint: '四块木板摆成小方块。', group: '家具', kind: '相加', empty: '四块板拼成桌' },
+  { id: 'ball', name: '木球', pattern: [['plank', 'plank']], output: { item: 'ball', count: 1 }, hint: '两块木板合成圆球是游戏约定。', group: '玩具', kind: '相加', empty: '两块板合成圆' },
+  { id: 'chest', name: '储物箱', pattern: [['plank', 'plank', 'plank'], ['plank', null, 'plank'], ['plank', 'plank', 'plank']], output: { item: 'chest', count: 1 }, hint: '八块木板围一圈，中间留空。', group: '家具', kind: '分组相加', empty: '4 + 4 = 8', pits: [{ item: 'plank', count: 4 }, { item: 'plank', count: 4 }] },
+  { id: 'pot', name: '花盆', pattern: [['clay']], output: { item: 'pot', count: 1 }, hint: '一份黏土捏成花盆。烧砖仍去窑炉。', group: '装饰', kind: '一对一', empty: '一份黏土捏花盆' },
+  { id: 'wreath', name: '花环', pattern: [['branch']], output: { item: 'wreath', count: 1 }, hint: '一根树枝绕成花环。', group: '装饰', kind: '一对一', empty: '一根树枝绕成环' },
+  { id: 'lantern', name: '灯笼', pattern: [['plank', 'branch']], output: { item: 'lantern', count: 1 }, hint: '木板加树枝做成灯笼。', group: '装饰', kind: '两种材料', empty: '板做罩，枝做把' },
+  { id: 'flag', name: '旗帜', pattern: [['stick', 'branch']], output: { item: 'flag', count: 1 }, hint: '木棍加树枝做成旗帜。', group: '装饰', kind: '两种材料', empty: '棍做杆，枝当旗面' },
+];
+
+export const GARDEN_PLOTS = [
+  { id: 'plot-1', x: 8.2, z: 5, drainage: 'poor' },
+  { id: 'plot-2', x: 9.5, z: 5, drainage: 'poor' },
+  { id: 'plot-3', x: 10.8, z: 5, drainage: 'good' },
+  { id: 'plot-4', x: 8.2, z: 6.3, drainage: 'good' },
+  { id: 'plot-5', x: 9.5, z: 6.3, drainage: 'good' },
+  { id: 'plot-6', x: 10.8, z: 6.3, drainage: 'good' },
+];

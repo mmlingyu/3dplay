@@ -1,0 +1,81 @@
+// Original vector illustrations. Material colors match the river-valley world.
+export const MATERIAL_COLORS = {
+  wood: '#b97944', plank: '#b97944', stick: '#b97944', branch: '#b97944',
+  stone: '#8b9c9b', clay: '#b97855', soil: '#b97855', water: '#77b9cd',
+  seed: '#8fb867', brick: '#c47a60', shard: '#c47a60', bean: '#8fb867',
+  roof: '#c98063', window: '#9ec9c4', door: '#8f6238', bed: '#efe0b8',
+  fence: '#b97944', pot: '#c47a60', wreath: '#5f8a48', lantern: '#e0a35a', flag: '#d36b5a',
+};
+
+const materials = {
+  wood: '<path fill="#b97944" d="m8 8 13-3 5 4v15l-14 4-6-4V11Z"/><path fill="#dba263" d="m8 8 13-3 5 4-14 4Z"/><path fill="#936037" d="m6 11 6 2v15l-6-4Z"/><path d="m15 15 7-2m-6 7 6-2m-7 7 7-2"/><ellipse cx="17" cy="8.5" rx="3.5" ry="1.5" fill="none"/>',
+  plank: '<path fill="#c28b50" d="m4 14 19-7 5 5-19 9Z"/><path fill="#a86e3e" d="M4 14v7l5 5v-5Zm5 7v5l19-7v-7Z"/><path d="m10 14 11-4m-6 6 9-3M8 18v4"/>',
+  stick: '<path fill="#b97944" d="m7 25 15-20 4 3-15 21Z"/><path d="m12 21 3 1m3-10 3 1"/><path fill="#dda365" d="m22 5 4 3-2 3-4-3Z"/>',
+  branch: '<path d="M7 28 20 5M13 18l-6-6m10-1 8 2m-7 0 1-7" stroke="#a66f42" stroke-width="4"/><path fill="#8fb867" d="M8 12C2 12 3 6 3 6s7 0 5 6Zm16 1c0-6 6-6 6-6s1 7-6 6Z"/>',
+  stone: '<path fill="#8b9c9b" d="m5 12 8-7 10 2 5 12-5 7-14 1-6-8Z"/><path fill="#b4c0b8" d="m5 12 8-7 10 2-5 8Z"/><path fill="#718681" d="m18 15 10 4-5 7-5-11Z"/><path d="m5 12 13 3m0 0-9 12"/>',
+  clay: '<path fill="#b97855" d="M5 23c0-6 4-7 5-12 1-5 7-6 10-3 2 2 2 5 5 8 3 4 2 10-2 11H9c-3 0-4-2-4-4Z"/><path d="M10 17c2-2 6-2 8-1m-9 6c4 2 9 2 13-1"/><path d="M13 10c1-1 3-1 4 0" stroke="#dfa481"/>',
+  soil: '<path fill="#b97855" d="m4 12 11-5 13 5v13l-12 4-12-4Z"/><path fill="#d59a6d" d="m4 12 11-5 13 5-12 5Z"/><path fill="#965e42" d="M4 12v13l12 4V17Z"/><path d="m8 19 1 1m12 0 2-1m-3 6 1-1m-10 0 1-1m6-12 3 1" stroke-linecap="round"/>',
+  water: '<path fill="#77b9cd" d="M16 4C13 10 6 16 6 21a10 10 0 0 0 20 0C26 16 19 10 16 4Z"/><path d="M11 19c-2 4 0 7 4 7" fill="none" stroke="#d9f3ee" stroke-width="2.5"/>',
+  seed: '<path fill="#aa8750" d="M12 28c-5-4-5-10 0-13 6-1 9 5 6 10-1 2-4 3-6 3Z"/><path d="M15 20V9"/><path fill="#8fb867" d="M15 12C8 13 6 7 6 7c7-3 10 0 9 5Zm0-3c0-7 6-7 10-6 0 6-4 8-10 6Z"/>',
+  brick: '<path fill="#c47a60" d="m3 13 18-7 8 5-18 7Z"/><path fill="#b26652" d="M3 13v10l8 5V18Z"/><path fill="#d88c70" d="M11 18v10l18-7V11Z"/><path d="m8 11 8 5m2-9 7 6m-9 3v10m7-13v10"/>',
+  shard: '<path fill="#c47a60" d="m8 5 16 7-5 16-15-9Z"/><path fill="#e2a085" d="m8 5 16 7-12 3Z"/><path d="m12 15 7 13m-7-13-8 4"/>',
+  workbench: '<path fill="#d49d63" d="m3 10 15-5 11 5-15 5Z"/><path fill="#b97944" d="M3 10v6l11 5v-6Zm11 5v6l15-5v-6Z"/><path d="M7 18v10m17-9v9m-8-7v7" stroke="#92623d" stroke-width="3"/><path d="m10 8 10 5m-4-6 10 5"/>',
+  chest: '<path fill="#b97944" d="M5 10c0-3 3-5 11-5s11 2 11 5v15H5Z"/><path fill="#dba365" d="M5 10c0-3 3-5 11-5s11 2 11 5v5H5Z"/><path d="M10 6v9m12-9v9M5 15h22"/><rect x="13" y="12" width="6" height="7" rx="1" fill="#e8c570"/>',
+  ramp: '<path fill="#c9965c" d="m4 24 21-17 4 3-21 18Z"/><path fill="#a97243" d="M4 24v4h25V10L8 28Z"/><path d="m11 18 4 3m2-8 4 3M27 15v10"/>',
+  post: '<path fill="#b97944" d="M5 8h22v14H5Z"/><path fill="#d8a064" d="m5 8 3-3h22l-3 3Z"/><path fill="#99653f" d="m27 8 3-3v14l-3 3Z"/><path d="M10 22v6m12-6v6M6 28h9m3 0h9M5 15h22m-14-7v14m8-14v14"/>',
+  ball: '<circle cx="16" cy="16" r="12" fill="#d69764"/><path d="M8 7c6 4 8 14 7 21M26 9c-7 0-14 8-19 14" stroke="#fae4c1" stroke-width="2"/><path d="M5 13c5 2 15 5 23 1" stroke="#b5744d"/><path d="M11 7c2-1 4-1 5-1" stroke="#fff0d7" stroke-width="2"/>',
+  roof: '<path fill="#c98063" d="m4 18 12-10 12 10v4L16 12 4 22Z"/><path fill="#a8664e" d="M4 22h24v3H4Z"/><path d="M16 8v8"/>',
+  window: '<rect x="6" y="6" width="20" height="20" rx="2" fill="#9ec9c4"/><path d="M16 6v20M6 16h20" stroke="#6a8f7a"/><rect x="6" y="6" width="20" height="20" rx="2" fill="none"/>',
+  door: '<path fill="#8f6238" d="M8 3h16v26H8Z"/><path fill="#b07948" d="M10 5h12v22H10Z"/><circle cx="20" cy="17" r="1.6" fill="#e8c570"/>',
+  bed: '<path fill="#efe0b8" d="M4 17h24v8H4Z"/><path fill="#d8c48a" d="M4 12h9v7H4Z"/><path d="M6 25v4m20-4v4M4 21h24"/>',
+  fence: '<path fill="#b97944" d="M5 6h5v20H5zm8.5 0h5v20h-5zM22 6h5v20h-5z"/><path fill="#d8a064" d="M4 11h24v3H4zm0 7h24v3H4Z"/>',
+  pot: '<path fill="#c47a60" d="M9 13h14l-2 14H11Z"/><path fill="#8fb867" d="M16 4c-4 4-4 8 0 10 4-2 4-6 0-10Z"/><ellipse cx="16" cy="13" rx="8" ry="2.2" fill="#b56c55"/>',
+  wreath: '<circle cx="16" cy="17" r="8" fill="none" stroke="#5f8a48" stroke-width="5"/><path fill="#c45d5d" d="M16 5 18.4 11h-4.8Z"/><path d="M8 14c2-2 4-2 6-1m10 1c-2-2-4-2-6-1"/>',
+  lantern: '<path fill="#c98063" d="M10 10h12v15H10Z"/><path fill="#f0d48a" d="M12 14h8v6h-8Z"/><path d="M16 4v6m-4 0h8M12 25h8" stroke="#8f6238"/>',
+  flag: '<path d="M8 4v24" stroke="#8a6239" stroke-width="3"/><path fill="#d36b5a" d="M10 5h16l-4 6 4 6H10Z"/>',
+  bean: '<path fill="#8fb867" d="M9 6c4-3 8 1 10 4s9 5 9 11c0 7-8 10-14 7C7 25 2 11 9 6Z"/><path d="M13 11c-2 6 0 10 5 13" stroke="#66884b"/>',
+  plantReady: '<path d="M16 29V7" stroke="#67864f" stroke-width="2"/><path fill="#8fb867" d="M16 13C7 16 3 11 4 7c8-1 12 2 12 6Zm0 7c8 1 12-4 11-8-7-1-11 2-11 8Z"/><path fill="#c3cb77" d="M20 17c6 2 5 9 1 12-2-3-5-8-1-12Z"/>',
+};
+
+const ui = {
+  leaf: '<path d="M26 5C13 4 5 8 6 18c1 9 16 12 20-13Z"/><path d="M6 28c3-8 7-13 15-18M13 15l6 2m-8 2-2-5"/>',
+  sun: '<circle cx="16" cy="16" r="6"/><path d="M16 3v3m0 20v3M3 16h3m20 0h3M7 7l2 2m14 14 2 2M7 25l2-2M23 9l2-2"/>',
+  backpack: '<rect x="7" y="8" width="18" height="21" rx="6"/><path d="M12 8V6a4 4 0 0 1 8 0v2M7 15H4v9h3m18-9h3v9h-3"/><rect x="11" y="18" width="10" height="7" rx="2"/><path d="M12 13h8"/>',
+  craft: '<path d="m4 11 12-6 12 6-12 6Zm0 0v13l12 5 12-5V11M16 17v12"/><path d="m10 8 12 6m-1-6L9 14"/>',
+  compass: '<circle cx="16" cy="17" r="12"/><path d="M16 2v3m-5 19 3-9 7-5-3 9Z"/><path d="m14 15 4 4"/>',
+  sound: '<path d="M4 12h6l7-6v20l-7-6H4Zm17-2a9 9 0 0 1 0 12m4-15a14 14 0 0 1 0 18"/>',
+  'sound-off': '<path d="M4 12h6l7-6v20l-7-6H4Zm18 0 7 8m0-8-7 8"/>',
+  pause: '<rect x="7" y="5" width="6" height="22" rx="2"/><rect x="19" y="5" width="6" height="22" rx="2"/>',
+  close: '<path d="m9 9 14 14m0-14L9 23"/>',
+  'arrow-right': '<path d="M5 16h21M18 8l8 8-8 8"/>',
+  rotate: '<path d="M26 12A11 11 0 1 0 27 21M26 4v8h-8"/>',
+  undo: '<path d="m12 6-8 7 8 7M4 13h15c11 0 11 14 0 14h-5"/>',
+  hand: '<path d="M10 16V8a2 2 0 0 1 4 0v7-10a2 2 0 0 1 4 0v10-7a2 2 0 0 1 4 0v8-4a2 2 0 0 1 4 0v8c0 6-4 10-9 10h-1c-4 0-6-3-8-6l-4-5c-2-3 2-5 4-3l2 2"/>',
+  hammer: '<path d="m8 5 4-2 12 9-5 6-4-4L5 28l-3-3 10-14-4-3Zm15 7 4 3-4 5-4-3"/>',
+  footsteps: '<ellipse cx="11" cy="10" rx="4" ry="7" transform="rotate(-16 11 10)"/><path d="m9 20 6-1 1 5c-4 3-6 1-7-4Z"/><ellipse cx="23" cy="19" rx="4" ry="7" transform="rotate(16 23 19)"/><path d="m19 29 6 1"/>',
+  home: '<path d="m3 15 13-11 13 11M7 13v15h18V13M13 28V18h6v10"/>',
+  plant: '<path d="M16 27V13m0 4C5 18 4 9 4 9c9-2 13 1 12 8Zm0-4c-1-8 6-10 12-9 0 8-5 12-12 9Z"/><path d="M7 28h18"/>',
+  kiln: '<path d="M5 28V12C5 6 10 3 16 3s11 3 11 9v16ZM5 12h22"/><path d="M10 28v-9a6 6 0 0 1 12 0v9M13 24c-2-3 3-4 3-7 4 3 5 7 1 9"/>',
+  warehouse: '<path d="m3 11 13-7 13 7v18H3ZM3 11h26M9 29V17h14v12m-14-7h14m-14 4h14"/>',
+  help: '<circle cx="16" cy="16" r="12"/><path d="M12 12a4 4 0 0 1 8 0c0 3-4 3-4 6m0 5h.01" stroke-width="2.4"/>',
+  map: '<path d="m3 7 9-3 8 3 9-3v21l-9 3-8-3-9 3Zm9-3v21m8-18v21"/><path d="m6 17 3-3 6 3 4-6 6 2" stroke-dasharray="2 3"/>',
+  check: '<path d="m6 17 7 7L27 8" stroke-width="3"/>',
+  plus: '<path d="M16 6v20M6 16h20"/>',
+  minus: '<path d="M6 16h20"/>',
+  book: '<path d="M16 7C12 4 7 4 3 5v22c4-1 9-1 13 2 4-3 9-3 13-2V5c-4-1-9-1-13 2Zm0 0v22M7 11h5m-5 5h5m8-5h5m-5 5h5"/>',
+  play: '<path d="M10 5v22l18-11Z" fill="currentColor" stroke="none"/>',
+  jump: '<path d="M7 26h18M16 23V5m-7 7 7-7 7 7"/><path d="M6 21v-4m20 4v-4" stroke-dasharray="2 3"/>',
+  balloon: '<ellipse cx="16" cy="11" rx="8" ry="9"/><path d="M10 18c2 3 10 3 12 0M12 18l-2 6h12l-2-6"/><rect x="11" y="24" width="10" height="5" rx="1"/>',
+  save: '<path d="M5 4h18l5 5v19H5ZM10 4v9h12V4M10 28V18h13v10m-4-21v3"/>',
+  heart: '<path d="M16 27 5 16C-3 7 8 0 16 9c8-9 19-2 11 7Z"/>',
+  sparkle: '<path d="m17 4 3 8 8 3-8 3-3 9-3-9-8-3 8-3Zm-12-1v6M2 6h6m18 17v6m-3-3h6"/>',
+};
+
+/** Return an original inline SVG. Buttons provide their own accessible labels. */
+export function icon(name, size = 24) {
+  name = ({ log: 'wood', brokenBrick: 'shard' })[name] || name;
+  const dimension = Number.isFinite(Number(size)) ? Math.max(8, Number(size)) : 24;
+  const drawing = materials[name] || ui[name] || ui.leaf;
+  const isMaterial = Object.hasOwn(materials, name);
+  return `<svg class="game-icon${isMaterial ? ' material-icon' : ''}" width="${dimension}" height="${dimension}" viewBox="0 0 32 32" fill="none" stroke="${isMaterial ? '#65533e' : 'currentColor'}" stroke-width="${isMaterial ? '1.4' : '2'}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${drawing}</svg>`;
+}

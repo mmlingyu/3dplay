@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>木作工作台 · 家庭建筑设计稿</title>
+  <style>
+    :root {
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --paper: #fffaf0;
+      --green: #426b58;
+      --green-dark: #2e5343;
+      --ink: #354c3d;
+      --muted: #77806c;
+      --line: #d5c7a4;
+      --wood: #d0894e;
+      --ok: #7b9e73;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #c8dfc1; color: var(--ink); }
+    .page { max-width: 980px; margin: 0 auto; padding: 20px 16px 64px; }
+    h1 { margin: 0; font-size: 26px; color: var(--green-dark); }
+    .kicker { margin: 0 0 4px; color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .08em; }
+    .note { margin: 6px 0 0; max-width: 60ch; color: var(--muted); font-size: 14px; line-height: 1.5; }
+    .pack { margin: 16px 0 12px; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 16px; background: var(--paper); }
+    .pack h2 { margin: 0 0 8px; font-size: 13px; }
+    .pack-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+    .bag { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px; width: 64px; padding: 6px 4px; border-radius: 12px; background: #f7f3e6; font-size: 11px; font-weight: 800; }
+    .bag svg { width: 28px; height: 28px; }
+    .bag b { color: var(--green); font-size: 14px; }
+    .bag.zero { opacity: .4; }
+    .hint { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+    .fold { margin: 0; border: 1.5px solid var(--line); border-radius: 14px; background: var(--paper); }
+    .fold + .fold { margin-top: 6px; }
+    .fold summary { display: flex; align-items: center; justify-content: space-between; min-height: 44px; padding: 8px 12px; cursor: pointer; font-weight: 800; list-style: none; }
+    .fold summary::-webkit-details-marker { display: none; }
+    .fold summary::after { content: "打开"; color: var(--muted); font-size: 12px; font-weight: 700; }
+    .fold[open] summary::after { content: "收起"; }
+    .scroller { display: flex; gap: 8px; overflow-x: auto; padding: 0 12px 12px; }
+    .want { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px; width: 88px; min-height: 88px; padding: 8px 6px; border: 2px solid var(--line); border-radius: 14px; background: #fff; color: var(--ink); font-size: 13px; font-weight: 800; }
+    .want svg { width: 34px; height: 34px; }
+    .want small { color: var(--muted); font-size: 10px; }
+    .want[aria-pressed="true"] { border-color: var(--ok); background: #e7f0da; }
+    .board { margin-top: 12px; min-height: 200px; padding: 16px; border: 2px solid #b7c3a3; border-radius: 20px; background: var(--paper); }
+    .board-empty { display: grid; place-items: center; min-height: 160px; color: var(--muted); font-weight: 700; text-align: center; }
+    .eq { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(120px,auto); align-items: center; gap: 12px; }
+    .kind { display: inline-flex; margin-bottom: 8px; padding: 3px 10px; border-radius: 999px; background: #e4ebd8; color: var(--green); font-size: 12px; font-weight: 800; }
+    .kind.split { background: #f3e4c8; color: #8a5a2a; }
+    .kind.double { background: #dce8f4; color: #3d5f86; }
+    .kind.mix { background: #efe4f2; color: #6a4a78; }
+    .left { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; }
+    .bunch { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .label { font-size: 15px; font-weight: 800; }
+    .pits { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; }
+    .pit { width: 58px; height: 58px; padding: 0; border: 3px dashed #d7c39a; border-radius: 50%; background: #fffdf8; }
+    .pit svg { width: 32px; height: 32px; opacity: .22; }
+    .pit.filled { border-style: solid; border-color: var(--wood); background: #ffe7c7; }
+    .pit.filled svg { opacity: 1; }
+    .plus, .eqs { color: #8a6a3d; font-size: 28px; font-weight: 800; }
+    .out { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .box { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 100px; min-height: 100px; padding: 8px; border: 3px dashed #c5d3b2; border-radius: 22px; background: #f7f8ef; opacity: .4; }
+    .eq.ready .box { opacity: 1; border-style: solid; border-color: var(--ok); background: #e7f0da; }
+    .sum { width: 100%; margin: 4px 0 0; text-align: center; font-size: 15px; font-weight: 800; color: var(--green); }
+    .why { margin-top: 10px; font-size: 13px; line-height: 1.5; color: var(--muted); }
+    .tabs { display: flex; gap: 8px; margin: 14px 0; }
+    .tabs button { min-height: 40px; padding: 6px 14px; border: 2px solid #b7c3a3; border-radius: 14px; background: var(--paper); font-weight: 800; color: var(--green); }
+    .tabs button[aria-selected="true"] { background: #e7f0da; border-color: var(--ok); }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    table { width: 100%; border-collapse: collapse; background: var(--paper); border-radius: 14px; overflow: hidden; }
+    th, td { padding: 7px 8px; border-bottom: 1px solid #eadfc8; text-align: left; font-size: 13px; }
+    th { background: #e7f0da; }
+    .warn { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: #fff3d8; color: #6d4e26; font-size: 13px; line-height: 1.5; }
+    .steps { padding-left: 20px; }
+    .steps li { margin: 5px 0; font-size: 14px; }
+    svg.ic { width: 28px; height: 28px; fill: none; stroke: #553d2d; stroke-width: 1.3; }
+    @media (max-width: 720px) {
+      .eq { grid-template-columns: 1fr; }
+      .eqs { transform: rotate(90deg); justify-self: center; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <p class="kicker">我的河谷 · 设计稿</p>
+    <h1>先点想做的，再填这一样的坑</h1>
+    <p class="note">背包始终可见。想做的东西收在折叠组里，不铺满一屏。每一种配方的左边材料组合只对应一样结果，避免 1 块木板做出三种东西。</p>
+
+    <section class="pack">
+      <h2>现在背包里有</h2>
+      <div class="pack-row" id="pack"></div>
+      <p class="hint">灰色是 0。石块、砖、木板、木料、种植土可以直接摆。清水、豆种、豆子给菜园。试样碎片只观察。黏土去窑炉才能成砖。</p>
+    </section>
+
+    <div class="tabs">
+      <button type="button" id="tab-make" aria-selected="true">做东西</button>
+      <button type="button" id="tab-rules">配方为什么不打架</button>
+      <button type="button" id="tab-build">拼一座小屋</button>
+    </div>
+
+    <section id="panel-make" class="panel active">
+      <div id="folds"></div>
+      <div class="board" id="board"><div class="board-empty">打开上面一组，点想做的东西。<br>下面只会出这一样要用的坑。</div></div>
+    </section>
+
+    <section id="panel-rules" class="panel">
+      <p class="note" style="margin-bottom:10px">旧稿里「1 木板 = 窗 / 屋顶 / 斜坡」和「2 木板 = 门 / 台阶 / 床」看起来像同一道加法。现在每种左边的材料组合只通往一个结果。</p>
+      <table>
+        <thead><tr><th>想做</th><th>左边（唯一）</th><th>运算</th><th>不再和谁撞</th></tr></thead>
+        <tbody>
+          <tr><td>木板</td><td>木料 ×1</td><td>切开 →4</td><td>—</td></tr>
+          <tr><td>木棍</td><td>木板 ×1</td><td>加倍 →2</td><td>单独 1 块板只做棍，不做屋顶</td></tr>
+          <tr><td>挡板</td><td>木棍 ×1</td><td>一对一</td><td>篱笆改成 2 棍</td></tr>
+          <tr><td>篱笆</td><td>木棍 + 木棍</td><td>相加</td><td>—</td></tr>
+          <tr><td>窗</td><td>木板 + 木棍</td><td>两种材料</td><td>不再是 1 板</td></tr>
+          <tr><td>斜坡</td><td>木板 + 石块</td><td>两种材料</td><td>兼上台阶；不当屋顶</td></tr>
+          <tr><td>屋顶</td><td>木板 + 木板 + 木板</td><td>凑三</td><td>和斜坡、窗都不同</td></tr>
+          <tr><td>门</td><td>木板 + 木板 + 木棍</td><td>板加棍</td><td>比窗多一块板</td></tr>
+          <tr><td>床</td><td>木板 + 木板 + 木棍 + 木棍</td><td>板面棍腿</td><td>和门差一根棍</td></tr>
+          <tr><td>工作台</td><td>木板 ×4</td><td>相加</td><td>木球不再用 4 板</td></tr>
+          <tr><td>木球</td><td>木板 + 木板</td><td>相加卷圆</td><td>不再和工作台抢 4 板</td></tr>
+          <tr><td>储物箱</td><td>(4 板)+(4 板)</td><td>分组 4+4</td><td>—</td></tr>
+          <tr><td>花盆</td><td>黏土 ×1</td><td>一对一</td><td>装饰，窑炉的黏土另一条路是烧砖</td></tr>
+          <tr><td>花环</td><td>树枝 ×1</td><td>一对一</td><td>树枝不再只当燃料</td></tr>
+          <tr><td>灯笼</td><td>木板 + 树枝</td><td>两种材料</td><td>—</td></tr>
+          <tr><td>旗帜</td><td>木棍 + 树枝</td><td>两种材料</td><td>—</td></tr>
+        </tbody>
+      </table>
+      <p class="warn">黏土：花盆是冷作装饰；砖仍走窑炉，不在这张工作台里烧。石块直接铺地基，只有做斜坡时才进坑。</p>
+    </section>
+
+    <section id="panel-build" class="panel">
+      <ol class="steps">
+        <li>背包里的木料切开成木板，铺 2×2 地面。墙继续用木板或砖直接摆。</li>
+        <li>做门：两块木板加一根棍。放在南面，这格可以走进去。</li>
+        <li>做窗：木板加木棍。嵌在墙上。</li>
+        <li>做屋顶：三块木板凑成斜顶，盖两片。</li>
+        <li>上台用斜坡（木板+石块），不再单独做台阶。</li>
+        <li>屋里放床或箱子。门外篱笆，墙上可挂灯笼、旗帜、花环，门口摆花盆。</li>
+      </ol>
+      <p class="warn">格子连接不能判断现实房屋是否安全。装饰份数是游戏约定。</p>
+    </section>
+  </div>
+  <script>
+    const svg = {
+      wood: '<svg class="ic" viewBox="0 0 32 32"><path fill="#b97944" d="m8 8 13-3 5 4v15l-14 4-6-4V11Z"/><path fill="#dba263" d="m8 8 13-3 5 4-14 4Z"/></svg>',
+      plank: '<svg class="ic" viewBox="0 0 32 32"><path fill="#c28b50" d="m4 14 19-7 5 5-19 9Z"/><path fill="#a86e3e" d="M4 14v7l5 5v-5Z"/></svg>',
+      stick: '<svg class="ic" viewBox="0 0 32 32"><path fill="#b97944" d="m7 25 15-20 4 3-15 21Z"/></svg>',
+      stone: '<svg class="ic" viewBox="0 0 32 32"><path fill="#8b9c9b" d="m5 12 8-7 10 2 5 12-5 7-14 1-6-8Z"/></svg>',
+      clay: '<svg class="ic" viewBox="0 0 32 32"><path fill="#b97855" d="M5 23c0-6 4-7 5-12 1-5 7-6 10-3 2 2 2 5 5 8 3 4 2 10-2 11H9c-3 0-4-2-4-4Z"/></svg>',
+      branch: '<svg class="ic" viewBox="0 0 32 32"><path d="M7 28 20 5M13 18l-6-6" stroke="#a66f42" stroke-width="4"/><path fill="#8fb867" d="M8 12C2 12 3 6 3 6s7 0 5 6Z"/></svg>',
+      soil: '<svg class="ic" viewBox="0 0 32 32"><path fill="#b97855" d="m4 12 11-5 13 5v13l-12 4-12-4Z"/></svg>',
+      water: '<svg class="ic" viewBox="0 0 32 32"><path fill="#77b9cd" d="M16 4C13 10 6 16 6 21a10 10 0 0 0 20 0C26 16 19 10 16 4Z"/></svg>',
+      seed: '<svg class="ic" viewBox="0 0 32 32"><path fill="#aa8750" d="M12 28c-5-4-5-10 0-13 6-1 9 5 6 10-1 2-4 3-6 3Z"/></svg>',
+      brick: '<svg class="ic" viewBox="0 0 32 32"><path fill="#c47a60" d="m3 13 18-7 8 5-18 7Z"/><path fill="#b26652" d="M3 13v10l8 5V18Z"/></svg>',
+      shard: '<svg class="ic" viewBox="0 0 32 32"><path fill="#c47a60" d="m8 5 16 7-5 16-15-9Z"/></svg>',
+      bean: '<svg class="ic" viewBox="0 0 32 32"><path fill="#8fb867" d="M9 6c4-3 8 1 10 4s9 5 9 11c0 7-8 10-14 7C7 25 2 11 9 6Z"/></svg>',
+      roof: '<svg class="ic" viewBox="0 0 32 32"><path fill="#c98063" d="m4 18 12-10 12 10v4L16 12 4 22Z"/></svg>',
+      window: '<svg class="ic" viewBox="0 0 32 32"><rect x="7" y="7" width="18" height="18" rx="2" fill="#9ec9c4" stroke="#6a8f7a"/><path d="M16 7v18M7 16h18"/></svg>',
+      door: '<svg class="ic" viewBox="0 0 32 32"><path fill="#8f6238" d="M9 4h14v24H9Z"/><circle cx="20" cy="16" r="1.4" fill="#e8c570"/></svg>',
+      bed: '<svg class="ic" viewBox="0 0 32 32"><path fill="#efe0b8" d="M4 18h24v8H4Z"/><path fill="#d8c48a" d="M4 14h8v6H4Z"/></svg>',
+      fence: '<svg class="ic" viewBox="0 0 32 32"><path fill="#b97944" d="M6 8h4v18H6zm8 0h4v18h-4zm8 0h4v18h-4z"/></svg>',
+      workbench: '<svg class="ic" viewBox="0 0 32 32"><path fill="#d49d63" d="m3 10 15-5 11 5-15 5Z"/></svg>',
+      ball: '<svg class="ic" viewBox="0 0 32 32"><circle cx="16" cy="16" r="11" fill="#d69764"/></svg>',
+      chest: '<svg class="ic" viewBox="0 0 32 32"><path fill="#b97944" d="M5 10c0-3 3-5 11-5s11 2 11 5v15H5Z"/></svg>',
+      ramp: '<svg class="ic" viewBox="0 0 32 32"><path fill="#c9965c" d="m4 24 21-17 4 3-21 18Z"/></svg>',
+      post: '<svg class="ic" viewBox="0 0 32 32"><path fill="#b97944" d="M12 4h8v24h-8Z"/></svg>',
+      pot: '<svg class="ic" viewBox="0 0 32 32"><path fill="#c47a60" d="M9 12h14l-2 14H11Z"/><path fill="#8fb867" d="M16 4c-4 4-4 8 0 10 4-2 4-6 0-10Z"/></svg>',
+      wreath: '<svg class="ic" viewBox="0 0 32 32"><circle cx="16" cy="17" r="8" fill="none" stroke="#5f8a48" stroke-width="5"/><path fill="#c45d5d" d="M16 6 18 11h-4Z"/></svg>',
+      lantern: '<svg class="ic" viewBox="0 0 32 32"><path fill="#c98063" d="M10 10h12v14H10Z"/><path fill="#f0d48a" d="M12 14h8v6h-8Z"/></svg>',
+      flag: '<svg class="ic" viewBox="0 0 32 32"><path stroke="#8a6239" stroke-width="3" d="M8 4v24"/><path fill="#d36b5a" d="M10 5h16l-4 6 4 6H10Z"/></svg>',
+    };
+
+    const bag = [
+      ['wood', '木料', 6], ['plank', '木板', 12], ['stick', '木棍', 4], ['stone', '石块', 8],
+      ['clay', '黏土', 4], ['branch', '树枝', 5], ['brick', '砖块', 6], ['soil', '种植土', 4],
+      ['water', '清水', 4], ['seed', '豆种', 4], ['bean', '豆子', 2], ['shard', '碎片', 1],
+    ];
+
+    const recipes = {
+      plank: { kind: '切开', cls: 'split', ages: '4+', left: [{ item: 'wood', name: '木料', n: 1 }], out: { item: 'plank', name: '木板', n: 4 }, empty: '1 份切开成 4 块', why: '单独一份木料只做木板。' },
+      stick: { kind: '加倍', cls: 'double', ages: '6+', left: [{ item: 'plank', name: '木板', n: 1 }], out: { item: 'stick', name: '木棍', n: 2 }, empty: '1 变成 2', why: '单独一块木板只做木棍，不再做成窗或屋顶。' },
+      post: { kind: '一对一', cls: '', ages: '4+', left: [{ item: 'stick', name: '木棍', n: 1 }], out: { item: 'post', name: '挡板', n: 1 }, empty: '一根做成一个', why: '单独一根棍只做挡板。' },
+      fence: { kind: '相加', cls: '', ages: '6+', left: [{ item: 'stick', name: '木棍', n: 2 }], out: { item: 'fence', name: '篱笆', n: 1 }, empty: '点左边的坑，放进去', why: '两根棍围院子，和一根棍的挡板分开。' },
+      window: { kind: '两种材料', cls: 'mix', ages: '6+', left: [{ item: 'plank', name: '木板', n: 1 }, { item: 'stick', name: '木棍', n: 1 }], out: { item: 'window', name: '窗', n: 1 }, empty: '板做面，棍做框', why: '有框的窗：板 + 棍。' },
+      ramp: { kind: '两种材料', cls: 'mix', ages: '6+', left: [{ item: 'plank', name: '木板', n: 1 }, { item: 'stone', name: '石块', n: 1 }], out: { item: 'ramp', name: '斜坡', n: 1 }, empty: '板做坡，石块垫底', why: '斜坡兼上台阶。屋顶不用石块。' },
+      roof: { kind: '凑三', cls: '', ages: '6+', left: [{ item: 'plank', name: '木板', n: 3 }], out: { item: 'roof', name: '屋顶', n: 1 }, empty: '点左边的坑，放进去', why: '三块板拼斜顶。不是一块板，也不是斜坡。' },
+      door: { kind: '板加棍', cls: 'mix', ages: '6+', left: [{ item: 'plank', name: '木板', n: 2 }, { item: 'stick', name: '木棍', n: 1 }], out: { item: 'door', name: '门', n: 1 }, empty: '两块板加一根闩', why: '比窗多一块板。' },
+      bed: { kind: '板面棍腿', cls: 'mix', ages: '6+', left: [{ item: 'plank', name: '木板', n: 2 }, { item: 'stick', name: '木棍', n: 2 }], out: { item: 'bed', name: '床', n: 1 }, empty: '板做面，棍做腿', why: '和门相比多一根棍。' },
+      workbench: { kind: '相加', cls: '', ages: '6+', left: [{ item: 'plank', name: '木板', n: 4 }], out: { item: 'workbench', name: '工作台', n: 1 }, empty: '四块板拼成桌', why: '四块板只做工作台。' },
+      ball: { kind: '相加', cls: '', ages: '6+', left: [{ item: 'plank', name: '木板', n: 2 }], out: { item: 'ball', name: '木球', n: 1 }, empty: '两块板合成圆', why: '不再用四块板，避免和工作台抢配方。' },
+      chest: { kind: '分组相加', cls: '', ages: '8+', left: [{ item: 'plank', name: '木板', n: 4 }, { item: 'plank', name: '木板', n: 4 }], out: { item: 'chest', name: '储物箱', n: 1 }, empty: '4 + 4 = 8', why: '八块分成两组来数。' },
+      pot: { kind: '一对一', cls: '', ages: '4+', left: [{ item: 'clay', name: '黏土', n: 1 }], out: { item: 'pot', name: '花盆', n: 1 }, empty: '一份黏土捏花盆', why: '冷作装饰。烧砖仍去窑炉。' },
+      wreath: { kind: '一对一', cls: '', ages: '4+', left: [{ item: 'branch', name: '树枝', n: 1 }], out: { item: 'wreath', name: '花环', n: 1 }, empty: '一根树枝绕成环', why: '树枝除了当柴，也能做装饰。' },
+      lantern: { kind: '两种材料', cls: 'mix', ages: '6+', left: [{ item: 'plank', name: '木板', n: 1 }, { item: 'branch', name: '树枝', n: 1 }], out: { item: 'lantern', name: '灯笼', n: 1 }, empty: '板做罩，枝做把', why: '和窗不同，窗用的是棍不是树枝。' },
+      flag: { kind: '两种材料', cls: 'mix', ages: '6+', left: [{ item: 'stick', name: '木棍', n: 1 }, { item: 'branch', name: '树枝', n: 1 }], out: { item: 'flag', name: '旗帜', n: 1 }, empty: '棍做杆，枝当旗面', why: '旗面用树枝是游戏约定。' },
+    };
+
+    const folds = [
+      { id: 'mat', title: '先做出材料', ids: ['plank', 'stick'] },
+      { id: 'house', title: '盖房子', ids: ['roof', 'window', 'door', 'ramp', 'fence'] },
+      { id: 'room', title: '屋里屋外', ids: ['bed', 'workbench', 'chest'] },
+      { id: 'deco', title: '个性装饰', ids: ['pot', 'wreath', 'lantern', 'flag'] },
+      { id: 'toy', title: '球道玩具', ids: ['ball', 'post'] },
+    ];
+
+    const puts = {};
+    const sumLine = n => n <= 1 ? String(n || '') : `${Array.from({ length: n }, () => '1').join(' + ')} = ${n}`;
+
+    document.getElementById('pack').innerHTML = bag.map(([id, name, n]) =>
+      `<div class="bag${n ? '' : ' zero'}">${svg[id]}<span>${name}</span><b>${n}</b></div>`
+    ).join('');
+
+    document.getElementById('folds').innerHTML = folds.map((f, i) => `
+      <details class="fold" data-fold="${f.id}" ${i === 1 ? 'open' : ''}>
+        <summary>${f.title}</summary>
+        <div class="scroller">${f.ids.map(id => {
+          const r = recipes[id];
+          return `<button type="button" class="want" data-id="${id}" aria-pressed="false">${svg[r.out.item]}<span>${r.out.name}</span><small>${r.kind}</small></button>`;
+        }).join('')}</div>
+      </details>`).join('');
+
+    const board = document.getElementById('board');
+    function selectWant(id) {
+      document.querySelectorAll('.want').forEach(b => b.setAttribute('aria-pressed', b.dataset.id === id ? 'true' : 'false'));
+      const recipe = recipes[id];
+      const need = recipe.left.reduce((s, g) => s + g.n, 0);
+      const put = puts[id] || 0;
+      let i = 0;
+      const left = recipe.left.map((g, gi) => {
+        const pits = Array.from({ length: g.n }, (_, k) => {
+          const index = i++;
+          return `<button type="button" class="pit${index < put ? ' filled' : ''}" aria-label="放一个${g.name}">${svg[g.item]}</button>${k < g.n - 1 ? '<span class="plus">+</span>' : ''}`;
+        }).join('');
+        return `${gi ? '<span class="plus">+</span>' : ''}<div class="bunch"><span class="label">${g.name} ×${g.n}</span><div class="pits">${pits}</div></div>`;
+      }).join('');
+      const ready = put === need;
+      board.innerHTML = `<article class="eq${ready ? ' ready' : ''}">
+        <div class="left">
+          <span class="kind ${recipe.cls}">做${recipe.out.name} · ${recipe.kind} · ${recipe.ages}</span>
+          ${left}
+          <p class="sum">${put ? sumLine(put) : recipe.empty}</p>
+        </div>
+        <span class="eqs">=</span>
+        <div class="out">
+          <span class="label">得到</span>
+          <div class="box">${svg[recipe.out.item]}<b>${recipe.out.name}</b><strong>×${recipe.out.n}</strong></div>
+          <p class="sum">${ready ? `得到 ${recipe.out.n} 个${recipe.out.name}` : '放满就出现'}</p>
+        </div>
+      </article><p class="why">${recipe.why}</p>`;
+      board.querySelectorAll('.pit').forEach(pit => {
+        pit.addEventListener('click', () => {
+          let next = puts[id] || 0;
+          if (pit.classList.contains('filled')) next = Math.max(0, next - 1);
+          else if (next < need) next += 1;
+          puts[id] = next;
+          selectWant(id);
+        });
+      });
+    }
+
+    document.getElementById('folds').addEventListener('click', e => {
+      const btn = e.target.closest('.want');
+      if (btn) selectWant(btn.dataset.id);
+    });
+    document.querySelectorAll('.fold').forEach(box => {
+      box.addEventListener('toggle', () => {
+        if (!box.open) return;
+        document.querySelectorAll('.fold').forEach(other => { if (other !== box) other.open = false; });
+      });
+    });
+
+    const show = name => {
+      ['make', 'rules', 'build'].forEach(id => {
+        document.getElementById('tab-' + id).setAttribute('aria-selected', id === name ? 'true' : 'false');
+        document.getElementById('panel-' + id).classList.toggle('active', id === name);
+      });
+    };
+    document.getElementById('tab-make').onclick = () => show('make');
+    document.getElementById('tab-rules').onclick = () => show('rules');
+    document.getElementById('tab-build').onclick = () => show('build');
+  </script>
+</body>
+</html>

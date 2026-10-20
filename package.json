@@ -1,0 +1,23 @@
+{
+  "name": "yuanyuan-river-valley",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A gentle, persistent building sandbox for discovering the world.",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node --test test/*.test.js",
+    "test:browser": "node test/browser-check.js",
+    "test:axle": "node test/axle-browser-check.js"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "3.7.1",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1",
+    "vite": "8.3.4"
+  }
+}
