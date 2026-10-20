@@ -8,6 +8,7 @@ import { LAND_RULES, FACILITY_CHUNKS, isPointOpen, landBounds, openChunks, landE
 import { CreationWorld } from './creation-world.js';
 import { BOUNCE_ISLAND, PARK_NAME, PLAY_MODES, bounceSurface, onBounceIsland, parkPadAt, playBounce, playMode } from './bounce-data.js';
 import { BALLOON_BASE, BALLOON_CONTROL, BALLOON_NAME, balloonAngleFrom, balloonHomeAngle, balloonHomeDuration, balloonLook, balloonNearBase, balloonReturnPose, balloonScaleFrom, balloonSteer, balloonTourPoint, onBalloonLawn } from './balloon-data.js';
+import { dockShip, drawSouvenir, spinSouvenirs } from './mei-models.js';
 import { chooseDockSite } from './realm-data.js';
 import { trackListeners, trackWorldCreated, trackWorldReleased } from './scene-stats.js';
 
@@ -677,7 +678,7 @@ export class RiverWorld {
     else if(block.item==='paper-boat') this.cube(g,ghost?m:this.mats.paper,[0,.22,0],[.8,.24,.42],true);
     else if(block.item==='paper-koinobori') { this.cube(g,m,[0,.55,0],[.08,1.1,.08],true); this.cube(g,ghost?m:this.mats.carp,[.32,.8,0],[.55,.28,.08],true); }
     else if(block.item==='paper-door') { this.cube(g,ghost?m:this.mats.paper,[0,.55,0],[.86,1.1,.08],true); this.cube(g,m,[0,.55,.05],[.04,1.1,.04]); this.cube(g,m,[0,.55,.05],[.86,.04,.04]); }
-    else this.cube(g,m,[0,.5,0],[.97,.98,.97],true);
+    else if (!drawSouvenir(this, g, block, ghost)) this.cube(g,m,[0,.5,0],[.97,.98,.97],true);
     return g;
   }
   sync(state) {
@@ -1201,7 +1202,7 @@ export class RiverWorld {
     if (!silent) this.callbacks.onBalloonStop?.();
   }
   balloonLook() {
-    return balloonLook(this.balloon?.phase || 'idle', this.balloon?.angle || 0, this.balloon?.mode || 'orbit');
+    return balloonLook(this.balloon?.phase || 'idle', this.balloon?.angle || 0, this.balloon?.mode || 'orbit', this.balloon?.realmId || 'ri');
   }
   setBalloonMode(mode) {
     if (!this.balloon || this.balloon.phase === 'home' || this.balloon.phase === 'descend' || this.balloon.phase === 'voyage') return false;
@@ -1327,7 +1328,7 @@ export class RiverWorld {
     this.camera.lookAt(this.lookAt);
   }
   update(dt,input={x:0,z:0},paused=false){
-    this.time+=dt;this.stepRoofMotions(dt);let mx=input.x||0,mz=input.z||0;
+    this.time+=dt;this.stepRoofMotions(dt);spinSouvenirs(this, dt);let mx=input.x||0,mz=input.z||0;
     if(!paused){this.motionTime+=dt;if(!this.bounce&&!this.balloon)this.locomotion=this.waterState().mode;}
     if(!paused){if(mx||mz)this.stopWalking();if(this.walkTarget){const dx=this.walkTarget.x-this.playerPosition.x,dz=this.walkTarget.y-this.playerPosition.z,d=Math.hypot(dx,dz);if(d<1.9&&this.walkCallback){const cb=this.walkCallback;this.stopWalking();cb();}else if(d<.15)this.stopWalking();else{const c=Math.cos(this.yaw),s=Math.sin(this.yaw);mx=(dx*c-dz*s)/d;mz=(dx*s+dz*c)/d;}}
       const length=Math.hypot(mx,mz);if(length>1){mx/=length;mz/=length;}
@@ -1539,6 +1540,7 @@ export class RiverWorld {
     this.cube(g, 'wood', [-0.62, 0.45, 1.2], [0.14, 0.8, 0.14]);
     this.cube(g, 'wood', [0.62, 0.45, 1.2], [0.14, 0.8, 0.14]);
     this.cube(g, 'wood', [1.15, 0.28, 0], [0.62, 0.24, 1.35], true);
+    dockShip(this, g);
     this.scene.add(g);
     this.dockGroup = g;
     this.target(g, { id: 'ferry-dock', type: 'ferry', name: '渡口', label: '去日谷', ariaLabel: '去日谷', action: '去日谷' });

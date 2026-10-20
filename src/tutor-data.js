@@ -54,9 +54,13 @@ export async function loadTutorPack(realm = 'he') {
       const pack = applyPack(await response.json(), key);
       if (pack.characters.length) return pack;
     }
-  } catch { /* the day valley still plays from the local pack */ }
-  const local = await import('./ri-tutors.js');
-  return applyPack(local.riTutorPack, key);
+  } catch { /* the valley still plays from the local pack */ }
+  const loaders = {
+    ri: () => import('./ri-tutors.js').then((mod) => mod.riTutorPack),
+    mei: () => import('./mei-tutors.js').then((mod) => mod.meiTutorPack),
+  };
+  if (!loaders[key]) return packs[key] || { audience: '4-12', subjects: [], characters: [] };
+  return applyPack(await loaders[key](), key);
 }
 
 export function tutors() {
