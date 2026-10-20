@@ -104,7 +104,16 @@ function paint(component, components, data, onAction) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'a2ui-choice';
-      button.textContent = String(option.label || '');
+      button.replaceChildren();
+      if (option.icon) {
+        const picture = document.createElement('span');
+        picture.innerHTML = icon(option.icon, 28);
+        button.append(picture);
+      }
+      const caption = document.createElement('span');
+      caption.textContent = String(option.label || '');
+      button.append(caption);
+      button.setAttribute('aria-label', String(option.label || '选项'));
       button.disabled = Boolean(result);
       if (picked && option.value === picked) button.classList.add(result === 'no' ? 'no' : result ? 'ok' : 'picked');
       button.addEventListener('pointerdown', () => {

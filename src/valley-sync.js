@@ -1,8 +1,8 @@
-import { DAMAGED_BACKUP_KEY, LAND_BACKUP_KEY, LIFE_BACKUP_KEY } from './game-data.js';
+import { DAMAGED_BACKUP_KEY, LAND_BACKUP_KEY, LIFE_BACKUP_KEY, TRAVEL_BACKUP_KEY } from './game-data.js';
 import { createInitialState, salvageSave } from './game-state.js';
 
 export const OWNER_KEY = 'yuanyuan-river-valley-owner';
-const BACKUP_KEYS = [DAMAGED_BACKUP_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY];
+const BACKUP_KEYS = [DAMAGED_BACKUP_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY];
 
 function inventoryDistance(save) {
   const starter = createInitialState().inventory;

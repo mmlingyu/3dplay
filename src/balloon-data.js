@@ -1,4 +1,19 @@
 import { landBounds } from './land-data.js';
+import { REALMS, VOYAGE_NOTE } from './realm-data.js';
+
+export { VOYAGE_NOTE };
+
+function flightBounds(land) {
+  if (land && Number.isFinite(land.minX) && Number.isFinite(land.maxX) && Number.isFinite(land.minZ) && Number.isFinite(land.maxZ)) {
+    return { minX: land.minX, maxX: land.maxX, minZ: land.minZ, maxZ: land.maxZ };
+  }
+  return landBounds(land);
+}
+
+export function balloonBaseFor(realmId = 'he') {
+  if (realmId === 'ri') return REALMS.ri.balloon;
+  return BALLOON_BASE;
+}
 
 export const BALLOON_NAME = '热气球草场';
 
@@ -55,12 +70,13 @@ export function balloonReturnPose(from, phase, u) {
   };
 }
 
-export function onBalloonLawn(x, z, extra = 0) {
-  return Math.hypot(x - BALLOON_BASE.x, z - BALLOON_BASE.z) <= BALLOON_BASE.radius + extra;
+export function onBalloonLawn(x, z, extra = 0, realm = 'he') {
+  const base = balloonBaseFor(realm);
+  return Math.hypot(x - base.x, z - base.z) <= base.radius + extra;
 }
 
 export function balloonTourPoint(land, angle, scale = 0.36) {
-  const bounds = landBounds(land);
+  const bounds = flightBounds(land);
   const cx = (bounds.minX + bounds.maxX) / 2;
   const cz = (bounds.minZ + bounds.maxZ) / 2;
   const span = Math.min(BALLOON_CONTROL.maxScale, Math.max(BALLOON_CONTROL.minScale, Number(scale) || 0.36));
@@ -79,7 +95,7 @@ export function balloonTourPoint(land, angle, scale = 0.36) {
 }
 
 export function clampBalloonPose(land, x, y, z) {
-  const bounds = landBounds(land);
+  const bounds = flightBounds(land);
   const m = BALLOON_CONTROL.margin;
   const low = Math.min(BALLOON_CONTROL.maxHeight, Math.max(BALLOON_CONTROL.minHeight, Number(y) || BALLOON_BASE.cruiseHeight));
   return {
@@ -115,7 +131,7 @@ export function balloonScaleFrom(land, x, z) {
 }
 
 export function balloonHomeAngle(land) {
-  const bounds = landBounds(land);
+  const bounds = flightBounds(land);
   const cx = (bounds.minX + bounds.maxX) / 2;
   const cz = (bounds.minZ + bounds.maxZ) / 2;
   return Math.atan2(BALLOON_BASE.z - cz, BALLOON_BASE.x - cx);
@@ -127,6 +143,9 @@ export function wrapHeading(angle) {
 }
 
 export function balloonLook(phase, angle = 0, mode = 'orbit') {
+  if (phase === 'voyage') {
+    return { phase, title: '看风景去日谷', note: VOYAGE_NOTE, hint: '坐稳。想快一点可以跳过。', landing: true, mode };
+  }
   if (phase === 'lift') {
     return { phase, title: '起飞', note: '慢慢升起来，看整个河谷。', hint: '坐稳，热气球正在升起。想下来就点降落。', landing: false, mode };
   }

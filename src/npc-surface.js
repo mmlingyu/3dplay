@@ -12,6 +12,7 @@ export const PLAY_KINDS = [
 export const NPC_IMAGES = [
   { id: 'moon', label: '月亮', url: './npc/moon.svg', description: '一轮月亮挂在河谷上空' },
   { id: 'falls', label: '瀑布', url: './npc/falls.svg', description: '一道瀑布从山上流下来' },
+  { id: 'washi', label: '和纸步骤', url: './npc/ri-washi-steps.svg', description: '和纸的五步：蒸、敲、加水、抄纸、晾干' },
 ];
 
 export const NPC_VIDEO = { url: './npc/note.mp4', description: '一小段河谷动画' };
@@ -19,6 +20,7 @@ export const NPC_VIDEO = { url: './npc/note.mp4', description: '一小段河谷�
 const BANDS = [
   { id: 'little', label: '短一点' },
   { id: 'bigger', label: '再长一点' },
+  { id: 'older', label: '挑战一下' },
 ];
 
 const FEEDBACK = { ok: '对了', no: '再选一次', picked: '选好了', seen: '看完了' };
@@ -59,9 +61,9 @@ export function talkActivities(tutor) {
     lines: sentencePages(topic.say),
     ask: topic.ask || topic.label,
     choices: Array.isArray(topic.choices) ? topic.choices : [],
-    image: topic.image === 'falls' ? 'falls' : 'moon',
+    image: NPC_IMAGES.some((item) => item.id === topic.image) ? topic.image : 'moon',
   }));
-  const questions = [...(tutor?.quiz?.little || []), ...(tutor?.quiz?.bigger || [])];
+  const questions = [...(tutor?.quiz?.little || []), ...(tutor?.quiz?.bigger || []), ...(tutor?.quiz?.older || [])];
   if (!items.some((item) => item.play === 'quiz') && questions.length) {
     items.push({ id: 'quiz', label: '做一题', play: 'quiz', lines: [], ask: '', choices: [], image: 'moon' });
   }
@@ -110,7 +112,7 @@ export function npcTalkMessages({
 
   const menuOptions = catalog.map((item) => ({ label: item.label, value: item.id, mark: PLAY_MARK[item.play] || '玩' }));
   const pickOptions = (activity?.choices || []).map((item) => ({ label: item.text, value: item.id }));
-  const quizOptions = (question?.choices || []).map((item) => ({ label: item.text, value: item.id }));
+  const quizOptions = (question?.choices || []).map((item) => ({ label: item.text, value: item.id, icon: item.icon || '' }));
   const choiceOptions = !playing ? menuOptions : play === 'pick' ? pickOptions : quizOptions;
   const prompt = !playing ? '想做哪一件？' : play === 'text' ? (activity?.label || '读一句') : play === 'video' ? '看一小段' : play === 'image' ? (activity?.label || '看一张') : (play === 'pick' ? (activity?.ask || '选一个') : (question?.ask || '今天先到这里'));
   const components = [
