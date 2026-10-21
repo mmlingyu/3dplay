@@ -17,6 +17,7 @@ import { gradeQuestion, loadTutorPack, nextQuestion, primeTutorPack, tutorById, 
 import { chooseDockSite, contentAgeBand, FERRY_NOTE, REALMS, VOYAGE_NOTE } from './realm-data.js';
 import { VISTAS } from './vista-data.js';
 import { MEI_AUDIO, SHIP_NOTE, VOYAGE_MEI_NOTE } from './mei-data.js';
+import { projectBand } from './project-board.js';
 import { createCutscene } from './travel.js';
 import { sceneStats } from './scene-stats.js';
 import { RI_AUDIO } from './ri-tutors.js';
@@ -245,7 +246,7 @@ function paintTravel() {
   const claim = $('ri-claim');
   if (claim) claim.hidden = realm !== 'ri' || !game.washiStatus?.().ready;
   const trade = $('mei-trade');
-  if (trade) trade.hidden = game.state.settings?.ageBand !== 'older';
+  if (trade) trade.hidden = projectBand(game.state.settings?.ageBand) !== 'older';
   const nearDock = () => {
     if (!world || realm !== 'he') return false;
     const site = chooseDockSite(game.state.blocks);
@@ -1014,6 +1015,12 @@ function interact(target = null) {
     }
     if (target.xing === 'hopper') { toast(game.seeHopper().message, true); return; }
     openXing(target.xing === 'moss' ? 'moss' : 'lab');
+  } else if (target.type === 'mei-part') {
+    const result = game.collectMeiPart(target.part);
+    toast(result.message, result.ok);
+    speak(result.speak || result.message);
+    world.sync?.(game.state);
+    return;
   } else if (target.type === 'maple' || target.type === 'project' || target.type === 'quilt') {
     openPanel(target.type);
   } else if (target.type === 'flag') {
@@ -1388,7 +1395,7 @@ $('balloon-voyage-mei')?.addEventListener('click', () => {
 });
 $('travel-go-mei')?.addEventListener('click', () => { if (started && !panels?.isOpen()) startFerry('mei'); });
 $('mei-letter-close')?.addEventListener('click', () => { const card = $('mei-letter'); if (card) card.hidden = true; });
-for (const [id, panel] of [['mei-maple', 'maple'], ['mei-project', 'project'], ['mei-quilt', 'quilt'], ['mei-trade', 'trade'], ['mei-lantern', 'lantern'], ['mei-thanks', 'thanks']]) {
+for (const [id, panel] of [['mei-maple', 'maple'], ['mei-project', 'project'], ['mei-quilt', 'quilt'], ['mei-trade', 'trade'], ['mei-lantern', 'lantern'], ['mei-thanks', 'thanks'], ['mei-stage', 'stage'], ['mei-projector', 'projector'], ['mei-premiere', 'premiere']]) {
   $(id)?.addEventListener('click', () => { if (started && (game.state.travel?.current || 'he') === 'mei') openPanel(panel); });
 }
 $('mei-stamps')?.addEventListener('click', () => { if (started) openPanel('stamps'); });

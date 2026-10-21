@@ -285,6 +285,10 @@ export function emptyRealm(realmId) {
     realm.projects = [];
     realm.trades = [];
     realm.decor = { face: 'smile' };
+    realm.storyShard = false;
+    realm.projector = { gear: false, lens: false, lamp: false };
+    realm.films = [];
+    realm.premiere = false;
   }
   return realm;
 }
