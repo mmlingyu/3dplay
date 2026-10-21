@@ -58,6 +58,7 @@
         <button type="button" id="bounce-stop" class="primary-btn">停下来</button>
       </div>
       <button type="button" id="travel-home" class="primary-btn" hidden aria-label="回家">回家</button>
+      <button type="button" id="holo-back" class="primary-btn" hidden aria-label="回到外星谷">回到外星谷</button>
       <button type="button" id="travel-go" class="primary-btn" hidden aria-label="去日谷">去日谷</button>
       <button type="button" id="travel-go-mei" class="primary-btn" hidden aria-label="去美谷">去美谷</button>
       <div id="ri-actions" hidden>
@@ -100,6 +101,17 @@
         <p>纸飞机上画着一座没搭完的小木屋。</p>
         <button type="button" id="mei-letter-close" class="primary-btn" aria-label="先放着">先放着</button>
       </div>
+      <div id="holo-transition" hidden role="dialog" aria-label="进入星网">
+        <p id="holo-transition-text">光从脚下慢慢亮起来。地面变成光点，再聚成平台。</p>
+        <button type="button" id="holo-skip" class="primary-btn" aria-label="跳过">跳过</button>
+      </div>
+      <div id="holo-bar" hidden>
+        <button type="button" id="holo-avatar-open" class="primary-btn" aria-label="化身">化身</button>
+        <button type="button" id="holo-tier-open" class="primary-btn" aria-label="星阶">星阶</button>
+        <button type="button" id="holo-stage-open" class="primary-btn" aria-label="数之环">数之环</button>
+        <p class="holo-later">形、力、星图、码：之后开放</p>
+      </div>
+      <div id="holo-panel" hidden role="dialog" aria-label="星网"></div>
       <div id="star-cutscene" hidden role="dialog" aria-label="飞向星星">
         <strong id="star-title">飞向星星</strong>
         <p id="star-note">这是游戏里的幻想航线，真实的热气球飞不出大气层。</p>

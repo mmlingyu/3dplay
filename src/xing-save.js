@@ -4,6 +4,7 @@ import { ITEMS } from './game-data.js';
 import { GLYPH_IDS } from './glyph-data.js';
 import { CRYSTAL_SECONDS, EXPERIMENT_LIMIT, crystalStage } from './experiment-lab.js';
 import { QUARANTINE_NOTE } from './xing-data.js';
+import { readHolo } from './holo-save.js';
 
 const ID_TEXT = /^[a-z0-9-]{1,64}$/;
 const PUZZLE_ID = /^p-(little|bigger|older)-(pair|color|count|order)-[a-z0-9-]{1,24}$/;
@@ -55,7 +56,7 @@ export function readXingFields(realm) {
     experimentIds.add(item.id);
     return { id: item.id, kind: item.kind, band: item.band, homeApex, xingApex };
   });
-  return { glyphs: [...glyphs], puzzles: [...puzzles], experiments: nextExperiments };
+  return { glyphs: [...glyphs], puzzles: [...puzzles], experiments: nextExperiments, holo: readHolo(realm) };
 }
 
 export function readCrystal(proc) {
