@@ -1,4 +1,6 @@
-import { ITEMS, RECIPES, COLLECTABLE_ITEMS, GARDEN_PLOTS, MAX_BUILD_HEIGHT, STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, terrainHeight, isProtectedCell, roofSpan, roofWallAt } from './game-data.js';
+import { ITEMS, RECIPES, COLLECTABLE_ITEMS, GARDEN_PLOTS, MAX_BUILD_HEIGHT, STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, terrainHeight, isProtectedCell, roofSpan, roofWallAt } from './game-data.js';
+import { REALM_BLOCK_LIMIT, SUPPLY_COOLDOWN, SUPPLY_COUNT, WASHI_STAGES, WASHI_TOTAL_SECONDS, arrivalFor, defaultTravel, emptyRealm, inVisitorYard, isDockCell, realmContains, realmTerrainHeight, washiStage } from './realm-data.js';
+import { TravelError, repairTravelRaw, validateTravel } from './travel-save.js';
 import { BALL_RULES } from './ball-data.js';
 import { LIFE_RULES, FLORA_SITES, FLORA_BY_ID, floraBlocked, createFlora, realMoment } from './life-data.js';
 import { createLand, validateLand, isGridOpen, isPointOpen, frontierChunks, nearbyFrontiers, landEncounters } from './land-data.js';
@@ -29,7 +31,8 @@ export function createInitialState() {
     flora: createFlora(),
     land:createLand(),
     player: { x: -5, z: 5, y: 0 },
-    settings: { sound: true },
+    settings: { sound: true, ageBand: null },
+    travel: defaultTravel(),
     stats: { gathered: 0, crafted: 0, built: 0, orders: 0 },
     garden: GARDEN_PLOTS.map(plot => ({ ...plot, planted: false, age: 0, moisture: 1, harvested: false, moistureElapsed: 0, drainElapsed: 0 })),
     kiln: emptyKiln(),
@@ -99,7 +102,9 @@ export function validateSave(value) {
   if (!isRecord(p) || !isPointOpen(next.land,p.x,p.z) || !Number.isFinite(p.y) || p.y < -2 || p.y > 16) throw new Error('存档中的角色位置不正确。');
   next.player = { x: p.x, y: p.y, z: p.z };
   if (!isRecord(value.settings) || typeof value.settings.sound !== 'boolean') throw new Error('存档中的设置不正确。');
-  next.settings = { sound: value.settings.sound };
+  const ageBand = value.settings.ageBand ?? null;
+  if (ageBand !== null && ageBand !== 'little' && ageBand !== 'bigger' && ageBand !== 'older') throw new Error('存档中的年龄档不正确。');
+  next.settings = { sound: value.settings.sound, ageBand };
   if (!isRecord(value.stats)) throw new Error('存档中的记录不正确。');
   for (const stat of Object.keys(next.stats)) {
     if (!isCount(value.stats[stat])) throw new Error('存档中的记录数量不正确。');
@@ -126,13 +131,25 @@ export function validateSave(value) {
   if (!Array.isArray(value.claimedOrders) || value.claimedOrders.length > 10000 || value.claimedOrders.some(id => typeof id !== 'string' || id.length < 1 || id.length > 128) || new Set(value.claimedOrders).size !== value.claimedOrders.length) throw new Error('存档中的补给记录不正确。');
   next.claimedOrders = [...value.claimedOrders];
   next.creation = validateCreation(value.creation);
-  const maxId = Math.max(0, ...next.blocks.map(block => Number(block.id.slice(6))));
+  try { next.travel = validateTravel(value.travel); }
+  catch (error) {
+    if (error?.travel) throw error;
+    throw new TravelError(error?.message || '旅行记录不正确。');
+  }
+  const seenIds = new Set(next.blocks.map(block => block.id));
+  for (const realm of Object.values(next.travel.realms)) {
+    for (const block of realm.blocks) {
+      if (seenIds.has(block.id)) throw new TravelError('日谷的建筑编号和家里重复。', 'realm');
+      seenIds.add(block.id);
+    }
+  }
+  const maxId = Math.max(0, ...[...seenIds].map(id => Number(String(id).slice(6))));
   if (!Number.isSafeInteger(maxId) || maxId >= 1000000000) throw new Error('存档中的建筑编号不正确。');
   next.nextId = Math.max(maxId + 1, isPositive(value.nextId) ? value.nextId : 1);
   return next;
 }
 
-const FIGURE_BACKUP_KEYS = [STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY];
+const FIGURE_BACKUP_KEYS = [STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY];
 
 export function figureRecordsFrom(raw) {
   const list = Array.isArray(raw?.creation?.figures) ? raw.creation.figures : (Array.isArray(raw?.figures) ? raw.figures : []);
@@ -226,6 +243,10 @@ function normalizeGrid(grid) {
   return result;
 }
 
+function grantStamp(state, id) {
+  if (!state.travel.stamps.includes(id)) state.travel.stamps.push(id);
+}
+
 export class GameState {
   constructor(storage) {
     if (storage === undefined) {
@@ -240,6 +261,7 @@ export class GameState {
     this.damagedSaveText = null;
     this.figuresHealed = false;
     this.legacySaveText=null;this.legacyBackupKey=null;this.legacyBackupBase=LIFE_BACKUP_KEY;
+    this.travelSaveText=null;this.travelBackupKey=null;this.travelNotice=null;
     this.load();
   }
 
@@ -296,6 +318,19 @@ export class GameState {
       this.storageError = '进度只在当前窗口中暂时保留，刷新或关闭页面后不会恢复。请导出存档到文件。';
       return fail(this.storageError);
     }
+    if(this.travelSaveText!==null){
+      try{
+        let backedUp=false;
+        for(let i=0;i<100;i++){
+          const key=i?`${TRAVEL_BACKUP_KEY}-${i}`:TRAVEL_BACKUP_KEY,existing=this.storage.getItem(key);
+          if(existing!==null&&existing!==this.travelSaveText)continue;
+          if(existing===null)this.storage.setItem(key,this.travelSaveText);
+          if(this.storage.getItem(key)!==this.travelSaveText)throw new Error('备份未写入');
+          this.travelSaveText=null;this.travelBackupKey=key;backedUp=true;break;
+        }
+        if(!backedUp)throw new Error('备份槽位已满');
+      }catch{this.storageError='旅行升级前的世界未能备份。请先导出存档。';return fail(this.storageError);}
+    }
     if(this.legacySaveText!==null){
       try{
         let backedUp=false;
@@ -338,7 +373,23 @@ export class GameState {
     try {
       text = this.storage.getItem(STORAGE_KEY);
       if (!text) return fail('没有本地存档。');
-      const raw=JSON.parse(text),next = validateSave(raw);
+      const raw=JSON.parse(text);
+      let next;
+      try{ next = validateSave(raw); }
+      catch(error){
+        if(!error?.travel) throw error;
+        const repaired=repairTravelRaw(raw);
+        try{ next = validateSave(repaired.raw); }
+        catch(again){
+          if(!again?.travel) throw again;
+          repaired.raw.travel=defaultTravel();
+          next = validateSave(repaired.raw);
+          repaired.notice='旅行记录有问题，已经回到河谷。家里的建筑和背包还在。';
+        }
+        this.travelSaveText=text;
+        this.travelNotice=repaired.notice;
+      }
+      if(raw.travel===undefined) this.travelSaveText=text;
       this.legacySaveText=raw.clock===undefined||raw.flora===undefined||raw.land?.claimed===undefined?text:null;
       this.legacyBackupBase=raw.land?.claimed===undefined?LAND_BACKUP_KEY:LIFE_BACKUP_KEY;
       this.state = next;
@@ -370,6 +421,10 @@ export class GameState {
     if(this.legacySaveText!==null)return this.legacySaveText;
     try{return this.storage?.getItem(this.legacyBackupKey||LAND_BACKUP_KEY)??this.storage?.getItem(LIFE_BACKUP_KEY)??null;}catch{return null;}
   }
+  getTravelBackup(){
+    if(this.travelSaveText!==null)return this.travelSaveText;
+    try{return this.storage?.getItem(this.travelBackupKey||TRAVEL_BACKUP_KEY)??null;}catch{return null;}
+  }
 
   importSave(text) {
     try {
@@ -399,11 +454,26 @@ export class GameState {
 
   harvest(item) {
     if (!COLLECTABLE_ITEMS.includes(item)) return fail('这种材料需要加工或种植得到。');
+    if (ITEMS[item]?.origin === 'ri' && (this.state.travel?.current || 'he') !== 'ri') return fail('这种材料在日谷采集。楮树林和竹林一直都在，不用答题。');
     if (!isCount(this.state.inventory[item] + 2)) return fail('背包里的这种材料已经很多了。');
     this.mutate(state => { state.inventory[item] += 2; state.stats.gathered += 2; });
     return ok(`采到2份${ITEMS[item].name}。`, { item, count: 2 });
   }
 
+  currentRealm(state = this.state) {
+    return state.travel?.current || 'he';
+  }
+  blockBag(state = this.state) {
+    const id = this.currentRealm(state);
+    if (id === 'he') return state;
+    if (!state.travel.realms[id]) state.travel.realms[id] = emptyRealm(id);
+    return state.travel.realms[id];
+  }
+  activeBlocks() { return this.blockBag().blocks; }
+  chestBag(id) {
+    const chests = this.blockBag().chests;
+    return chests && Object.hasOwn(chests, id) ? chests[id] : null;
+  }
   coversCell(block, x, y, z) {
     const w = block.w || 1, d = block.d || 1;
     return block.y === y && x >= block.x && x < block.x + w && z >= block.z && z < block.z + d;
@@ -412,17 +482,27 @@ export class GameState {
   placementProblem(item, position) {
     if (!ITEMS[item]?.placeable) return '这种物品暂时不能作为建筑放置。';
     if (!isRecord(position)) return '先选择一个空格。';
-    const spot = item === 'roof' && !position.w ? { ...position, ...roofSpan(this.state.blocks, position), rotation: 0 } : { w: 1, d: 1, rotation: 0, ...position };
+    const realm = this.currentRealm();
+    const blocks = this.activeBlocks();
+    const spot = item === 'roof' && !position.w ? { ...position, ...roofSpan(blocks, position), rotation: 0 } : { w: 1, d: 1, rotation: 0, ...position };
     const { x, y, z, rotation = 0 } = spot;
     const w = spot.w || 1, d = spot.d || 1;
-    if (!Number.isInteger(y) || y > MAX_BUILD_HEIGHT) return '先开垦这片区域，再在空格里搭建。';
+    if (!Number.isInteger(y) || y > MAX_BUILD_HEIGHT) return realm === 'he' ? '先开垦这片区域，再在空格里搭建。' : '这里出了日谷的范围。';
     if (!Number.isInteger(rotation) || rotation < 0 || rotation > 3) return '方向不正确，转一转再放。';
+    if (realm !== 'he' && blocks.length >= REALM_BLOCK_LIMIT) return `日谷的访客小院已经放了 ${REALM_BLOCK_LIMIT} 块，先取回一些再搭。`;
+    const ground = (cx, cz) => realm === 'he' ? terrainHeight(cx, cz) : realmTerrainHeight(realm, cx);
     for (let dx = 0; dx < w; dx++) for (let dz = 0; dz < d; dz++) {
       const cx = x + dx, cz = z + dz;
-      if (!inBounds(cx, cz, this.state.land) || y < terrainHeight(cx, cz)) return '先开垦这片区域，再在空格里搭建。';
-      if (isProtectedCell(cx, cz)) return '这里是大家共用的设施、菜地或通道，旁边的空地可以自由搭建。';
-      if (landEncounters(this.state.land).some(e => Math.hypot(e.x - cx, e.z - cz) < 1.1)) return '给小动物和发现点留一点空间，旁边可以搭建。';
-      if (this.state.blocks.some(block => {
+      if (realm === 'he') {
+        if (!inBounds(cx, cz, this.state.land) || y < ground(cx, cz)) return '先开垦这片区域，再在空格里搭建。';
+        if (isDockCell(cx, cz, this.state.blocks)) return '这里是渡口，小船要停靠。旁边可以搭建。';
+        if (isProtectedCell(cx, cz)) return '这里是大家共用的设施、菜地或通道，旁边的空地可以自由搭建。';
+        if (landEncounters(this.state.land).some(e => Math.hypot(e.x - cx, e.z - cz) < 1.1)) return '给小动物和发现点留一点空间，旁边可以搭建。';
+      } else {
+        if (!Number.isInteger(cx) || !Number.isInteger(cz) || !realmContains(realm, cx, cz)) return '这里出了日谷的范围。';
+        if (!inVisitorYard(realm, cx, cz) || y < ground(cx, cz)) return '这里是朋友的家和园子，去访客小院搭建吧。';
+      }
+      if (blocks.some(block => {
         if (!this.coversCell(block, cx, y, cz)) return false;
         const wideRoof = block.item === 'roof' && ((block.w || 1) > 1 || (block.d || 1) > 1);
         if (wideRoof && item !== 'roof') return false;
@@ -431,13 +511,13 @@ export class GameState {
       })) return '这里已经有东西了，换一个空格试试。';
     }
     const supported = item === 'roof' && spot.enclosed;
-    if (!supported && y !== terrainHeight(x, z) && !this.state.blocks.some(block => Math.abs(block.x - x) + Math.abs(block.y - y) + Math.abs(block.z - z) === 1)) return '先连接地面或旁边的建筑。这是游戏的搭建规则，真实承重更复杂。';
+    if (!supported && y !== ground(x, z) && !blocks.some(block => Math.abs(block.x - x) + Math.abs(block.y - y) + Math.abs(block.z - z) === 1)) return '先连接地面或旁边的建筑。这是游戏的搭建规则，真实承重更复杂。';
     return null;
   }
 
   placeBlock(item, position) {
     if (!isRecord(position)) return fail('先选择一个空格。');
-    const span = item === 'roof' ? roofSpan(this.state.blocks, position) : { x: position.x, z: position.z, w: 1, d: 1, enclosed: false };
+    const span = item === 'roof' ? roofSpan(this.activeBlocks(), position) : { x: position.x, z: position.z, w: 1, d: 1, enclosed: false };
     const spot = { ...position, ...span, rotation: item === 'roof' ? 0 : (position.rotation ?? 0) };
     const problem = this.placementProblem(item, spot);
     if (problem) return fail(problem);
@@ -447,8 +527,9 @@ export class GameState {
     this.mutate(state => {
       state.nextId++;
       state.inventory[item]--;
-      state.blocks.push(block);
-      if (item === 'chest') state.chests[block.id] = blankInventory();
+      const bag = this.blockBag(state);
+      bag.blocks.push(block);
+      if (item === 'chest') bag.chests[block.id] = blankInventory();
       state.stats.built++;
       note = this.fitRoofs(state);
     });
@@ -459,7 +540,9 @@ export class GameState {
   }
 
   fitRoofs(state) {
-    const roofs = state.blocks.filter(block => block.item === 'roof');
+    const bag = this.blockBag(state);
+    const blocks = bag.blocks;
+    const roofs = blocks.filter(block => block.item === 'roof');
     const claimed = [];
     const drop = [];
     let grew = false;
@@ -477,11 +560,11 @@ export class GameState {
         const key = `${x},${z}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        if (roofWallAt(state.blocks, x, z, roof.y)) continue;
-        const span = roofSpan(state.blocks, { x, y: roof.y, z });
+        if (roofWallAt(blocks, x, z, roof.y)) continue;
+        const span = roofSpan(blocks, { x, y: roof.y, z });
         if (span.enclosed && (!best || span.w * span.d > best.w * best.d)) best = span;
       }
-      const mid = cells.find(([x, z]) => !roofWallAt(state.blocks, x, z, roof.y)) || cells[0];
+      const mid = cells.find(([x, z]) => !roofWallAt(blocks, x, z, roof.y)) || cells[0];
       const box = best ? { x: best.x, z: best.z, w: best.w, d: best.d, y: roof.y } : { x: mid[0], z: mid[1], w: 1, d: 1, y: roof.y };
       if (claimed.some(held => overlaps(held, box))) {
         drop.push(roof);
@@ -497,7 +580,7 @@ export class GameState {
     }
     if (drop.length) {
       const ids = new Set(drop.map(roof => roof.id));
-      state.blocks = state.blocks.filter(block => !ids.has(block.id));
+      bag.blocks = bag.blocks.filter(block => !ids.has(block.id));
       state.inventory.roof += drop.length;
       this.history = this.history.filter(action => !ids.has(action.block?.id));
     }
@@ -522,18 +605,20 @@ export class GameState {
   }
 
   removeBlock(id, remember = true) {
-    const block = this.state.blocks.find(block => block.id === id);
+    const bagNow = this.blockBag();
+    const block = bagNow.blocks.find(block => block.id === id);
     if (!block) return fail('这里没有可以取回的建筑。');
-    const contents = this.state.chests[id] ? copy(this.state.chests[id]) : null;
+    const contents = bagNow.chests[id] ? copy(bagNow.chests[id]) : null;
     const returned = { ...(contents ?? blankInventory()) };
     returned[block.item] = (returned[block.item] ?? 0) + 1;
     if (ITEM_KEYS.some(item => !isCount(this.state.inventory[item] + (returned[item] ?? 0)))) return fail('背包里的材料太多，请先存放一些。');
     let note = null;
     this.mutate(state => {
-      state.blocks = state.blocks.filter(block => block.id !== id);
+      const bag = this.blockBag(state);
+      bag.blocks = bag.blocks.filter(block => block.id !== id);
       state.inventory[block.item]++;
       if (contents) for (const item of ITEM_KEYS) state.inventory[item] += contents[item];
-      delete state.chests[id];
+      delete bag.chests[id];
       note = this.fitRoofs(state);
     });
     if (remember) this.history.push({ type: 'remove', block: copy(block), contents });
@@ -559,8 +644,9 @@ export class GameState {
     let note = null;
     this.mutate(state => {
       for (const item of ITEM_KEYS) state.inventory[item] -= required[item] ?? 0;
-      state.blocks.push(copy(block));
-      if (contents) state.chests[block.id] = copy(contents);
+      const bag = this.blockBag(state);
+      bag.blocks.push(copy(block));
+      if (contents) bag.chests[block.id] = copy(contents);
       note = this.fitRoofs(state);
     });
     this.history.pop();
@@ -589,6 +675,7 @@ export class GameState {
       for (const item of ITEM_KEYS) state.inventory[item] -= required[item];
       state.inventory[recipe.output.item] += recipe.output.count;
       state.stats.crafted += recipe.output.count;
+      if (recipe.output.item === 'paper-crane') grantStamp(state, 'ri-crane-first');
     });
     return ok(`做好了${recipe.output.count}份${recipe.name}。`, { item: recipe.output.item, count: recipe.output.count, recipe });
   }
@@ -603,7 +690,7 @@ export class GameState {
   }
 
   depositChest(id, item, count = 1) {
-    const chest = Object.hasOwn(this.state.chests, id) ? this.state.chests[id] : null;
+    const chest = this.chestBag(id);
     if (!chest) return fail('先放好一个储物箱。');
     if (!Object.hasOwn(ITEMS, item) || !isPositive(count) || !isCount(chest[item] + count)) return fail('材料和数量不正确。');
     if (this.state.inventory[item] < count) return fail('背包里的材料不够，少放一些试试。');
@@ -612,7 +699,7 @@ export class GameState {
   }
 
   withdrawChest(id, item, count = 1) {
-    const chest = Object.hasOwn(this.state.chests, id) ? this.state.chests[id] : null;
+    const chest = this.chestBag(id);
     if (!chest) return fail('这个箱子已经取回了。');
     if (!Object.hasOwn(ITEMS, item) || !isPositive(count) || !isCount(this.state.inventory[item] + count)) return fail('材料和数量不正确。');
     if (chest[item] < count) return fail('箱子里没有这么多，少取一些试试。');
@@ -636,6 +723,90 @@ export class GameState {
     return { ...kiln, label: KILN_LABELS[kiln.stage], progress: kiln.elapsed / 24 };
   }
 
+  beginTravel(realmId, via = 'ferry') {
+    if (this.currentRealm() !== 'he') return fail('先回到河谷，再出发。');
+    if (realmId !== 'ri') return fail('这一谷还没开放。');
+    const way = via === 'balloon' ? 'balloon' : 'ferry';
+    this.history = [];
+    this.mutate(state => {
+      if (!state.travel.realms.ri) state.travel.realms.ri = emptyRealm('ri');
+      state.travel.realms.ri.player = arrivalFor('ri', way);
+      state.travel.current = 'ri';
+      state.travel.via = way;
+      if (!state.travel.visited.includes('ri')) state.travel.visited.push('ri');
+      grantStamp(state, 'ri-arrive');
+    });
+    return ok(way === 'balloon' ? '热气球落到日谷的草坪上。' : '小船到日谷的码头了。');
+  }
+  returnHome() {
+    if (this.currentRealm() === 'he') return ok('已经在河谷。');
+    this.history = [];
+    this.mutate(state => { state.travel.current = 'he'; state.travel.via = null; });
+    return ok('回到河谷了。家里的东西都在。');
+  }
+  washiStatus() {
+    const proc = this.state.travel?.realms?.ri?.processes?.find(item => item.kind === 'washi') || null;
+    if (!proc) return { stage: 'idle', elapsed: 0, label: '还没开始', ready: false, stages: WASHI_STAGES };
+    const stage = WASHI_STAGES.find(item => item.id === proc.stage);
+    return { stage: proc.stage, elapsed: proc.elapsed, label: proc.stage === 'ready' ? '可以收下' : (stage?.label || '制作中'), ready: proc.stage === 'ready', stages: WASHI_STAGES };
+  }
+  startWashi() {
+    if (this.currentRealm() !== 'ri') return fail('先到日谷的纸坊。');
+    const running = this.state.travel.realms.ri?.processes?.find(item => item.kind === 'washi' && item.stage !== 'ready');
+    if (running) return fail('这张和纸还在做，做好再开始下一张。');
+    if ((this.state.inventory.kozo || 0) < 1) return fail('楮皮还不够。去楮树林采集就有，不用答题。');
+    this.mutate(state => {
+      state.inventory.kozo -= 1;
+      const realm = state.travel.realms.ri;
+      realm.processes = realm.processes.filter(item => item.kind !== 'washi');
+      realm.processes.push({ id: 'washi', kind: 'washi', elapsed: 0, stage: washiStage(0) });
+    });
+    return ok('开始做和纸。剥皮蒸煮、敲打、加水、竹帘抄纸，然后晾干。');
+  }
+  claimWashi() {
+    const proc = this.state.travel?.realms?.ri?.processes?.find(item => item.kind === 'washi' && item.stage === 'ready');
+    if (!proc) return fail('和纸还在晾，看一看步骤，过一会儿再来。');
+    if (!isCount(this.state.inventory.washi + 1)) return fail('背包里的和纸已经很多了。');
+    this.mutate(state => {
+      state.inventory.washi += 1;
+      const realm = state.travel.realms.ri;
+      realm.processes = realm.processes.filter(item => item.id !== proc.id);
+      grantStamp(state, 'ri-washi-first');
+    });
+    return ok('收下第一张和纸。时间在游戏里缩短了。');
+  }
+  repairKoinobori() {
+    if (this.currentRealm() !== 'ri') return fail('先到日谷的旗杆。');
+    if ((this.state.inventory['paper-koinobori'] || 0) < 1) return fail('先用和纸和竹篾做一面纸鲤鱼旗。不用答题。');
+    const realm = this.state.travel.realms.ri;
+    if (realm.claimed.includes('ri-flag-repaired')) return ok('鲤鱼旗已经补好了。');
+    this.mutate(state => {
+      const spot = state.travel.realms.ri;
+      if (!spot.claimed.includes('ri-flag-repaired')) spot.claimed.push('ri-flag-repaired');
+      grantStamp(state, 'ri-help-koharu');
+    });
+    return ok('纸鲤鱼旗补上了。小春说谢谢。这面旗还在背包里，也可以带回河谷。');
+  }
+  rewardTutorSupply(tutorId = 'ri') {
+    if (typeof tutorId !== 'string' || !/^[a-z0-9-]{1,64}$/.test(tutorId)) return fail('这份补给的内容不正确。');
+    if ((this.state.clock.elapsed || 0) < (this.state.travel.supplyAt || 0)) return fail('这份小补给稍后再领。楮树林随时可以采，不用等。');
+    if (!isCount((this.state.inventory.kozo || 0) + SUPPLY_COUNT)) return fail('背包里的楮皮已经很多了。');
+    this.mutate(state => {
+      state.inventory.kozo += SUPPLY_COUNT;
+      state.travel.supplyAt = state.clock.elapsed + SUPPLY_COOLDOWN;
+      const sticker = `ri-quiz-${tutorId}`;
+      if (!state.travel.stickers.includes(sticker)) state.travel.stickers.push(sticker);
+    });
+    return ok(`得到 ${SUPPLY_COUNT} 份楮皮。这是可选补给，不去答题也能采集。`);
+  }
+  seeLetter(id = 'letter-ri-1') {
+    if (typeof id !== 'string' || !/^[a-z0-9-]{1,64}$/.test(id)) return fail('这封信还认不出。');
+    this.mutate(state => {
+      if (!state.travel.story.seen.includes(id)) state.travel.story.seen.push(id);
+      if (!state.travel.story.letters.includes(id)) state.travel.story.letters.push(id);
+    });
+    return ok('信看过了。想坐船就去渡口，不看信也可以走。');
+  }
   claimKiln() {
     const kiln = this.state.kiln;
     if (!['ready', 'failed'].includes(kiln.stage)) return fail('还没完成冷却，继续探索一会儿再来。');
@@ -705,6 +876,13 @@ export class GameState {
         if (kiln.stage !== 'idle' && kiln.elapsed < 24) {
           kiln.elapsed++;
           kiln.stage = kiln.elapsed === 24 ? (kiln.mode === 'normal' ? 'ready' : 'failed') : KILN_STAGES[1 + Math.floor(kiln.elapsed / 6)];
+        }
+        for (const realm of Object.values(state.travel?.realms || {})) {
+          for (const proc of realm.processes || []) {
+            if (proc.kind !== 'washi' || proc.stage === 'ready') continue;
+            proc.elapsed = Math.min(WASHI_TOTAL_SECONDS, proc.elapsed + 1);
+            proc.stage = washiStage(proc.elapsed);
+          }
         }
         for (const plot of state.garden) {
           if (!plot.planted || plot.age >= 90) continue;

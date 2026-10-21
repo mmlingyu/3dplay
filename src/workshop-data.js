@@ -1,6 +1,6 @@
 import { ITEMS, RECIPES } from './game-data.js';
 
-const UNIT = { wood: '份', plank: '块', stick: '根', stone: '块', branch: '根', clay: '份', ramp: '块', post: '块', workbench: '个', chest: '个', ball: '个', roof: '片', window: '扇', door: '扇', bed: '张', fence: '段', pot: '个', wreath: '个', lantern: '个', flag: '面' };
+const UNIT = { wood: '份', plank: '块', stick: '根', stone: '块', branch: '根', clay: '份', ramp: '块', post: '块', workbench: '个', chest: '个', ball: '个', roof: '片', window: '扇', door: '扇', bed: '张', fence: '段', pot: '个', wreath: '个', lantern: '个', flag: '面', kozo: '份', bamboo: '根', 'bamboo-strip': '条', washi: '张', 'paper-crane': '只', 'paper-boat': '只', 'paper-koinobori': '面', 'paper-door': '扇' };
 
 export const PACK_ITEMS = Object.freeze(['wood', 'plank', 'stick', 'stone', 'clay', 'branch', 'brick', 'soil', 'water', 'seed', 'bean', 'shard']);
 
@@ -10,6 +10,7 @@ export const WORKSHOP_FOLDS = Object.freeze([
   { id: 'room', title: '屋里屋外', ids: ['bed', 'workbench', 'chest'] },
   { id: 'deco', title: '个性装饰', ids: ['pot', 'wreath', 'lantern', 'flag'] },
   { id: 'toy', title: '球道玩具', ids: ['ball', 'post'] },
+  { id: 'ri', title: '日谷纸艺', ids: ['bamboo-strips', 'paper-crane', 'paper-boat', 'paper-koinobori', 'paper-door'] },
 ]);
 
 export function unit(item) {
@@ -94,6 +95,9 @@ const ITEM_SOURCE = Object.freeze({
   soil: '去地图上的种植土采集',
   water: '去地图上的溪边取水点采集',
   seed: '去地图上的豆子种子箱采集',
+  kozo: '去日谷的楮树林采集，不用答题',
+  bamboo: '去日谷的竹林采集，不用答题',
+  washi: '在日谷纸坊用楮皮做和纸',
   brick: '去小小砖窑，用黏土和树枝烧砖',
   bean: '去小菜园种豆，长成后再采收',
   shard: '试样碎片只观察，不能当材料',
@@ -107,7 +111,8 @@ export function whereToGet(item) {
 }
 
 export function sourceKind(item) {
-  if (ITEM_SOURCE[item] && ['wood', 'branch', 'stone', 'clay', 'soil', 'water', 'seed'].includes(item)) return 'gather';
+  if (ITEM_SOURCE[item] && ['wood', 'branch', 'stone', 'clay', 'soil', 'water', 'seed', 'kozo', 'bamboo'].includes(item)) return 'gather';
+  if (item === 'washi') return 'kiln';
   if (item === 'brick') return 'kiln';
   if (item === 'bean') return 'garden';
   if (RECIPES.some(entry => entry.output.item === item)) return 'craft';

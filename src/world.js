@@ -8,6 +8,8 @@ import { LAND_RULES, FACILITY_CHUNKS, isPointOpen, landBounds, openChunks, landE
 import { CreationWorld } from './creation-world.js';
 import { BOUNCE_ISLAND, PARK_NAME, PLAY_MODES, bounceSurface, onBounceIsland, parkPadAt, playBounce, playMode } from './bounce-data.js';
 import { BALLOON_BASE, BALLOON_CONTROL, BALLOON_NAME, balloonAngleFrom, balloonHomeAngle, balloonHomeDuration, balloonLook, balloonNearBase, balloonReturnPose, balloonScaleFrom, balloonSteer, balloonTourPoint, onBalloonLawn } from './balloon-data.js';
+import { chooseDockSite } from './realm-data.js';
+import { trackListeners, trackWorldCreated, trackWorldReleased } from './scene-stats.js';
 
 const C = { grass: '#a8bf7a', leaf: '#789957', leafLight: '#b6c785', soil: '#b48d64', wood: '#b97944', stone: '#8b9c9b', cream: '#fff5db', roof: '#c98063', water: '#8ebdc0', green: '#426b58' };
 const NAME_SHOW_DISTANCE = 3;
@@ -67,6 +69,8 @@ function gableGeometry(spanW, spanD) {
 
 export class RiverWorld {
   constructor(canvas, callbacks = {}) {
+    this.realmId = 'he';
+    this.released = false;
     this.canvas = canvas; this.callbacks = callbacks; this.state = null; this.selectedTarget = null;
     this.targets = []; this.pickMeshes = []; this.buildGroups = new Map(); this.plantGroups = new Map(); this.decorColliders = [];
     this.floraGroups=new Map();this.floraGeometry=new THREE.SphereGeometry(1,8,6);
@@ -89,7 +93,7 @@ export class RiverWorld {
     this.mat('wood', C.wood, texture('wood', C.wood)); this.mat('soil', C.soil, texture('soil', C.soil)); this.mat('grass', C.grass, texture('grass', C.grass));
     this.mat('stone', C.stone, texture('stone', C.stone)); this.mat('clay', '#bc8165', texture('soil', '#bc8165')); this.mat('brick', C.roof, texture('brick', C.roof));
     this.mat('cream', C.cream); this.mat('roof', C.roof); this.mat('leaf', C.leaf); this.mat('leafLight', C.leafLight); this.mat('green', C.green); this.mat('dark', '#354438'); this.mat('flower', '#eed396'); this.mat('mint', '#8fd0c6'); this.mat('bounce', '#ffe4c4');
-    this.mat('door', '#8f6238'); this.mat('window', '#9ec9c4'); this.mat('bed', '#efe0b8'); this.mat('fence', C.wood); this.mat('pot', '#c47a60'); this.mat('wreath', '#5f8a48'); this.mat('lantern', '#e0a35a'); this.mat('flag', '#d36b5a'); this.mat('balloon', '#e27a5f');
+    this.mat('door', '#8f6238'); this.mat('window', '#9ec9c4'); this.mat('bed', '#efe0b8'); this.mat('fence', C.wood); this.mat('pot', '#c47a60'); this.mat('wreath', '#5f8a48'); this.mat('lantern', '#e0a35a'); this.mat('flag', '#d36b5a'); this.mat('balloon', '#e27a5f'); this.mat('paper', '#f7f1e4'); this.mat('carp', '#e07a4a');
     this.groundMeshes = []; this.terrain(); this.landmarks(); this.details(); this.batchDecorations();
     this.creation = new CreationWorld(this);
     this.player = this.avatar(); this.scene.add(this.player);
@@ -107,6 +111,7 @@ export class RiverWorld {
     this.particles = []; this.balls = []; this.ballMaterial = new THREE.MeshStandardMaterial({ color: '#d9ac70', map: this.mats.wood.map, roughness: .83 }); this.minimap = document.getElementById('minimap');
     this.bindPointer(); this.resizeObserver = new ResizeObserver(() => this.resize()); this.resizeObserver.observe(canvas); this.resize();
     this.updateCamera(1, true); this.renderer.render(this.scene, this.camera);
+    trackWorldCreated();
   }
   mat(name, color, map = null) { const m = new THREE.MeshStandardMaterial({ color, map, roughness: .87, metalness: 0 }); this.mats[name] = m; return m; }
   mesh(parent, geometry, material, pos = [0, 0, 0], scale = [1, 1, 1]) { const m = new THREE.Mesh(geometry, typeof material === 'string' ? this.mats[material] : material); m.position.set(...pos); m.scale.set(...scale); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m; }
@@ -668,6 +673,10 @@ export class RiverWorld {
     else if(block.item==='wreath') { this.cube(g,ghost?m:this.mats.leaf,[0,.55,.42],[.7,.7,.08],true); this.cube(g,ghost?m:this.mats.flower,[0,.82,.46],[.14,.14,.06]); }
     else if(block.item==='lantern') { this.cube(g,m,[0,.42,0],[.32,.5,.32],true); this.cube(g,ghost?m:this.mats.flower,[0,.42,0],[.2,.28,.2]); }
     else if(block.item==='flag') { this.cube(g,m,[0,.55,0],[.08,1.1,.08],true); this.cube(g,ghost?m:this.mats.flag,[.28,.78,0],[.52,.32,.04]); }
+    else if(block.item==='paper-crane') { this.cube(g,ghost?m:this.mats.paper,[0,.35,0],[.7,.22,.55],true); this.cube(g,ghost?m:this.mats.paper,[-.28,.42,0],[.4,.08,.16],true); }
+    else if(block.item==='paper-boat') this.cube(g,ghost?m:this.mats.paper,[0,.22,0],[.8,.24,.42],true);
+    else if(block.item==='paper-koinobori') { this.cube(g,m,[0,.55,0],[.08,1.1,.08],true); this.cube(g,ghost?m:this.mats.carp,[.32,.8,0],[.55,.28,.08],true); }
+    else if(block.item==='paper-door') { this.cube(g,ghost?m:this.mats.paper,[0,.55,0],[.86,1.1,.08],true); this.cube(g,m,[0,.55,.05],[.04,1.1,.04]); this.cube(g,m,[0,.55,.05],[.86,.04,.04]); }
     else this.cube(g,m,[0,.5,0],[.97,.98,.97],true);
     return g;
   }
@@ -705,6 +714,7 @@ export class RiverWorld {
     this.syncLife(state);
     this.syncLand(state);
     this.creation.sync(state);
+    if (!this.dockReady) this.ensureDock(state.blocks);
     const plants=state.garden||[]; const plantSignature=plants.map(p=>`${p.id}:${p.planted}:${Math.floor((p.age||0)/18)}:${p.moisture}`).join('|');
     if(plantSignature!==this.plantSignature) {this.plantSignature=plantSignature;for(const g of this.plantGroups.values())this.scene.remove(g);this.plantGroups.clear();plants.forEach((p,i)=>{if(!p.planted)return;const x=Number.isFinite(p.x)?p.x:9.5+(i%3-1)*1.3,z=Number.isFinite(p.z)?p.z:5+Math.floor(i/3)*1.3;const g=new THREE.Group();g.position.set(x,.2,z);const stage=Math.min(5,Math.floor((p.age||0)/18));const h=.12+stage*.12;this.cube(g,'leaf',[0,h/2,0],[.045,h,.045]);for(let j=0;j<Math.min(stage+1,5);j++){const sign=j%2?1:-1;const leaf=this.mesh(g,new THREE.SphereGeometry(.16,8,6),'leaf',[sign*.15,.11+j*.085,0],[1,.38,.62]);leaf.rotation.z=sign*.3;}if(stage>=3)this.mesh(g,new THREE.SphereGeometry(.07,6,6),'cream',[.15,h,.01]);if(stage>=4)for(const sign of[-1,1])this.mesh(g,new THREE.CapsuleGeometry(.035,.18,2,6),'leafLight',[sign*.2,h*.7,.04],[1,1,1]);if(p.moisture>=3){const wet=new THREE.Mesh(new THREE.PlaneGeometry(.85,.85),this.water.material);wet.rotation.x=-Math.PI/2;wet.position.y=.008;g.add(wet);}this.scene.add(g);this.plantGroups.set(p.id,g);});}
   }
@@ -863,6 +873,8 @@ export class RiverWorld {
     return {target,point:h.point,cell};
   }
   bindPointer() {
+    this.pointerAbort = new AbortController();
+    this.pointerSignal = this.pointerAbort.signal;
     this.pointers = new Map();
     const gesture = this.pointerGesture = { start: null, dragged: false, pinch: 0, previewOffset: null, dragPick: null, pointerType: null, mouseTap: false };
     this.canvas.addEventListener('pointerdown', e => {
@@ -885,7 +897,7 @@ export class RiverWorld {
         const p = [...this.pointers.values()];
         gesture.pinch = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
       }
-    });
+    }, { signal: this.pointerSignal });
     this.canvas.addEventListener('pointermove', e => {
       const old = this.pointers.get(e.pointerId); if (!old) return;
       this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -901,7 +913,7 @@ export class RiverWorld {
           if (gesture.dragPick) this.callbacks.onPreviewDrag?.(gesture.dragPick);
         } else this.yaw -= (e.clientX - old.x) * .005;
       }
-    });
+    }, { signal: this.pointerSignal });
     this.canvas.addEventListener('pointerup', e => {
       gesture.mouseTap = e.pointerType === 'mouse' && !gesture.dragged && this.pointers.size === 1;
       if (this.pointers.size === 1) {
@@ -912,8 +924,8 @@ export class RiverWorld {
         }
       }
       this.pointers.delete(e.pointerId); gesture.start = null; gesture.previewOffset = null; gesture.dragPick = null;
-    });
-    this.canvas.addEventListener('pointercancel', () => this.cancelPointerGesture());
+    }, { signal: this.pointerSignal });
+    this.canvas.addEventListener('pointercancel', () => this.cancelPointerGesture(), { signal: this.pointerSignal });
     this.canvas.addEventListener('dblclick', e => {
       if (e.button !== 0) return;
       this.cancelScheduledTap();
@@ -921,8 +933,9 @@ export class RiverWorld {
       if (this.callbacks.canFocusModel?.() !== false && this.toggleModelFocus(pick)) return;
       if (gesture.pointerType !== 'mouse' || !gesture.mouseTap) return;
       if (pick) this.callbacks.onQuickPlace?.(pick);
-    });
-    this.canvas.addEventListener('wheel',e=>{e.preventDefault();this.zoomBy(e.deltaY*.008);},{passive:false});
+    }, { signal: this.pointerSignal });
+    this.canvas.addEventListener('wheel',e=>{e.preventDefault();this.zoomBy(e.deltaY*.008);},{passive:false, signal: this.pointerSignal});
+    trackListeners(6);
   }
   hitPreview(clientX, clientY) {
     if (!this.preview.visible || !this.preview.children.length) return false;
@@ -1016,6 +1029,7 @@ export class RiverWorld {
     if(x>=this.bridge.minX&&x<=this.bridge.maxX&&z>=this.bridge.minZ&&z<=this.bridge.maxZ)h=Math.max(h,this.bridge.height);
     const bounceH=bounceSurface(x,z);if(bounceH!==null)h=Math.max(h,bounceH);
     if(onBalloonLawn(x,z))h=Math.max(h,BALLOON_BASE.padHeight);
+    if(this.dockSite && Math.hypot(x-this.dockSite.x,z-this.dockSite.z)<=this.dockSite.radius+0.35)h=Math.max(h,0.28);
     if(this.demoRamp&&Math.abs(x-this.demoRamp.x)<this.demoRamp.width/2&&z>=this.demoRamp.minZ&&z<=this.demoRamp.maxZ)h=Math.max(h,(this.demoRamp.maxZ-z)/4*this.demoRamp.height);
     if(Math.abs(x-9)<.85&&z>=-2.25&&z<=-.9){h=Math.max(h,.08);if(Math.abs(x-9)>.74||z>-.99)h=Math.max(h,.5);}
     for(const b of this.state?.blocks||[]){if(b.item==='roof')continue;if(Math.abs(x-b.x)>.5||Math.abs(z-b.z)>.5)continue;if(b.item==='door')continue;const angle=(b.rotation||0)*Math.PI/2;const localZ=(x-b.x)*Math.sin(angle)+(z-b.z)*Math.cos(angle);if((b.item==='post'||b.item==='fence'||b.item==='flag')&&Math.abs(localZ)>.13)continue;let bh=b.y+1;if(b.item==='ramp'){bh=b.y+.5-localZ;}else if(b.item==='chest')bh=b.y+.7;else if(b.item==='bed')bh=b.y+.35;else if(b.item==='pot'||b.item==='lantern')bh=b.y+.45;else if(b.item==='wreath')bh=b.y+.08;h=Math.max(h,bh);}return h;
@@ -1140,10 +1154,26 @@ export class RiverWorld {
     return true;
   }
   requestBalloonLand() {
+    if (this.balloon?.phase === 'voyage') return false;
     return this.stopBalloon();
   }
+  startVoyage(realmId = 'ri') {
+    if (!this.balloon || this.balloon.phase !== 'tour') return false;
+    this.balloon.phase = 'voyage';
+    this.balloon.t = 0;
+    this.balloon.realmId = realmId;
+    this.balloon.arrived = false;
+    this.callbacks.onBalloonLook?.(this.balloonLook());
+    return true;
+  }
+  completeVoyage() {
+    if (!this.balloon || this.balloon.phase !== 'voyage' || this.balloon.arrived) return false;
+    this.balloon.arrived = true;
+    this.callbacks.onVoyageArrive?.(this.balloon.realmId || 'ri');
+    return true;
+  }
   stopBalloon() {
-    if (!this.balloon || this.balloon.phase === 'home' || this.balloon.phase === 'descend') return false;
+    if (!this.balloon || this.balloon.phase === 'home' || this.balloon.phase === 'descend' || this.balloon.phase === 'voyage') return false;
     const p = this.balloonCraft?.position || this.playerPosition;
     const near = balloonNearBase(p.x, p.z);
     this.balloon.phase = near ? 'descend' : 'home';
@@ -1174,7 +1204,7 @@ export class RiverWorld {
     return balloonLook(this.balloon?.phase || 'idle', this.balloon?.angle || 0, this.balloon?.mode || 'orbit');
   }
   setBalloonMode(mode) {
-    if (!this.balloon || this.balloon.phase === 'home' || this.balloon.phase === 'descend') return false;
+    if (!this.balloon || this.balloon.phase === 'home' || this.balloon.phase === 'descend' || this.balloon.phase === 'voyage') return false;
     const next = mode === 'steer' ? 'steer' : 'orbit';
     if (next === 'orbit' && this.balloonCraft) {
       const p = this.balloonCraft.position;
@@ -1187,7 +1217,7 @@ export class RiverWorld {
     return true;
   }
   setBalloonClimb(value, hold = 0) {
-    if (!this.balloon || this.balloon.phase === 'home' || this.balloon.phase === 'descend') return false;
+    if (!this.balloon || this.balloon.phase === 'home' || this.balloon.phase === 'descend' || this.balloon.phase === 'voyage') return false;
     this.balloon.climb = Math.max(-1, Math.min(1, Number(value) || 0));
     this.balloon.climbUntil = hold > 0 ? this.time + hold : 0;
     if (this.balloon.phase === 'tour') this.setBalloonMode('steer');
@@ -1251,6 +1281,13 @@ export class RiverWorld {
         ride.t = 0;
         ride.from = { x: home.x, y: ride.from?.y ?? home.cruiseHeight, z: home.z, angle: ride.angle };
         this.callbacks.onBalloonLook?.(this.balloonLook());
+      }
+    } else if (ride.phase === 'voyage') {
+      ride.height = Math.min(BALLOON_CONTROL.maxHeight, (ride.height || home.cruiseHeight) + BALLOON_CONTROL.climbSpeed * dt);
+      this.balloonCraft.position.y = ride.height + bob;
+      if (ride.height >= BALLOON_CONTROL.maxHeight - 0.05) {
+        this.completeVoyage();
+        return;
       }
     } else if (ride.phase === 'descend' || ride.phase === 'land') {
       ride.t += dt;
@@ -1377,7 +1414,7 @@ export class RiverWorld {
       b.className = 'world-label';
       b.textContent = t.label;
       const lookable = Boolean(t.figureId || t.assemblyId || t.type === 'tutor' || t.type === 'station' || (t.type === 'block' && t.panel));
-      b.setAttribute('aria-label', lookable ? `点一下${t.name}，双击靠近看` : `前往${t.name}`);
+      b.setAttribute('aria-label', t.ariaLabel || (lookable ? `点一下${t.name}，双击靠近看` : `前往${t.name}`));
       if (lookable) {
         b.addEventListener('click', event => {
           event.preventDefault();
@@ -1491,5 +1528,38 @@ export class RiverWorld {
     for(const b of this.state?.blocks||[]){const [x,y]=point(b.x,b.z);ctx.fillStyle='#b58a55';ctx.fillRect(x-1.7,y-1.7,3.4,3.4);}
     const [px,py]=point(this.playerPosition.x,this.playerPosition.z);ctx.fillStyle='#fff9e5';ctx.beginPath();ctx.arc(px,py,5,0,Math.PI*2);ctx.fill();ctx.fillStyle=C.green;ctx.beginPath();ctx.arc(px,py,3,0,Math.PI*2);ctx.fill();
   }
-  dispose(){this.resizeObserver.disconnect();this.frontierFillMaterial.dispose();this.frontierLineMaterial.dispose();this.renderer.dispose();}
+  ensureDock(blocks) {
+    this.dockReady = true;
+    const site = chooseDockSite(blocks || []);
+    this.dockSite = site;
+    if (!site) return;
+    const g = new THREE.Group();
+    g.position.set(site.x, 0.12, site.z);
+    for (let i = -2; i <= 2; i += 1) this.cube(g, 'wood', [0, 0.08, i * 0.62], [1.35, 0.14, 0.55]);
+    this.cube(g, 'wood', [-0.62, 0.45, 1.2], [0.14, 0.8, 0.14]);
+    this.cube(g, 'wood', [0.62, 0.45, 1.2], [0.14, 0.8, 0.14]);
+    this.cube(g, 'wood', [1.15, 0.28, 0], [0.62, 0.24, 1.35], true);
+    this.scene.add(g);
+    this.dockGroup = g;
+    this.target(g, { id: 'ferry-dock', type: 'ferry', name: '渡口', label: '去日谷', ariaLabel: '去日谷', action: '去日谷' });
+  }
+  release() {
+    if (this.released) return;
+    this.released = true;
+    this.pointerAbort?.abort();
+    this.resizeObserver?.disconnect();
+    document.getElementById('world-labels')?.replaceChildren();
+    const materials = new Set();
+    this.scene.traverse((obj) => {
+      const list = Array.isArray(obj.material) ? obj.material : (obj.material ? [obj.material] : []);
+      for (const material of list) materials.add(material);
+      if (obj.geometry) obj.geometry.dispose?.();
+    });
+    for (const material of materials) material.dispose?.();
+    this.frontierFillMaterial?.dispose();
+    this.frontierLineMaterial?.dispose();
+    this.renderer.dispose();
+    trackWorldReleased(6);
+  }
+  dispose() { this.release(); }
 }

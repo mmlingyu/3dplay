@@ -5,6 +5,8 @@ export const MATERIAL_COLORS = {
   seed: '#8fb867', brick: '#c47a60', shard: '#c47a60', bean: '#8fb867',
   roof: '#c98063', window: '#9ec9c4', door: '#8f6238', bed: '#efe0b8',
   fence: '#b97944', pot: '#c47a60', wreath: '#5f8a48', lantern: '#e0a35a', flag: '#d36b5a',
+  kozo: '#c4a574', bamboo: '#7ea35a', 'bamboo-strip': '#d2c48a', washi: '#f4efe4',
+  'paper-crane': '#f7f1e4', 'paper-boat': '#f7f1e4', 'paper-koinobori': '#e07a4a', 'paper-door': '#f3ecdf',
 };
 
 const materials = {
@@ -34,6 +36,14 @@ const materials = {
   lantern: '<path fill="#c98063" d="M10 10h12v15H10Z"/><path fill="#f0d48a" d="M12 14h8v6h-8Z"/><path d="M16 4v6m-4 0h8M12 25h8" stroke="#8f6238"/>',
   flag: '<path d="M8 4v24" stroke="#8a6239" stroke-width="3"/><path fill="#d36b5a" d="M10 5h16l-4 6 4 6H10Z"/>',
   bean: '<path fill="#8fb867" d="M9 6c4-3 8 1 10 4s9 5 9 11c0 7-8 10-14 7C7 25 2 11 9 6Z"/><path d="M13 11c-2 6 0 10 5 13" stroke="#66884b"/>',
+  kozo: '<path fill="#c4a574" d="M8 26c2-8 4-12 8-18 4 6 6 10 8 18"/><path fill="#6f8f55" d="M16 8c-6 2-8-4-8-4s6-2 8 4c2-6 8-6 8-4s-2 6-8 4Z"/><path d="M16 26V10"/>',
+  bamboo: '<path fill="#7ea35a" d="M10 28V6h4v22Zm8 0V6h4v22Z"/><path d="M10 12h4M10 20h4M18 12h4M18 20h4"/>',
+  'bamboo-strip': '<path fill="#d2c48a" d="M8 6h3v20H8Zm6 0h3v20h-3Zm6 0h3v20h-3Z"/>',
+  washi: '<path fill="#f4efe4" d="M7 6h14l4 4v16H7Z"/><path d="M21 6v4h4M11 14h8M11 19h6"/>',
+  'paper-crane': '<path fill="#f7f1e4" d="M6 18 16 8l10 10-6 2-4 8-4-8Z"/><path d="M16 8v14"/>',
+  'paper-boat': '<path fill="#f7f1e4" d="M6 20 16 8l10 12-4 4H10Z"/><path d="M10 20h12"/>',
+  'paper-koinobori': '<path fill="#e07a4a" d="M8 10c8-4 12 2 16 2-4 6-8 10-16 6 2-2 2-6 0-8Z"/><circle cx="12" cy="13" r="1.2" fill="#35543d"/><path d="M24 12c3 1 4 3 4 4"/>',
+  'paper-door': '<path fill="#f3ecdf" d="M8 4h16v24H8Z"/><path d="M16 4v24M8 12h16M8 20h16"/>',
   plantReady: '<path d="M16 29V7" stroke="#67864f" stroke-width="2"/><path fill="#8fb867" d="M16 13C7 16 3 11 4 7c8-1 12 2 12 6Zm0 7c8 1 12-4 11-8-7-1-11 2-11 8Z"/><path fill="#c3cb77" d="M20 17c6 2 5 9 1 12-2-3-5-8-1-12Z"/>',
 };
 
@@ -68,6 +78,12 @@ const ui = {
   balloon: '<ellipse cx="16" cy="11" rx="8" ry="9"/><path d="M10 18c2 3 10 3 12 0M12 18l-2 6h12l-2-6"/><rect x="11" y="24" width="10" height="5" rx="1"/>',
   save: '<path d="M5 4h18l5 5v19H5ZM10 4v9h12V4M10 28V18h13v10m-4-21v3"/>',
   heart: '<path d="M16 27 5 16C-3 7 8 0 16 9c8-9 19-2 11 7Z"/>',
+  ferry: '<path d="M6 20h20l-2 5H8Z"/><path d="M10 20c1-6 4-8 6-8s5 2 6 8M16 12V6"/><path d="M4 27c2-1 3-1 4 0s2 1 4 0 2-1 4 0 2 1 4 0 2-1 4 0"/>',
+  crane: '<path d="M5 20 16 7l11 13-7 2-4 7-4-7Z"/><path d="M16 7v16"/>',
+  boat: '<path d="M5 20 16 8l11 12H5Z"/><path d="M8 20h16l-2 5H10Z"/>',
+  carp: '<path d="M6 16c6-6 12-2 16-2-2 6-8 8-16 2 3-1 3-3 0 0Z"/><circle cx="11" cy="15" r="1"/>',
+  stamp: '<rect x="7" y="6" width="18" height="14" rx="2"/><path d="M11 24h10M16 20v4"/>',
+  paper: '<path d="M8 5h12l5 5v17H8Z"/><path d="M20 5v5h5"/>',
   sparkle: '<path d="m17 4 3 8 8 3-8 3-3 9-3-9-8-3 8-3Zm-12-1v6M2 6h6m18 17v6m-3-3h6"/>',
 };
 

@@ -8,11 +8,15 @@ import { POOL, inPoolReservedArea } from './water-data.js';
 import { floraStage, realMoment } from './life-data.js';
 import { realAnalogClock } from './clock-ui.js';
 import { nearbyFrontiers, LAND_RULES } from './land-data.js';
-import { currentUser } from './engine-client.js';
+import { accountSession } from './engine-client.js';
 import { startValleySync } from './valley-sync.js';
 import { BOUNCE_ISLAND, PARK_NAME, PLAY_MODES, SKIP_STEPS, TIMES_TABLES, bounceInfo, inNumberPark, onBounceIsland, playMode } from './bounce-data.js';
 import { BALLOON_BASE, BALLOON_NAME, onBalloonLawn } from './balloon-data.js';
-import { gradeQuestion, loadTutorPack, nextQuestion, tutorById, tutors } from './tutor-data.js';
+import { gradeQuestion, loadTutorPack, nextQuestion, tutorById, tutors, useTutorRealm } from './tutor-data.js';
+import { chooseDockSite, FERRY_NOTE, VOYAGE_NOTE } from './realm-data.js';
+import { createCutscene } from './travel.js';
+import { sceneStats } from './scene-stats.js';
+import { RI_AUDIO } from './ri-tutors.js';
 import { renderA2UI } from './a2ui.js';
 import { npcTalkMessages, talkActivities } from './npc-surface.js';
 
@@ -26,7 +30,10 @@ const cooldowns = new Map();
 let world, panels, started = false, mode = 'gather', selectedItem = 'plank';
 let rotation = 0, buildCell = null, chosenTarget = null, modelMenu = null, panelType = null, savedTime = 0;
 let lastFrame = performance.now(), uiTime = 0, completedWish = false, speechTimer;
-let tutorBand = 'little', tutorUsed = [], tutorCurrent = null, tutorPick = null, tutorStage = 'menu', tutorActivity = null, tutorPage = 0, tutorGreeted = new Set();
+let tutorBand = game.state.settings.ageBand || 'little', tutorUsed = [], tutorCurrent = null, tutorPick = null, tutorStage = 'menu', tutorActivity = null, tutorPage = 0, tutorGreeted = new Set();
+let switching = false, cutscene = null;
+const missingAudio = new Set(RI_AUDIO);
+const riReady = import('./ri-world.js');
 let landHint=null;
 const dismissedFrontiers=new Set();
 let playerName = GUEST_PLAYER_NAME;
@@ -145,6 +152,8 @@ function showBalloon(info) {
   const height = $('balloon-height');
   if (modes) modes.hidden = !!info.landing;
   if (height) height.hidden = !!info.landing;
+  const voyage = $('balloon-voyage');
+  if (voyage) voyage.hidden = info.phase !== 'tour' || (game.state.travel?.current || 'he') !== 'he';
   for (const btn of document.querySelectorAll('[data-balloon-mode]')) {
     btn.setAttribute('aria-pressed', String(btn.dataset.balloonMode === (info.mode || 'orbit')));
   }
@@ -159,9 +168,143 @@ function hideBalloon() {
   }
 }
 function storePlayer() {
-  if (!world) return;
-  const p = world.playerPosition; game.state.player = { x: p.x, y: p.y, z: p.z };
-  game.state.toys = world.serializeBalls();
+  if (!world || world.released || switching) return;
+  const realm = game.state.travel?.current || 'he';
+  if ((world.realmId || 'he') !== realm) return;
+  const p = world.playerPosition;
+  if (realm === 'he') {
+    if (world.balloon?.phase === 'voyage') game.state.player = { x: BALLOON_BASE.x, y: 0, z: BALLOON_BASE.z };
+    else game.state.player = { x: p.x, y: p.y, z: p.z };
+    game.state.toys = world.serializeBalls();
+  } else {
+    const spot = game.state.travel.realms?.[realm];
+    if (spot) spot.player = { x: p.x, y: p.y || 0, z: p.z, ry: world.facing || 0 };
+  }
+}
+function showCutscene(text) {
+  const box = $('travel-cutscene');
+  if (!box) return;
+  $('travel-cutscene-text').textContent = text;
+  box.hidden = false;
+}
+function hideCutscene() {
+  const box = $('travel-cutscene');
+  if (box) box.hidden = true;
+}
+function paintTravel() {
+  const realm = game.state.travel?.current || 'he';
+  const home = $('travel-home');
+  const go = $('travel-go');
+  const actions = $('ri-actions');
+  if (home) home.hidden = realm !== 'ri';
+  if (actions) actions.hidden = realm !== 'ri';
+  const claim = $('ri-claim');
+  if (claim) claim.hidden = realm !== 'ri' || !game.washiStatus?.().ready;
+  if (go && world) {
+    const site = chooseDockSite(game.state.blocks);
+    const p = world.playerPosition;
+    const near = realm === 'he' && !!p && (!site || Math.hypot(p.x - site.x, p.z - site.z) < (site.radius || 2) + 2.3);
+    go.hidden = !near || !!cutscene;
+  }
+  const voyage = $('balloon-voyage');
+  if (voyage) voyage.hidden = !(realm === 'he' && world?.balloon?.phase === 'tour');
+}
+function worldHooks() {
+  return {
+    tutors: tutors(),
+    onTap, onPick, onQuickPlace, onPreviewDrag: onTap,
+    canDragPreview: () => started && mode === 'build' && !!buildCell && !!game.state.inventory[selectedItem] && !panels?.isOpen(),
+    onBall: (message) => { if (started) { toast(message); save(); } },
+    onWater: message => { if (started) toast(message); },
+    onModelFocus: target => { if ($('focus-exit')) $('focus-exit').hidden = !target; if (!started) return; feel(target ? [10, 24, 16] : 8); toast(target ? `靠近看${target.name}。点退出近看可以回来。` : '回到原来的视角。'); refreshModelMenu(); updateContext(); },
+    canFocusModel: () => started && mode !== 'build' && mode !== 'remove' && !panels?.isOpen() && (world?.realmId || 'he') === 'he',
+    onBounce: info => { if (!started) return; showBounce(info); updateContext(); },
+    onParkMode: info => { if (!started) return; if (world.bounce) showBounce(info); const modeName = playMode(info.mode); toast(`${modeName.title} · ${modeName.ages}`); updateContext(); },
+    onBounceStop: () => { hideBounce(); const trampoline = world.targets.find(t => t.id === 'bounce-island'); if (trampoline) trampoline.action = '跳上去'; updateContext(); toast('停下来啦。走下来，再走上去，会重新从 1 开始。也可以先点一块玩法石。'); },
+    onBalloonStart: info => { if (!started) return; hideBounce(); showBalloon(info); toast('坐稳，热气球起飞啦。转一圈看整个河谷。'); speak('坐上热气球，飞起来看整个河谷。'); updateContext(); },
+    onBalloonLook: info => { if (!started) return; showBalloon(info); updateContext(); },
+    onBalloonStop: () => { hideBalloon(); toast('已经降落。想再看，再点乘坐。'); updateContext(); },
+    onVoyageArrive: () => { goRealm('balloon'); },
+  };
+}
+async function mountWorld(realm, mod) {
+  const canvas = $('world-canvas');
+  if (realm === 'ri') {
+    useTutorRealm('ri');
+    try { await loadTutorPack('ri'); } catch { /* local pack is already inside loadTutorPack */ }
+  }
+  if (world) {
+    world.release?.();
+    world = null;
+  }
+  if (realm === 'ri') {
+    const ready = mod || await riReady;
+    world = new ready.RiWorld(canvas, worldHooks());
+    const spot = game.state.travel.realms?.ri;
+    if (spot?.player) {
+      world.playerPosition.set(spot.player.x, spot.player.y || 0, spot.player.z);
+      world.facing = spot.player.ry || 0;
+    }
+  } else {
+    useTutorRealm('he');
+    setTutorGuards(tutors());
+    world = new RiverWorld(canvas, worldHooks());
+    world.facing = 0;
+  }
+  world.sync(game.state);
+  if (realm === 'ri' && game.state.travel.via === 'balloon') world.beginArrivalDescend();
+  world.createLabels((target) => approach(target, true));
+  paintTravel();
+}
+async function goRealm(via = 'ferry') {
+  if (switching || (game.state.travel?.current || 'he') !== 'he') return;
+  hideCutscene();
+  try {
+    const mod = await riReady;
+    if ((game.state.travel?.current || 'he') !== 'he') return;
+    storePlayer();
+    switching = true;
+    const result = game.beginTravel('ri', via);
+    if (!result.ok) { toast(result.message); return; }
+    await mountWorld('ri', mod);
+    toast(result.message);
+    speak(via === 'balloon' ? VOYAGE_NOTE : FERRY_NOTE);
+    updateContext();
+  } catch (error) {
+    console.warn('去日谷没有完成', error);
+    if ((game.state.travel?.current || 'he') === 'ri') game.returnHome();
+    if (!world || world.released) await mountWorld('he');
+    toast('这一次没能出发，还在河谷。');
+  } finally {
+    switching = false;
+  }
+}
+async function goHome() {
+  if (switching || (game.state.travel?.current || 'he') === 'he') return;
+  hideBalloon();
+  hideCutscene();
+  try {
+    storePlayer();
+    switching = true;
+    const result = game.returnHome();
+    await mountWorld('he');
+    toast(result.message);
+    updateContext();
+  } finally {
+    switching = false;
+  }
+}
+function startFerry() {
+  if (cutscene || switching || (game.state.travel?.current || 'he') !== 'he') return;
+  cutscene = createCutscene('ferry', 3);
+  showCutscene(FERRY_NOTE);
+}
+async function finishCutscene() {
+  const kind = cutscene?.kind;
+  cutscene = null;
+  hideCutscene();
+  if (kind === 'ferry') await goRealm('ferry');
+  if (kind === 'voyage') world?.completeVoyage?.();
 }
 function save() { storePlayer(); const result = game.save(); updateSaveStatus(); return result; }
 const valleySync = startValleySync(game);
@@ -171,15 +314,29 @@ function figureNames() {
 async function refreshAccount() {
   const chip = $('account-chip'), label = $('account-label'), dot = $('account-dot');
   if (!chip || !label) return;
-  const user = await currentUser();
+  const session = await accountSession();
+  const user = session.user;
   setPlayerName(user);
-  if (user?.name) {
+  if (!session.online) {
+    label.textContent = '本机';
+    chip.removeAttribute('href');
+    chip.removeAttribute('target');
+    delete chip.dataset.signedIn;
+    chip.title = '现在只记在这台浏览器里。';
+    if (dot) dot.style.background = '#84a369';
+  } else if (user?.name) {
     label.textContent = user.name;
+    chip.href = '/account';
+    chip.target = '_blank';
+    chip.rel = 'noopener';
     chip.dataset.signedIn = '1';
     chip.title = '已登录。建造、造物和设置记在这个账号上。';
     if (dot) dot.style.background = '#84a369';
   } else {
     label.textContent = '登录';
+    chip.href = '/account';
+    chip.target = '_blank';
+    chip.rel = 'noopener';
     delete chip.dataset.signedIn;
     chip.title = '还没登录。登录后，每个人会进入自己的河谷。';
     if (dot) dot.style.background = '#c98958';
@@ -311,6 +468,12 @@ function reclaimNearby(cx,cz){
   return result;
 }
 function updateLandGuidance(){
+  if ((game.state.travel?.current || 'he') !== 'he') {
+    landHint = null;
+    $('land-question').hidden = true;
+    world.setFrontier?.(null);
+    return;
+  }
   const nearby=nearbyFrontiers(game.state.land,world.playerPosition);
   for(const id of dismissedFrontiers)if(!nearby.some(p=>p.id===id))dismissedFrontiers.delete(id);
   landHint=started&&mode==='gather'&&!panels?.isOpen()&&!document.hidden?nearby.find(p=>!dismissedFrontiers.has(p.id))??null:null;
@@ -402,7 +565,7 @@ function paintTutor() {
       return;
     }
     if (action.name === 'band') {
-      tutorBand = action.context?.band === 'bigger' ? 'bigger' : 'little';
+      tutorBand = ['little', 'bigger', 'older'].includes(action.context?.band) ? action.context.band : 'little';
       tutorUsed = [];
       tutorPick = null;
       tutorCurrent = nextQuestion(tutor.id, tutorBand, tutorUsed);
@@ -429,6 +592,10 @@ function paintTutor() {
     );
     tutorPick = { ok: graded.ok, choiceId: action.context?.value };
     if (tutorCurrent?.id) tutorUsed.push(tutorCurrent.id);
+    if (graded.ok && tutor.valley === 'ri' && tutorActivity?.play === 'quiz') {
+      const supply = game.rewardTutorSupply(tutor.id);
+      if (supply.ok) toast(supply.message);
+    }
     speak(graded.ok ? '对了' : '再选一次');
     paintTutor();
   });
@@ -483,6 +650,17 @@ function interact(target = null) {
     else world.walkTo(target.position);
   } else if (target.type === 'tutor') {
     openTutor(target.tutorId);
+  } else if (target.type === 'ferry') {
+    if ((game.state.travel?.current || 'he') === 'ri') goHome();
+    else startFerry();
+  } else if (target.type === 'letter') {
+    const card = $('letter-card');
+    if (card) card.hidden = false;
+    game.seeLetter('letter-ri-1');
+  } else if (target.type === 'flag') {
+    const result = game.repairKoinobori();
+    toast(result.message, result.ok);
+    world.sync(game.state);
   } else if (target.type === 'balloon') {
     if (world.balloon) {
       if (world.requestBalloonLand()) { toast('好，热气球自己飞回草坪基地。'); speak('热气球飞回草坪基地。'); }
@@ -521,12 +699,13 @@ function build() {
 function placementIssue(cell) {
   if (!game.state.inventory[selectedItem]) return `${ITEMS[selectedItem].name}用完了，换一种材料吧。`;
   if (selectedItem === 'ball') return null;
-  if (world.pool && inPoolReservedArea(cell.x,cell.z,.5)) return '这里是公共泳池和入口，给大家留出空间。';
-  if (inNumberPark(cell.x, cell.z, 0.6)) return `这里是${PARK_NAME}，给蹦床和玩法石留出空间。`;
-  if (onBalloonLawn(cell.x, cell.z, 0.4)) return `这里是${BALLOON_NAME}，给热气球和草坪留出空间。`;
+  const realm = game.state.travel?.current || 'he';
+  if (realm === 'he' && world.pool && inPoolReservedArea(cell.x,cell.z,.5)) return '这里是公共泳池和入口，给大家留出空间。';
+  if (realm === 'he' && inNumberPark(cell.x, cell.z, 0.6)) return `这里是${PARK_NAME}，给蹦床和玩法石留出空间。`;
+  if (onBalloonLawn(cell.x, cell.z, 0.4, realm)) return realm === 'he' ? `这里是${BALLOON_NAME}，给热气球和草坪留出空间。` : '这里是热气球草坪，给降落留出空间。';
   const problem = game.placementProblem(selectedItem, { ...cell, rotation });
   if (problem) return problem;
-  const footprint = selectedItem === 'roof' ? roofSpan(game.state.blocks, cell) : { x: cell.x, z: cell.z, w: 1, d: 1 };
+  const footprint = selectedItem === 'roof' ? roofSpan(game.activeBlocks(), cell) : { x: cell.x, z: cell.z, w: 1, d: 1 };
   for (let dx = 0; dx < footprint.w; dx++) for (let dz = 0; dz < footprint.d; dz++) {
     const cx = footprint.x + dx, cz = footprint.z + dz;
     if (Math.abs(cx - world.playerPosition.x) < .7 && Math.abs(cz - world.playerPosition.z) < .7 && cell.y <= world.playerPosition.y + .8) return `这里站着${playerName}，选旁边的空格吧。`;
@@ -625,7 +804,7 @@ function updateContext() {
     $('action-icon').innerHTML = icon(selectedItem === 'ball' ? 'ball' : 'hammer', 30);
     $('action-name').textContent = selectedItem === 'ball' ? '放小球' : '放这里';
     $('context-text').textContent = '电脑双击放置 · 触屏拖动预览松手放置 · 也可以按确认';
-    world.setPreview(selectedItem, rotation, buildCell, !problem, game.state.blocks);
+    world.setPreview(selectedItem, rotation, buildCell, !problem, game.activeBlocks());
   } else {
     world.setPreview(selectedItem, rotation, null);
     $('action-icon').innerHTML = icon(mode === 'remove' ? 'pickaxe' : target?.item || (target?.type === 'station' ? 'hammer' : 'hand'), 30);
@@ -672,7 +851,9 @@ function updateContext() {
     speak(tutorNear.hello || `${tutorNear.name}在等你。`);
   }
   const p = world.playerPosition;
-  $('location-name').textContent = world.balloon ? (world.balloonLook().landing ? '飞回草坪基地' : '热气球上看河谷') : tutorNear ? `${tutorNear.name}的${tutorNear.place || '身边'}` : onBalloonLawn(p.x, p.z, 1.2) || p.z > 16 ? BALLOON_NAME : inNumberPark(p.x, p.z, 1.2) ? PARK_NAME : p.x > 5 ? (p.z < 0 ? '溪边球道' : '豆苗的东岸') : p.z < -2 ? '林间小工坊' : '河谷小院';
+  const realmNow = game.state.travel?.current || 'he';
+  $('location-name').textContent = realmNow === 'ri' ? '日谷' : world.balloon ? (world.balloon.phase === 'voyage' ? '看风景去日谷' : world.balloonLook().landing ? '飞回草坪基地' : '热气球上看河谷') : tutorNear ? `${tutorNear.name}的${tutorNear.place || '身边'}` : onBalloonLawn(p.x, p.z, 1.2) || p.z > 16 ? BALLOON_NAME : inNumberPark(p.x, p.z, 1.2) ? PARK_NAME : p.x > 5 ? (p.z < 0 ? '溪边球道' : '豆苗的东岸') : p.z < -2 ? '林间小工坊' : '河谷小院';
+  paintTravel();
   const clock=realMoment();
   const hh=String(clock.hour).padStart(2,'0'),mm=String(clock.minute).padStart(2,'0');
   $('clock-label').textContent=`${clock.period} ${hh}:${mm} · ${clock.season}`;
@@ -690,32 +871,25 @@ function start() {
 }
 
 async function bootValley() {
+  await loadTutorPack();
   try {
-    await loadTutorPack();
-  } catch (error) {
-    console.warn('知识引擎的角色名单没取到', error);
-  }
-  setTutorGuards(tutors());
-  try {
-  world = new RiverWorld($('world-canvas'), {
-    tutors: tutors(),
-    onTap, onPick, onQuickPlace, onPreviewDrag: onTap,
-    canDragPreview: () => started && mode === 'build' && !!buildCell && !!game.state.inventory[selectedItem] && !panels?.isOpen(),
-    onBall: (message) => { if (started) { toast(message); save(); } },
-    onWater: message => { if(started)toast(message); },
-    onModelFocus: target => { if ($('focus-exit')) $('focus-exit').hidden = !target; if (!started) return; feel(target ? [10, 24, 16] : 8); toast(target ? `靠近看${target.name}。点退出近看可以回来。` : '回到原来的视角。'); refreshModelMenu(); updateContext(); },
-    canFocusModel: () => started && mode !== 'build' && mode !== 'remove' && !panels?.isOpen(),
-    onBounce: info => { if (!started) return; showBounce(info); updateContext(); },
-    onParkMode: info => { if (!started) return; if (world.bounce) showBounce(info); const mode = playMode(info.mode); toast(`${mode.title} · ${mode.ages}`); updateContext(); },
-    onBounceStop: () => { hideBounce(); const trampoline = world.targets.find(t => t.id === 'bounce-island'); if (trampoline) trampoline.action = '跳上去'; updateContext(); toast('停下来啦。走下来，再走上去，会重新从 1 开始。也可以先点一块玩法石。'); },
-    onBalloonStart: info => { if (!started) return; hideBounce(); showBalloon(info); toast('坐稳，热气球起飞啦。转一圈看整个河谷。'); speak('坐上热气球，飞起来看整个河谷。'); updateContext(); },
-    onBalloonLook: info => { if (!started) return; showBalloon(info); updateContext(); },
-    onBalloonStop: () => { hideBalloon(); toast('已经降落到草坪基地。想再看，再点乘坐。'); updateContext(); },
+  const savedRealm = game.state.travel?.current === 'ri' ? 'ri' : 'he';
+  await mountWorld(savedRealm);
+  panels = createPanels({
+    game, icon, toast, speak, onSelect: selectItem, onReclaim: reclaimNearby, onPlaceFigure: placeFigureNearby,
+    onTravelHome: () => { panels?.close?.(); goHome(); },
+    onAge: (ageBand) => { if (!tutorOpen()) tutorBand = ageBand || 'little'; },
+    onChanged: () => { world?.sync(game.state); updateUI(); },
+    onClose: () => { panelType = null; resetInput(); save(); updateContext(); },
   });
-  world.sync(game.state); world.facing = 0;
-  panels = createPanels({ game, icon, toast, speak, onSelect: selectItem, onReclaim:reclaimNearby, onPlaceFigure: placeFigureNearby, onChanged: () => { world.sync(game.state); updateUI(); }, onClose: () => { panelType = null; resetInput(); save(); updateContext(); } });
-  world.createLabels((target) => approach(target, true));
-  game.subscribe(() => { if (world.state !== game.state) { chosenTarget = null; buildCell = null; dismissedFrontiers.clear(); world.select(null); } world.sync(game.state); updateUI(); if (panelType === 'garden' || panelType==='life') panels.refresh(); else if (panelType === 'kiln') panels.touchKiln(); });
+  game.subscribe(() => {
+    if (switching || !world || world.released) return;
+    if ((world.realmId || 'he') !== (game.state.travel?.current || 'he')) return;
+    if (world.state !== game.state) { chosenTarget = null; buildCell = null; dismissedFrontiers.clear(); world.select(null); }
+    world.sync(game.state); updateUI();
+    if (panelType === 'garden' || panelType === 'life' || panelType === 'washi') panels.refresh();
+    else if (panelType === 'kiln') panels.touchKiln();
+  });
   if (game.state.stats.built || game.state.stats.gathered || game.state.stats.crafted) $('start-button').innerHTML = `继续我的河谷 ${icon('arrow-right', 22)}`;
   updateUI(); updateContext();
   } catch (error) {
@@ -763,6 +937,37 @@ $('placement-confirm').addEventListener('click', () => { if (started && !panels.
 $('placement-cancel').addEventListener('click', () => changeMode('gather'));
 $('jump-button').addEventListener('click', () => { if (started && !panels.isOpen()) world.jump(); });
 $('bounce-stop').addEventListener('click', () => { if (started) world.stopBounce(); });
+$('travel-home')?.addEventListener('click', () => { if (started) goHome(); });
+$('travel-go')?.addEventListener('click', () => { if (started && !panels?.isOpen()) startFerry(); });
+$('travel-skip')?.addEventListener('click', () => {
+  if (cutscene?.kind === 'ferry') finishCutscene();
+  else if (world?.balloon?.phase === 'voyage') { hideCutscene(); world.completeVoyage(); }
+});
+$('letter-close')?.addEventListener('click', () => { const card = $('letter-card'); if (card) card.hidden = true; });
+$('ri-washi')?.addEventListener('click', () => {
+  if (!started || (game.state.travel?.current || 'he') !== 'ri') return;
+  const site = { x: -8, z: -6 };
+  const begin = () => { const result = game.startWashi(); toast(result.message, result.ok); openPanel('washi'); };
+  if (Math.hypot(world.playerPosition.x - site.x, world.playerPosition.z - site.z) > 3.4) world.walkTo(site, begin);
+  else begin();
+});
+$('ri-claim')?.addEventListener('click', () => { const result = game.claimWashi(); toast(result.message, result.ok); paintTravel(); });
+$('ri-crane')?.addEventListener('click', () => {
+  const result = game.craft([['washi']], 'paper-crane');
+  toast(result.message, result.ok);
+  if (!result.ok) openPanel('fold');
+});
+$('ri-stamps')?.addEventListener('click', () => openPanel('stamps'));
+$('ri-flag')?.addEventListener('click', () => {
+  const result = game.repairKoinobori();
+  toast(result.message, result.ok);
+  world?.sync(game.state);
+});
+$('balloon-voyage')?.addEventListener('click', () => {
+  if (!started || !world?.startVoyage?.('ri')) return;
+  showCutscene(VOYAGE_NOTE);
+  showBalloon(world.balloonLook());
+});
 $('balloon-land')?.addEventListener('click', () => {
   if (!started || !world?.requestBalloonLand()) return;
   toast('好，热气球自己飞回草坪基地。');
@@ -839,9 +1044,14 @@ window.addEventListener('pagehide', () => { if (started) save(); });
 function frame(now) {
   const elapsed = Math.max(0, Math.min((now - lastFrame) / 1000, 2));
   const dt = Math.min(elapsed, .05); lastFrame = now;
-  if (world && !document.hidden) {
+  if (world && !document.hidden && !switching) {
     const input = { x: joystick.x + (keys.has('d') || keys.has('arrowright') ? 1 : 0) - (keys.has('a') || keys.has('arrowleft') ? 1 : 0), z: joystick.z + (keys.has('s') || keys.has('arrowdown') ? 1 : 0) - (keys.has('w') || keys.has('arrowup') ? 1 : 0) };
-    world.update(dt, input, !started || panels.isOpen()); storePlayer();
+    const holding = !!cutscene && cutscene.kind === 'ferry';
+    world.update(dt, input, !started || panels.isOpen() || holding); storePlayer();
+    if (cutscene?.kind === 'ferry') {
+      const done = cutscene.tick(dt, { paused: !started || panelType === 'pause' || panels.isOpen(), hidden: false });
+      if (done) finishCutscene();
+    }
     if (started && panelType !== 'pause') game.tick(elapsed);
     uiTime += dt; savedTime += dt;
     placeModelMenu();
@@ -853,7 +1063,7 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // The browser checks inspect state and exercise the same actions used by the UI.
-window.__valley = { game, get world() { return world; }, get panels() { return panels; }, start, openPanel, selectItem, changeMode, interact, playerName: () => playerName, setBuildCell: cell => { buildCell = cell; updateContext(); } };
+window.__valley = { game, get world() { return world; }, get panels() { return panels; }, start, openPanel, selectItem, changeMode, interact, goHome, goRealm, startFerry, sceneStats, missingAudio: () => [...missingAudio], playerName: () => playerName, setBuildCell: cell => { buildCell = cell; updateContext(); } };
 window.render_game_to_text = () => JSON.stringify({
   coords: 'world x/east, y/up, z/south; integer building grid',
   started, mode, selectedItem, rotation, buildCell, panel: panels?.type() ?? null,

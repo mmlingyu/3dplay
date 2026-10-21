@@ -92,6 +92,20 @@ export class Workshop3D {
       this.boxAt(g,mat,[0,.34,0],[.28,.4,.28]);this.boxAt(g,'cream',[0,.34,0],[.18,.22,.18]);
     }else if(item==='flag'){
       this.boxAt(g,mat,[0,.4,0],[.06,.8,.06]);this.boxAt(g,'lever',[.22,.58,0],[.38,.22,.04]);
+    }else if(item==='washi'){
+      this.boxAt(g,mat,[0,.08,0],[.7,.04,.5]);
+    }else if(item==='paper-crane'){
+      this.boxAt(g,mat,[0,.16,0],[.55,.08,.28]);this.boxAt(g,mat,[-.22,.22,0],[.28,.04,.12]);
+    }else if(item==='paper-boat'){
+      this.boxAt(g,mat,[0,.12,0],[.62,.16,.28]);
+    }else if(item==='paper-koinobori'){
+      this.boxAt(g,mat,[0,.4,0],[.06,.8,.06]);this.boxAt(g,'lever',[.24,.55,0],[.42,.2,.06]);
+    }else if(item==='paper-door'){
+      this.boxAt(g,mat,[0,.36,0],[.5,.72,.06]);this.boxAt(g,'rim',[0,.36,.04],[.04,.72,.03]);
+    }else if(item==='bamboo'||item==='bamboo-strip'){
+      this.boxAt(g,mat,[0,.12,0],[item === 'bamboo' ? 0.16 : 0.08, 0.12, 0.78]);
+    }else if(item==='kozo'){
+      this.boxAt(g,mat,[0,.14,0],[.42,.16,.28]);
     }else{
       const wood=item==='wood';
       this.boxAt(g,mat,[0,wood?.28:.12,0],wood?[.62,.56,.58]:[.68,.22,.72]);

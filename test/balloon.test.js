@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BALLOON_BASE, BALLOON_CONTROL, BALLOON_NAME, balloonHomeAngle, balloonHomeDuration, balloonLook, balloonNearBase, balloonReturnPose, balloonSteer, balloonTourPoint, onBalloonLawn, wrapHeading } from '../src/balloon-data.js';
+import { BALLOON_BASE, BALLOON_CONTROL, BALLOON_NAME, balloonBaseFor, balloonHomeAngle, balloonHomeDuration, balloonLook, balloonNearBase, balloonReturnPose, balloonSteer, balloonTourPoint, clampBalloonPose, onBalloonLawn, wrapHeading } from '../src/balloon-data.js';
 import { createLand, isPointOpen } from '../src/land-data.js';
 import { isProtectedCell } from '../src/game-data.js';
 
@@ -65,4 +65,15 @@ test('自己开时摇杆移动并限制在地图和高度里', () => {
   assert.equal(top.y, BALLOON_CONTROL.maxHeight);
   assert.equal(balloonLook('tour', 0, 'steer').mode, 'steer');
   assert.match(balloonLook('tour', 0, 'steer').title, /自己开/);
+});
+
+test('看风景去日谷使用外谷边界，并说明路程被简化', () => {
+  assert.equal(balloonBaseFor('he'), BALLOON_BASE);
+  assert.notEqual(balloonBaseFor('ri').x, BALLOON_BASE.x);
+  assert.equal(onBalloonLawn(balloonBaseFor('ri').x, balloonBaseFor('ri').z, 0, 'ri'), true);
+  assert.equal(onBalloonLawn(BALLOON_BASE.x, BALLOON_BASE.z, 0, 'ri'), false);
+  const pose = clampBalloonPose({ minX: -14, maxX: 14, minZ: -14, maxZ: 14 }, 40, 10, -40);
+  assert.equal(pose.x, 14 - 1.8);
+  assert.equal(pose.z, -14 + 1.8);
+  assert.match(balloonLook('voyage').note, /简化/);
 });

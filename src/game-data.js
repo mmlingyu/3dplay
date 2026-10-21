@@ -1,4 +1,5 @@
 import { isCreationReserved } from './creation-data.js';
+import { isRealmProtected } from './realm-data.js';
 
 export const WORLD_SIZE = 32;
 export const MAX_BUILD_HEIGHT = 12;
@@ -13,6 +14,7 @@ export const DAMAGED_BACKUP_KEY = `${STORAGE_KEY}-damaged-backup`;
 export const FIGURES_KEY = `${STORAGE_KEY}-figures`;
 export const LIFE_BACKUP_KEY = `${STORAGE_KEY}-before-life`;
 export const LAND_BACKUP_KEY = `${STORAGE_KEY}-before-expansion`;
+export const TRAVEL_BACKUP_KEY = `${STORAGE_KEY}-before-travel`;
 export const CRAFT_RULES = Object.freeze({ dragThreshold: 7 });
 
 // Integer y coordinates describe the bottom of a placed block.
@@ -33,7 +35,8 @@ export function setTutorGuards(list = []) {
   }
 }
 
-export function isProtectedCell(x, z) {
+export function isProtectedCell(x, z, realm = 'he') {
+  if (realm && realm !== 'he') return isRealmProtected(realm, x, z);
   if (!Number.isFinite(x) || !Number.isFinite(z)) return true;
   // Shared facilities stay accessible, including their approach space.
   const facilities = [
@@ -87,9 +90,17 @@ export const ITEMS = {
   lantern: { name: '灯笼', color: '#e0a35a', emoji: '🏮', placeable: true, description: '木板加树枝做成灯笼。不会真的发光取暖。' },
   flag: { name: '旗帜', color: '#d36b5a', emoji: '🚩', placeable: true, description: '木棍加树枝做成旗帜。旗面用树枝是游戏约定。' },
   bean: { name: '豆子', color: '#b7d584', emoji: '🫘', placeable: false, description: '在适宜条件下长成的收获。成熟时间在游戏中缩短了。' },
+  kozo: { name: '楮皮', color: '#c4a574', emoji: '🌿', placeable: false, origin: 'ri', description: '楮树皮。和纸用它的纤维。在日谷的楮树林采集，不用答题。' },
+  bamboo: { name: '竹子', color: '#7ea35a', emoji: '🎋', placeable: false, origin: 'ri', description: '日谷竹林里的竹子。劈成竹篾是游戏约定。' },
+  'bamboo-strip': { name: '竹篾', color: '#d2c48a', emoji: '🥢', placeable: false, origin: 'ri', description: '竹子劈成的细条。格子份数是游戏约定。抄纸的竹帘也用竹条。' },
+  washi: { name: '和纸', color: '#f4efe4', emoji: '📄', placeable: false, origin: 'ri', description: '楮皮纤维做成的纸。剥皮蒸煮、敲打、加水、竹帘抄纸、晾干。这里的时间缩短了。' },
+  'paper-crane': { name: '纸鹤', color: '#f7f1e4', emoji: '🕊️', placeable: true, origin: 'ri', description: '和纸折的纸鹤。游戏里一次折好，真实折纸有很多步。可以带回河谷摆放。' },
+  'paper-boat': { name: '纸船', color: '#f7f1e4', emoji: '⛵', placeable: true, origin: 'ri', description: '两张和纸并排折成纸船。真实折纸船通常一张纸、很多步；分成两种格子是游戏约定。可以带回河谷摆放。' },
+  'paper-koinobori': { name: '纸鲤鱼旗', color: '#e07a4a', emoji: '🎏', placeable: true, origin: 'ri', description: '用和纸和竹篾做的鲤鱼旗装饰，挂在杆上随风飘。它不是国旗。' },
+  'paper-door': { name: '纸拉门', color: '#f3ecdf', emoji: '🚪', placeable: true, origin: 'ri', description: '木格上糊和纸的门。格子配方是游戏约定，真实拉门还有木框和纸的糊法。' },
 };
 
-export const COLLECTABLE_ITEMS = ['wood', 'stone', 'clay', 'branch', 'soil', 'water', 'seed'];
+export const COLLECTABLE_ITEMS = ['wood', 'stone', 'clay', 'branch', 'soil', 'water', 'seed', 'kozo', 'bamboo'];
 export const ROOF_WALLS = ['plank', 'fence', 'post', 'brick', 'door', 'window', 'stone'];
 export const ROOF_LIMIT = 8;
 
@@ -170,6 +181,11 @@ export const RECIPES = [
   { id: 'wreath', name: '花环', pattern: [['branch']], output: { item: 'wreath', count: 1 }, hint: '一根树枝绕成花环。', group: '装饰', kind: '一对一', empty: '一根树枝绕成环' },
   { id: 'lantern', name: '灯笼', pattern: [['plank', 'branch']], output: { item: 'lantern', count: 1 }, hint: '木板加树枝做成灯笼。', group: '装饰', kind: '两种材料', empty: '板做罩，枝做把' },
   { id: 'flag', name: '旗帜', pattern: [['stick', 'branch']], output: { item: 'flag', count: 1 }, hint: '木棍加树枝做成旗帜。', group: '装饰', kind: '两种材料', empty: '棍做杆，枝当旗面' },
+  { id: 'bamboo-strips', name: '竹篾', pattern: [['bamboo']], output: { item: 'bamboo-strip', count: 4 }, hint: '一根竹子分成四条竹篾。数量是游戏约定。', group: '日谷', kind: '切开', empty: '1 根分成 4 条' },
+  { id: 'paper-crane', name: '纸鹤', pattern: [['washi']], output: { item: 'paper-crane', count: 1 }, hint: '一张和纸折成纸鹤。游戏里一次折好，真实折纸有很多步。这是游戏约定。', group: '日谷', kind: '对折', empty: '一张和纸' },
+  { id: 'paper-boat', name: '纸船', pattern: [['washi', 'washi']], output: { item: 'paper-boat', count: 1 }, hint: '两张和纸并排折成纸船。真实折纸船通常只用一张纸。这里和纸鹤分成两种格子，是游戏约定。', group: '日谷', kind: '对折', empty: '两张并排' },
+  { id: 'paper-koinobori', name: '纸鲤鱼旗', pattern: [['washi', 'bamboo-strip']], output: { item: 'paper-koinobori', count: 1 }, hint: '和纸加竹篾做成纸鲤鱼旗。这是装饰，不是国旗。格子是游戏约定。', group: '日谷', kind: '两种材料', empty: '纸做鱼，篾做骨' },
+  { id: 'paper-door', name: '纸拉门', pattern: [['washi', 'stick']], output: { item: 'paper-door', count: 1 }, hint: '和纸加木棍做成纸拉门。格子是游戏约定。', group: '日谷', kind: '两种材料', empty: '纸做面，棍做框' },
 ];
 
 export const GARDEN_PLOTS = [
