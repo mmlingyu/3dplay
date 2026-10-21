@@ -13,7 +13,7 @@ import { startValleySync } from './valley-sync.js';
 import { BOUNCE_ISLAND, PARK_NAME, PLAY_MODES, SKIP_STEPS, TIMES_TABLES, bounceInfo, inNumberPark, onBounceIsland, playMode } from './bounce-data.js';
 import { BALLOON_BASE, BALLOON_NAME, balloonBaseFor, onBalloonLawn } from './balloon-data.js';
 import { gradeQuestion, loadTutorPack, nextQuestion, primeTutorPack, tutorById, tutors, useTutorRealm } from './tutor-data.js';
-import { chooseDockSite, FERRY_NOTE, REALMS, VOYAGE_NOTE } from './realm-data.js';
+import { chooseDockSite, contentAgeBand, FERRY_NOTE, REALMS, VOYAGE_NOTE } from './realm-data.js';
 import { VISTAS } from './vista-data.js';
 import { MEI_AUDIO, SHIP_NOTE, VOYAGE_MEI_NOTE } from './mei-data.js';
 import { createCutscene } from './travel.js';
@@ -26,10 +26,13 @@ import { kindsFor, makePuzzle } from './glyph-data.js';
 import { gravityCompare } from './experiment-lab.js';
 import { renderA2UI } from './a2ui.js';
 import { npcTalkMessages, talkActivities } from './npc-surface.js';
+import { isTour, tourStorage } from './tour-mode.js';
+import { attachValleyStory, storyApi, storyEnter, storyTalk } from './story-flow.js';
 
 const $ = (id) => document.getElementById(id);
 document.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = icon(el.dataset.icon, 24); });
-const game = new GameState();
+const touring = isTour();
+const game = new GameState(touring ? tourStorage(globalThis.localStorage) : undefined);
 const hotItems = ['plank', 'brick', 'door', 'window', 'roof', 'ramp'];
 const keys = new Set();
 const joystick = { x: 0, z: 0 };
@@ -404,6 +407,8 @@ async function mountWorld(realm, mod, options = {}) {
     world = new RiverWorld(canvas, worldHooks());
     world.facing = 0;
     attachHomeVisitor(world, game);
+    attachValleyStory(world, game, { speak, toast, touring });
+    if (started) storyEnter();
   }
   world.sync(game.state);
   if ((realm === 'ri' || realm === 'mei') && game.state.travel.via === 'balloon') world.beginArrivalDescend?.();
@@ -503,7 +508,9 @@ async function finishCutscene() {
   if (kind === 'voyage' || kind === 'stars') world?.completeVoyage?.();
 }
 function save() { storePlayer(); const result = game.save(); updateSaveStatus(); return result; }
-const valleySync = startValleySync(game);
+const valleySync = touring
+  ? { bind: async () => ({ changed: false, source: 'tour' }), flush: async () => false }
+  : startValleySync(game);
 function figureNames() {
   return (game.state.creation?.figures || []).map(item => item.figure?.name).filter(Boolean);
 }
@@ -820,8 +827,7 @@ function closeTutor() {
   tutorCurrent = null;
 }
 function bandName() {
-  const age = game.state.settings?.ageBand || tutorBand || 'little';
-  return age === 'bigger' || age === 'older' ? age : 'little';
+  return contentAgeBand(game.state.settings?.ageBand || tutorBand || 'little');
 }
 function openXing(kind = 'lab') {
   const sheet = $('xing-sheet');
@@ -942,6 +948,9 @@ function interact(target = null) {
   else if (target.type === 'bounce') {
     if (world.bounce) { world.stopBounce(); toast('停下来啦。想再跳，再走上小岛。'); }
     else world.walkTo(target.position);
+  } else if (target.type === 'story') {
+    storyTalk(target);
+    return;
   } else if (target.type === 'tutor') {
     openTutor(target.tutorId);
   } else if (target.type === 'ferry') {
@@ -1217,8 +1226,9 @@ function updateContext() {
 function start() {
   if (!world) return;
   started = true; $('welcome').hidden = true; resetInput(); save();
-  toast('去逛逛吧！左边摇杆走路，点材料，再点右边采集。');
-  speak('欢迎来到河谷。想去哪里，由你决定。');
+  storyEnter();
+  toast(touring ? '体验模式。右上角可以跳到下一章。孩子的存档不会被改。' : '去逛逛吧！左边摇杆走路，点材料，再点右边采集。');
+  speak(touring ? '雾慢慢进来了。它不会伤害任何东西。' : '欢迎来到河谷。想去哪里，由你决定。');
   updateContext();
   if (game.storageError) toast(game.storageError);
 }
@@ -1460,7 +1470,7 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // The browser checks inspect state and exercise the same actions used by the UI.
-window.__valley = { game, get world() { return world; }, get panels() { return panels; }, start, openPanel, selectItem, changeMode, interact, goHome, goRealm, goXing, openXing, closeXing, startFerry, sceneStats, missingAudio: () => [...missingAudio], playerName: () => playerName, setBuildCell: cell => { buildCell = cell; updateContext(); }, gravityCompare, advanceCrystal: (seconds, flags = {}) => { if (flags?.paused || flags?.hidden) return game.crystalStatus(); game.tick(seconds); return game.crystalStatus(); }, setAge: (band) => { tutorBand = ['little', 'bigger', 'older'].includes(band) ? band : 'little'; }, step(dt = 0.05) { if (!world || world.released || switching) return { realm: game.state.travel?.current || 'he', phase: null }; world.update(dt, { x: 0, z: 0 }, false); if (cutscene?.kind === 'stars' || cutscene?.kind === 'ferry') { const done = cutscene.tick(dt, { paused: panelType === 'pause' || !!panels?.isOpen(), hidden: false }); if (done) finishCutscene(); } paintTravel(); return { realm: game.state.travel?.current || 'he', phase: world.balloon?.phase || null, cutscene: cutscene?.kind || null }; } };
+window.__valley = { game, get world() { return world; }, get panels() { return panels; }, get story() { return storyApi(); }, touring, start, openPanel, selectItem, changeMode, interact, goHome, goRealm, goXing, openXing, closeXing, startFerry, sceneStats, missingAudio: () => [...missingAudio], playerName: () => playerName, setBuildCell: cell => { buildCell = cell; updateContext(); }, gravityCompare, advanceCrystal: (seconds, flags = {}) => { if (flags?.paused || flags?.hidden) return game.crystalStatus(); game.tick(seconds); return game.crystalStatus(); }, setAge: (band) => { const known = ['little', 'bigger', 'older', 'junior', 'senior']; tutorBand = known.includes(band) ? band : 'little'; }, step(dt = 0.05) { if (!world || world.released || switching) return { realm: game.state.travel?.current || 'he', phase: null }; world.update(dt, { x: 0, z: 0 }, false); if (cutscene?.kind === 'stars' || cutscene?.kind === 'ferry') { const done = cutscene.tick(dt, { paused: panelType === 'pause' || !!panels?.isOpen(), hidden: false }); if (done) finishCutscene(); } paintTravel(); return { realm: game.state.travel?.current || 'he', phase: world.balloon?.phase || null, cutscene: cutscene?.kind || null }; } };
 window.render_game_to_text = () => JSON.stringify({
   coords: 'world x/east, y/up, z/south; integer building grid',
   started, mode, selectedItem, rotation, buildCell, panel: panels?.type() ?? null,

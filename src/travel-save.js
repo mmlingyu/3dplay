@@ -151,6 +151,10 @@ function validateRealm(id, realm) {
     claimed,
     processes: nextProcesses,
   };
+  if (Object.hasOwn(realm, 'storyShard')) {
+    if (typeof realm.storyShard !== 'boolean') throw new TravelError(`${name}的碎片记录不正确。`, 'realm', id);
+    checked.storyShard = realm.storyShard;
+  }
   if (id === 'xing') {
     try { Object.assign(checked, readXingFields(realm)); }
     catch (error) { throw new TravelError(error.message || '外星谷的记录不正确。', 'realm', id); }
@@ -186,6 +190,73 @@ function readKeepsakes(value) {
   return kept;
 }
 
+const RESTORE_IDS = new Set(['water', 'light', 'sky', 'all']);
+const PLACE_IDS = new Set(['yard', 'garden', 'dock', 'balloon', 'observatory']);
+const NUDGE_CHAPTERS = new Set(['prologue', 'ri', 'mei', 'xing', 'finale', 'festival', 'done']);
+
+function readFlag(value) {
+  if (value == null) return false;
+  if (typeof value !== 'boolean') throw new TravelError('故事记录不正确。');
+  return value;
+}
+
+function readPlaces(value) {
+  if (value == null) return [];
+  if (!Array.isArray(value) || value.length > 3) throw new TravelError('故事记录不正确。');
+  const places = [];
+  for (const id of value) {
+    if (typeof id !== 'string' || places.includes(id)) throw new TravelError('故事记录不正确。');
+    if (!PLACE_IDS.has(id) && !/^block-[1-9]\d*$/.test(id)) throw new TravelError('故事记录不正确。');
+    places.push(id);
+  }
+  return places;
+}
+
+function readSite(value) {
+  if (value == null) return null;
+  if (!isRecord(value) || !Number.isInteger(value.x) || !Number.isInteger(value.z)) throw new TravelError('故事记录不正确。');
+  if (value.x < -20 || value.x > 20 || value.z < -20 || value.z > 20) throw new TravelError('故事记录不正确。');
+  return { x: value.x, z: value.z };
+}
+
+function readNudges(value) {
+  const nudges = { vista: 0, bottle: 0, dock: 0, balloon: 0, stuck: 0, day: -1, last: '', chapter: 'prologue' };
+  if (value == null) return nudges;
+  if (!isRecord(value)) throw new TravelError('故事记录不正确。');
+  for (const key of ['vista', 'bottle', 'dock', 'balloon', 'stuck']) {
+    const count = value[key] ?? 0;
+    if (!Number.isSafeInteger(count) || count < 0 || count > 1000) throw new TravelError('故事记录不正确。');
+    nudges[key] = count;
+  }
+  const day = value.day ?? -1;
+  if (!Number.isSafeInteger(day) || day < -1 || day > 1000000000) throw new TravelError('故事记录不正确。');
+  nudges.day = day;
+  const last = value.last ?? '';
+  if (typeof last !== 'string' || last.length > 32) throw new TravelError('故事记录不正确。');
+  nudges.last = last;
+  const chapter = value.chapter ?? 'prologue';
+  if (typeof chapter !== 'string' || !NUDGE_CHAPTERS.has(chapter)) throw new TravelError('故事记录不正确。');
+  nudges.chapter = chapter;
+  return nudges;
+}
+
+export function readStory(story) {
+  const source = story ?? {};
+  if (!isRecord(source)) throw new TravelError('故事记录不正确。');
+  return {
+    seen: idList(source.seen ?? [], '看过的故事', { limit: 64 }),
+    letters: idList(source.letters ?? [], '信件', { limit: 32 }),
+    restored: idList(source.restored ?? [], '恢复的地方', { known: RESTORE_IDS, limit: 8 }),
+    fogIntro: readFlag(source.fogIntro),
+    fogOff: readFlag(source.fogOff),
+    hintsOff: readFlag(source.hintsOff),
+    festival: readFlag(source.festival),
+    homePlaces: readPlaces(source.homePlaces),
+    nudges: readNudges(source.nudges),
+    site: readSite(source.site),
+  };
+}
+
 export function validateTravel(travel) {
   if (travel == null) {
     const fresh = defaultTravel();
@@ -204,8 +275,7 @@ export function validateTravel(travel) {
   const visited = idList(travel.visited ?? [], '去过的谷', { known: new Set(PLAYABLE_REALMS), limit: 8 });
   const stamps = idList(travel.stamps ?? [], '印章', { known: STAMP_IDS, limit: 32 });
   const stickers = idList(travel.stickers ?? [], '贴纸', { limit: 64 });
-  const story = travel.story ?? { seen: [], letters: [] };
-  if (!isRecord(story)) throw new TravelError('故事记录不正确。');
+  const story = readStory(travel.story ?? {});
   const gifts = travel.gifts ?? { given: [], received: [] };
   if (!isRecord(gifts)) throw new TravelError('礼物记录不正确。');
   const supplyAt = travel.supplyAt ?? 0;
@@ -226,10 +296,7 @@ export function validateTravel(travel) {
     visited,
     stamps,
     stickers,
-    story: {
-      seen: idList(story.seen ?? [], '看过的故事', { limit: 64 }),
-      letters: idList(story.letters ?? [], '信件', { limit: 32 }),
-    },
+    story,
     gifts: {
       given: idList(gifts.given ?? [], '送出的礼物', { limit: 64 }),
       received: idList(gifts.received ?? [], '收到的礼物', { limit: 64 }),
@@ -291,6 +358,8 @@ export function repairTravelRaw(raw) {
     fresh.stickers = keepIds(src.stickers);
     fresh.story.seen = keepIds(src.story?.seen);
     fresh.story.letters = keepIds(src.story?.letters);
+    try { fresh.story = readStory({ ...(isRecord(src.story) ? src.story : {}), seen: fresh.story.seen, letters: fresh.story.letters }); }
+    catch { /* keep the letters and the default picture flags */ }
     fresh.gifts.given = keepIds(src.gifts?.given);
     fresh.gifts.received = keepIds(src.gifts?.received);
     fresh.supplyAt = Number.isSafeInteger(src.supplyAt) && src.supplyAt >= 0 && src.supplyAt <= LIFE_RULES.maxElapsed ? src.supplyAt : 0;

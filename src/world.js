@@ -623,6 +623,7 @@ export class RiverWorld {
     this.mats.grass.color.copy(this.grassScratch);
     const foliage=[{leaf:'#789957',light:'#b6c785'},{leaf:'#6a9a48',light:'#9cbf6a'},{leaf:'#c4783a',light:'#e2b15a'},{leaf:'#c9d2c8',light:'#e4ebe3'}][moment.seasonIndex];
     this.mats.leaf.color.set(foliage.leaf);this.mats.leafLight.color.set(foliage.light);
+    this.storySky?.(moment);
   }
   stepWeather(moment,dt){
     const kind=moment.weather.kind;
@@ -736,6 +737,7 @@ export class RiverWorld {
     this.creation.sync(state);
     this.placeBottle(state);
     if (!this.dockReady) this.ensureDock(state.blocks);
+    this.storySync?.(state);
     const plants=state.garden||[]; const plantSignature=plants.map(p=>`${p.id}:${p.planted}:${Math.floor((p.age||0)/18)}:${p.moisture}`).join('|');
     if(plantSignature!==this.plantSignature) {this.plantSignature=plantSignature;for(const g of this.plantGroups.values())this.scene.remove(g);this.plantGroups.clear();plants.forEach((p,i)=>{if(!p.planted)return;const x=Number.isFinite(p.x)?p.x:9.5+(i%3-1)*1.3,z=Number.isFinite(p.z)?p.z:5+Math.floor(i/3)*1.3;const g=new THREE.Group();g.position.set(x,.2,z);const stage=Math.min(5,Math.floor((p.age||0)/18));const h=.12+stage*.12;this.cube(g,'leaf',[0,h/2,0],[.045,h,.045]);for(let j=0;j<Math.min(stage+1,5);j++){const sign=j%2?1:-1;const leaf=this.mesh(g,new THREE.SphereGeometry(.16,8,6),'leaf',[sign*.15,.11+j*.085,0],[1,.38,.62]);leaf.rotation.z=sign*.3;}if(stage>=3)this.mesh(g,new THREE.SphereGeometry(.07,6,6),'cream',[.15,h,.01]);if(stage>=4)for(const sign of[-1,1])this.mesh(g,new THREE.CapsuleGeometry(.035,.18,2,6),'leafLight',[sign*.2,h*.7,.04],[1,1,1]);if(p.moisture>=3){const wet=new THREE.Mesh(new THREE.PlaneGeometry(.85,.85),this.water.material);wet.rotation.x=-Math.PI/2;wet.position.y=.008;g.add(wet);}this.scene.add(g);this.plantGroups.set(p.id,g);});}
   }
@@ -1466,6 +1468,7 @@ export class RiverWorld {
     if (this.selectionPulse > 0) { this.selectionPulse = Math.max(0, this.selectionPulse - dt * 2.4); const s = 1 + Math.sin((1 - this.selectionPulse) * Math.PI) * 0.35; this.selectionRing.scale.setScalar(s); }
     for(const p of this.particles){p.age+=dt;p.v.y-=2*dt;p.mesh.position.addScaledVector(p.v,dt);if(p.age>1){this.scene.remove(p.mesh);p.mesh.geometry.dispose();p.mesh.material.dispose();}}this.particles=this.particles.filter(p=>p.age<=1);
     this.animateKiln(dt, paused);
+    this.storyFrame?.(dt, paused);
     this.renderer.render(this.scene,this.camera);this.positionLabels();if(Math.floor(this.time*5)!==this.lastMapTime){this.lastMapTime=Math.floor(this.time*5);this.drawMinimap();}
     return this.playerPosition;
   }

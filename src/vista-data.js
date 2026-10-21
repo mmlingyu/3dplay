@@ -102,6 +102,7 @@ const ROUTE_COLORS = Object.freeze({ ri: '#d98aa4', mei: '#c45c4a', xing: '#6aa6
 
 export function vistaBand(ageBand) {
   if (ageBand === 'bigger' || ageBand === 'older') return ageBand;
+  if (ageBand === 'senior') return 'older';
   return 'little';
 }
 
@@ -211,7 +212,7 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-export function drawVistaMap(canvas, { discovered = {}, band = 'little' } = {}) {
+export function drawVistaMap(canvas, { discovered = {}, band = 'little', overlay = null } = {}) {
   if (!canvas?.getContext) return;
   const layout = MAP_LAYOUT;
   const ratio = Math.min(2, canvas.ownerDocument?.defaultView?.devicePixelRatio || 1);
@@ -291,4 +292,5 @@ export function drawVistaMap(canvas, { discovered = {}, band = 'little' } = {}) 
   ctx.fill();
   ctx.fillStyle = '#8f6238';
   ctx.fillRect(layout.dock.x - 5, layout.dock.y - 3, 10, 6);
+  if (typeof overlay === 'function') overlay(ctx, layout);
 }

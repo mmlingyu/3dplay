@@ -6,10 +6,11 @@ import { Workshop3D } from './workshop-3d.js';
 import { BUILD_CASES, PACK_ITEMS, WORKSHOP_FOLDS, combinationTree, lackHint, lackItems, madeLine, mathPits, needLine, putHint, recipeNeeds, resultLine } from './workshop-data.js';
 import { Axle3D } from './axle-3d.js';
 import { createCreationStudio, CREATION_TITLES } from './creation-ui.js';
-import { AGE_BANDS, FOLD_NOTE, WASHI_NOTE } from './realm-data.js';
+import { AGE_BANDS, FOLD_NOTE, WASHI_NOTE, normalizeAgeBand } from './realm-data.js';
 import { STAMP_BOOK } from './stamp-book.js';
 import { MEI_PANEL_TITLES, handleMeiAction, meiPanelHtml } from './mei-panels.js';
 import { KEEPSAKES, VISTA_IDS, VISTAS, VISTA_QUIZ, drawVistaMap, gradeVistaQuiz, vistaBand, vistaDistanceCopy } from './vista-data.js';
+import { clueLine, drawStarOverlay } from './story-data.js';
 
 const escapeHTML = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 const BUILDABLE = new Set(['plank', 'stone', 'brick', 'ramp', 'post', 'chest', 'workbench', 'roof', 'window', 'door', 'bed', 'fence', 'pot', 'wreath', 'lantern', 'flag']);
@@ -101,7 +102,10 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
     return pattern.length <= side && pattern.every((row) => row.length <= side);
   }
   function currentMatches() {
-    try { return game.getMatches(grid) || []; } catch { return []; }
+    try {
+      const restored = game.state.travel?.story?.restored || [];
+      return (game.getMatches(grid) || []).filter((recipe) => !recipe.story || restored.includes(recipe.story) || restored.includes('all'));
+    } catch { return []; }
   }
   function miniaturePattern(pattern) {
     const columns = Math.max(1, ...pattern.map((row) => row.length));
@@ -118,7 +122,9 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
     const used = grid.flat().filter(Boolean).reduce((counts, key) => ({ ...counts, [key]: (counts[key] || 0) + 1 }), {});
     const over = Object.keys(used).filter((key) => used[key] > inventoryCount(key));
     const materials = itemEntries.filter(([key]) => recipeInputs.has(key) && inventoryCount(key) > 0);
-    const recipeBook = `<details class="panel-details craft-recipe-book"><summary>打开配方书 · 游戏约定</summary><p>点“摆给我看”只展示配方，不会消耗材料。</p><div class="panel-grid">${recipes.map((recipe) => `<article class="recipe-card">${miniaturePattern(recipePattern(recipe))}<strong>${escapeHTML(recipe.name)}</strong><p>${escapeHTML(recipe.hint || '')}</p><small>得到 ${recipe.output.count} 个${escapeHTML(nameOf(recipe.output.item))}</small>${button('craft-example', recipeFits(recipe) ? '摆给我看' : '需要 3 × 3 工作台', { data: { recipe: recipe.id }, disabled: !recipeFits(recipe) })}</article>`).join('')}</div></details>`;
+    const restored = game.state.travel?.story?.restored || [];
+    const openRecipes = recipes.filter((recipe) => !recipe.story || restored.includes(recipe.story) || restored.includes('all'));
+    const recipeBook = `<details class="panel-details craft-recipe-book"><summary>打开配方书 · 游戏约定</summary><p>点“摆给我看”只展示配方，不会消耗材料。</p><div class="panel-grid">${openRecipes.map((recipe) => `<article class="recipe-card">${miniaturePattern(recipePattern(recipe))}<strong>${escapeHTML(recipe.name)}</strong><p>${escapeHTML(recipe.hint || '')}</p><small>得到 ${recipe.output.count} 个${escapeHTML(nameOf(recipe.output.item))}</small>${button('craft-example', recipeFits(recipe) ? '摆给我看' : '需要 3 × 3 工作台', { data: { recipe: recipe.id }, disabled: !recipeFits(recipe) })}</article>`).join('')}</div></details>`;
     return `${guideMarkup('craft-goal', side === 3)}<div class="panel-row craft-intro"><span>${svg('workbench', 22)}<strong>摆一摆，点制作</strong> · 试摆不扣材料</span>${readButton('点产物图看摆法。材料可以拖进格子，也可以先点材料再点格子。点格子可以拿回，点制作才消耗材料。格子是游戏约定。')}</div>
       <div class="panel-tabs" role="group" aria-label="选择工坊大小">${button('craft-size', '随身 2 × 2', { className: side === 2 ? 'primary-btn' : 'secondary-btn', data: { side: 2 } })}${button('craft-size', `工作台 3 × 3${canUseLargeGrid() ? '' : ' · 需要工作台'}`, { className: side === 3 ? 'primary-btn' : 'secondary-btn', data: { side: 3 }, disabled: !canUseLargeGrid() })}</div>
       <div class="craft-layout"><section class="craft-materials"><h3 class="craft-step-label">① 拖材料</h3>${materials.length ? inventoryView('craft-material', materials) : `<p class="panel-note">先去采集木料。</p>`}<p class="craft-selected">正在选：${svg(selectedMaterial, 18)} ${escapeHTML(nameOf(selectedMaterial))}</p>${recipeBook}</section><section class="craft-workspace"><h3 class="craft-step-label">② 摆一摆</h3><div class="craft-grid" data-size="${side}" style="grid-template-columns:repeat(${side},1fr)">${grid.flatMap((row, y) => row.map((key, x) => button('craft-slot', key ? `${svg(key, 42)}<small>${escapeHTML(nameOf(key))}</small>` : '<span aria-hidden="true">＋</span>', { className: 'craft-slot', data: { x, y }, label: `第${y + 1}行第${x + 1}格，${key ? `${nameOf(key)}，点击拿回` : '空格，点击放入所选材料'}` }))).join('')}</div>
@@ -461,12 +467,18 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
     }).join('');
     const scale = band === 'older' ? '<p class="vista-scale">比例尺在地图下面。1 首歌大约是一小段。数字是游戏里的远近，不是真实公里。</p>' : '';
     const quiz = band === 'older' ? `<div class="vista-quiz"><p>${escapeHTML(VISTA_QUIZ.ask)}</p><div class="panel-row">${VISTA_QUIZ.options.map((opt) => button('vista-quiz', escapeHTML(opt.label), { className: 'secondary-btn', data: { choice: opt.id }, label: opt.label })).join('')}</div><p id="vista-quiz-note" role="status">${escapeHTML(vistaQuizNote)}</p><p class="panel-note">答错不扣东西。</p></div>` : '';
-    return `<canvas id="vista-map" width="320" height="240" aria-label="河谷在中间，海面盖着雾。发现以后会点亮。"></canvas>${scale}${lines}${quiz}<p class="panel-note">实线是渡口的船，虚线是热气球。外星谷只有热气球，而且是想象的航线。没发现也能从渡口出发。</p>${readButton('河谷在中间。发现一个谷，地图就点亮它。坐船的线是实的，热气球的线是虚的。')}`;
+    const star = game.state.travel?.story?.fogIntro ? `<div class="star-map-key"><p>星河图叠在海上。亮的一段是已经拿回的碎片，问号是还没拿回的。</p><div class="panel-row">${['ri', 'mei', 'xing'].map((id) => button('story-clue', id === 'ri' ? '日谷' : id === 'mei' ? '美谷' : '外星谷', { data: { realm: id }, label: `${id === 'ri' ? '日谷' : id === 'mei' ? '美谷' : '外星谷'}的线索` })).join('')}</div></div>` : '';
+    return `<canvas id="vista-map" width="320" height="240" aria-label="河谷在中间，海面盖着雾。发现以后会点亮。"></canvas>${scale}${lines}${quiz}${star}<p class="panel-note">实线是渡口的船，虚线是热气球。外星谷只有热气球，而且是想象的航线。没发现也能从渡口出发。</p>${readButton('河谷在中间。发现一个谷，地图就点亮它。坐船的线是实的，热气球的线是虚的。')}`;
   }
   function paintVistaCanvas() {
     const canvas = root.querySelector('#vista-map');
     if (!canvas) return;
-    drawVistaMap(canvas, { discovered: game.state.travel?.discovered || {}, band: vistaBand(game.state.settings?.ageBand) });
+    const travel = game.state.travel;
+    drawVistaMap(canvas, {
+      discovered: travel?.discovered || {},
+      band: vistaBand(game.state.settings?.ageBand),
+      overlay: travel?.story?.fogIntro ? (ctx, layout) => drawStarOverlay(ctx, layout, travel) : null,
+    });
   }
   function stampsView() {
     const owned = new Set(game.state.travel?.stamps || []);
@@ -474,10 +486,12 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
   }
   function pauseView() {
     const saveInfo = game.storageError || (!game.storage?.setItem ? '这个窗口暂时保留世界，请下载存档备份。' : (game.accountId ? '背包物品、放下的建筑和设置记在当前登录的账号上。换一个人登录，会进入那个人自己的河谷。' : '还没登录，世界只在这台浏览器里。登录后会记到账号上。'));
-    const age = game.state.settings?.ageBand || '';
+    const age = normalizeAgeBand(game.state.settings?.ageBand) || '';
+    const fogOff = game.state.travel?.story?.fogOff === true;
+    const hintsOff = game.state.travel?.story?.hintsOff === true;
     const away = (game.state.travel?.current || 'he') !== 'he';
     const ageOptions = [['', '不设置'], ...AGE_BANDS.map((item) => [item.id, item.label])].map(([id, label]) => `<option value="${id}" ${age === id ? 'selected' : ''}>${label}</option>`).join('');
-    return `<div class="panel-note">${svg('save', 32)}<span>${escapeHTML(saveInfo)}</span></div>${readButton(`${saveInfo}大人可以导出备份，也可以导入以前的存档。`)}<div class="panel-row">${button('save', '保存一下', { className: 'primary-btn' })}${button('close', '继续玩', { className: 'primary-btn' })}${away ? button('travel-home', '回家', { className: 'primary-btn', label: '回家' }) : ''}</div>${game.travelNotice ? `<p class="panel-notice" role="status">${escapeHTML(game.travelNotice)}</p>` : ''}<details class="panel-details" ${importPending ? 'open' : ''}><summary>给大人：备份与导入存档</summary><p>${game.accountId ? '已登录时，河谷存在这个账号下，换一台电脑登录也能回来。仍可以导出一份文件备份。' : '还没登录时，存档只在当前浏览器里。登录后会记到账号上。'}</p><label>年龄档（不记录生日）<select id="age-band">${ageOptions}</select></label><p>这只是打开对话时的默认长短。孩子随时可以换，不会扣东西。</p><div class="panel-row">${button('export', '下载存档 JSON')}${button('import-choose', '选择存档文件')}${backupBeforeImport ? button('export-backup', '下载导入前的备份') : ''}${game.getLegacyBackup?.()?button('export-legacy','下载升级前的备份'):''}${game.getTravelBackup?.()?button('export-travel','下载升级前的备份',{label:'下载旅行升级前的备份'}):''}${game.getMeiBackup?.()?button('export-mei','下载升级前的备份',{label:'下载美谷升级前的备份'}):''}${game.getXingBackup?.()?button('export-xing','下载升级前的备份',{label:'下载外星谷升级前的备份'}):''}${game.getVistaBackup?.()?button('export-vista','下载升级前的备份',{label:'下载远眺升级前的备份'}):''}</div><input id="save-import-input" type="file" accept=".json,application/json" hidden>${importPending ? `<div class="panel-note warning">已选：${escapeHTML(importPending.name)}。导入会替换当前世界；系统会先保留备份并检查存档。${button('import-confirm', '确认导入', { className: 'primary-btn' })}${button('import-cancel', '取消')}</div>` : ''}</details>${studio.pauseSection()}<p class="panel-notice" role="status">${escapeHTML(pauseNotice)}</p>`;
+    return `<div class="panel-note">${svg('save', 32)}<span>${escapeHTML(saveInfo)}</span></div>${readButton(`${saveInfo}大人可以导出备份，也可以导入以前的存档。`)}<div class="panel-row">${button('save', '保存一下', { className: 'primary-btn' })}${button('close', '继续玩', { className: 'primary-btn' })}${away ? button('travel-home', '回家', { className: 'primary-btn', label: '回家' }) : ''}</div>${game.travelNotice ? `<p class="panel-notice" role="status">${escapeHTML(game.travelNotice)}</p>` : ''}<details class="panel-details" ${importPending ? 'open' : ''}><summary>给大人：备份与导入存档</summary><p>${game.accountId ? '已登录时，河谷存在这个账号下，换一台电脑登录也能回来。仍可以导出一份文件备份。' : '还没登录时，存档只在当前浏览器里。登录后会记到账号上。'}</p><label>年龄档（不记录生日）<select id="age-band">${ageOptions}</select></label><p>这只是打开对话时的默认长短。孩子随时可以换，不会扣东西。6–8 岁和 9–12 岁两档。以前的 4–6 岁、7–9 岁会当作 6–8 岁。</p><label>雾的画面<select id="story-fog"><option value="on" ${fogOff ? '' : 'selected'}>开</option><option value="off" ${fogOff ? 'selected' : ''}>关</option></select></label><label>故事提示<select id="story-hints"><option value="on" ${hintsOff ? '' : 'selected'}>开</option><option value="off" ${hintsOff ? 'selected' : ''}>关</option></select></label><div class="panel-row">${button('export', '下载存档 JSON')}${button('import-choose', '选择存档文件')}${backupBeforeImport ? button('export-backup', '下载导入前的备份') : ''}${game.getLegacyBackup?.()?button('export-legacy','下载升级前的备份'):''}${game.getTravelBackup?.()?button('export-travel','下载升级前的备份',{label:'下载旅行升级前的备份'}):''}${game.getMeiBackup?.()?button('export-mei','下载升级前的备份',{label:'下载美谷升级前的备份'}):''}${game.getXingBackup?.()?button('export-xing','下载升级前的备份',{label:'下载外星谷升级前的备份'}):''}${game.getVistaBackup?.()?button('export-vista','下载升级前的备份',{label:'下载远眺升级前的备份'}):''}${game.getStoryBackup?.()?button('export-story','下载升级前的备份',{label:'下载故事升级前的备份'}):''}</div><input id="save-import-input" type="file" accept=".json,application/json" hidden>${importPending ? `<div class="panel-note warning">已选：${escapeHTML(importPending.name)}。导入会替换当前世界；系统会先保留备份并检查存档。${button('import-confirm', '确认导入', { className: 'primary-btn' })}${button('import-cancel', '取消')}</div>` : ''}</details>${studio.pauseSection()}<p class="panel-notice" role="status">${escapeHTML(pauseNotice)}</p>`;
   }
   function helpView() {
     const cards = [
@@ -862,6 +876,8 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
     if(action==='export-mei'){const text=game.getMeiBackup?.();if(text)download(text,'我的河谷-美谷升级前备份.json');else toast('暂时没有美谷升级前的备份。');return;}
     if(action==='export-xing'){const text=game.getXingBackup?.();if(text)download(text,'我的河谷-外星谷升级前备份.json');else toast('暂时没有外星谷升级前的备份。');return;}
     if(action==='export-vista'){const text=game.getVistaBackup?.();if(text)download(text,'我的河谷-远眺升级前备份.json');else toast('暂时没有远眺升级前的备份。');return;}
+    if(action==='export-story'){const text=game.getStoryBackup?.();if(text)download(text,'我的河谷-故事升级前备份.json');else toast('暂时没有故事升级前的备份。');return;}
+    if(action==='story-clue'){const line=clueLine(target.dataset.realm, game.state.settings?.ageBand); toast(line); safeSpeak(line); return;}
     if(action==='vista-quiz'){
       const before = JSON.stringify(game.state.inventory);
       const graded = gradeVistaQuiz(target.dataset.choice);
@@ -901,10 +917,20 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
   root.addEventListener('click', onAction);
   root.addEventListener('change', async (event) => {
     if (event.target.id === 'age-band') {
-      const value = event.target.value;
-      const ageBand = value === 'little' || value === 'bigger' || value === 'older' ? value : null;
+      const ageBand = normalizeAgeBand(event.target.value);
       game.mutate((state) => { state.settings.ageBand = ageBand; });
       onAge(ageBand);
+      return;
+    }
+    if (event.target.id === 'story-fog') {
+      const fogOff = event.target.value === 'off';
+      game.mutate((state) => { state.travel.story.fogOff = fogOff; });
+      onChanged();
+      return;
+    }
+    if (event.target.id === 'story-hints') {
+      const hintsOff = event.target.value === 'off';
+      game.mutate((state) => { state.travel.story.hintsOff = hintsOff; });
       return;
     }
     if (event.target.id !== 'save-import-input') return;
