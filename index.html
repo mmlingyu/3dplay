@@ -30,6 +30,7 @@
             <button class="icon-btn" id="sound-button" aria-label="关闭声音" data-tooltip="声音"><span data-icon="sound"></span></button>
             <button class="icon-btn" id="help-button" aria-label="怎么看、怎么玩" data-tooltip="怎么玩"><span data-icon="help"></span></button>
             <button class="icon-btn" id="pause-button" aria-label="保存与暂停" data-tooltip="保存与暂停"><span data-icon="pause"></span></button>
+            <button type="button" id="tour-next" class="secondary-btn" hidden>跳到下一章</button>
           </div>
         </header>
         <aside class="wish-card" id="wish-card">
@@ -175,6 +176,28 @@
         </section>
         <div class="welcome-world-note"><span class="welcome-note-dot"></span> <span id="welcome-player-note">小谷</span>正在小院等你</div>
       </div>
+      <div id="story-banner" hidden role="status">
+        <p id="story-banner-text">雾不会伤害任何东西。</p>
+        <button type="button" id="story-skip" class="secondary-btn">跳过</button>
+      </div>
+      <button type="button" id="story-disk" hidden aria-label="星河图石盘">石盘</button>
+      <aside id="tour-guide" hidden>
+        <strong>下一步</strong>
+        <p id="tour-guide-text">先看雾慢慢进来。</p>
+      </aside>
+      <section id="story-talk" hidden role="dialog" aria-label="河谷的人">
+        <strong id="story-talk-name">船伯</strong>
+        <p id="story-talk-line"></p>
+        <button type="button" id="story-talk-extra" class="secondary-btn" hidden>帮船伯记一份豆子</button>
+        <button type="button" id="story-talk-close" class="primary-btn">先走</button>
+      </section>
+      <section id="story-home" hidden role="dialog" aria-label="家之片">
+        <strong>选 3 个最喜欢的地方</strong>
+        <div id="story-home-picks"></div>
+        <button type="button" id="story-home-done" class="primary-btn">刻成家之片</button>
+        <button type="button" id="story-home-close" class="secondary-btn">以后再选</button>
+      </section>
+      <button type="button" id="story-festival" class="primary-btn" hidden>今天就办</button>
       <div id="toast-root" aria-live="polite"></div>
       <div id="modal-root"></div>
       <div id="webgl-fallback" hidden><h1>河谷还没显示出来</h1><p>请用支持 WebGL 的浏览器打开，再试一次。</p><button onclick="location.reload()">再试一次</button></div>

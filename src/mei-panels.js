@@ -148,8 +148,8 @@ function quiltView(game, button, escapeHTML) {
 }
 
 function tradeView(game, button, escapeHTML) {
-  if (game.state.settings?.ageBand !== 'older') {
-    return `<p>交换板给 10–12 岁看比例。想送东西，可以直接送礼物。</p><div class="panel-row">${button('gift-give', '送感谢卡', { className: 'primary-btn', label: '送感谢卡', data: { item: 'thanks-card', friend: 'joe' } })}</div>`;
+  if (projectBand(game.state.settings?.ageBand) !== 'older') {
+    return `<p>交换板给 9–12 岁看比例。想送东西，可以直接送礼物。</p><div class="panel-row">${button('gift-give', '送感谢卡', { className: 'primary-btn', label: '送感谢卡', data: { item: 'thanks-card', friend: 'joe' } })}</div>`;
   }
   const offer = MEI_TRADES[0];
   return `<p>${escapeHTML(TRADE_NOTE)} ${escapeHTML(offer.note)}</p><div class="panel-row">${button('trade-make', '交换', { className: 'primary-btn', label: '用豆子换枫糖浆', data: { id: offer.id } })}</div>`;

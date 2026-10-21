@@ -128,6 +128,16 @@ await page.locator('#mei-stage').click();
 const senior = await page.locator('.game-panel').innerText();
 check('9–12 岁有镜头、24 帧和三点布光', senior.includes('远景') && senior.includes('24') && senior.includes('三点布光'));
 await page.locator('.panel-header [data-action="close"]').click();
+await page.evaluate(() => { __valley.game.state.settings.ageBand = 'junior'; });
+await page.locator('#mei-stage').click();
+const juniorId = await page.locator('.game-panel').innerText();
+check('下拉的 6–8 岁仍是 Action、Cut 和三格', juniorId.includes('Action') && juniorId.includes('三格'));
+await page.locator('.panel-header [data-action="close"]').click();
+await page.evaluate(() => { __valley.game.state.settings.ageBand = 'senior'; });
+await page.locator('#mei-stage').click();
+const seniorId = await page.locator('.game-panel').innerText();
+check('下拉的 9–12 岁仍是镜头、24 帧和三点布光', seniorId.includes('远景') && seniorId.includes('24') && seniorId.includes('三点布光'));
+await page.locator('.panel-header [data-action="close"]').click();
 
 await page.locator('#mei-premiere').click();
 const premiere = await page.locator('.game-panel').innerText();
@@ -165,7 +175,7 @@ await tour.goto(`${url}?tour=1`);
 await tour.waitForFunction(() => window.__valley?.world);
 await tour.click('#start-button');
 await tour.evaluate(() => { __valley.game.state.settings.sound = false; });
-if (await tour.locator('#wish-dismiss').isVisible().catch(() => false)) await tour.click('#wish-dismiss');
+await tour.evaluate(() => document.getElementById('wish-dismiss')?.click());
 check('体验参数是 tour=1', await tour.evaluate(() => new URLSearchParams(location.search).get('tour') === '1'));
 await tour.evaluate(() => {
   const world = __valley.world;

@@ -1,5 +1,5 @@
-import { ITEMS, RECIPES, COLLECTABLE_ITEMS, GARDEN_PLOTS, MAX_BUILD_HEIGHT, STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, MEI3_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY, RI3_BACKUP_KEY, terrainHeight, isProtectedCell, roofSpan, roofWallAt } from './game-data.js';
-import { REALM_BLOCK_LIMIT, REALMS, SUPPLY_COOLDOWN, SUPPLY_COUNT, WASHI_STAGES, WASHI_TOTAL_SECONDS, arrivalFor, defaultTravel, emptyRealm, inVisitorYard, isDockCell, realmContains, realmTerrainHeight, washiStage } from './realm-data.js';
+import { ITEMS, RECIPES, COLLECTABLE_ITEMS, GARDEN_PLOTS, MAX_BUILD_HEIGHT, STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, MEI3_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY, STORY_BACKUP_KEY, RI3_BACKUP_KEY, terrainHeight, isProtectedCell, roofSpan, roofWallAt } from './game-data.js';
+import { REALM_BLOCK_LIMIT, REALMS, SUPPLY_COOLDOWN, SUPPLY_COUNT, WASHI_STAGES, WASHI_TOTAL_SECONDS, arrivalFor, defaultTravel, emptyRealm, inVisitorYard, isDockCell, normalizeAgeBand, realmContains, realmTerrainHeight, washiStage } from './realm-data.js';
 import { TravelError, repairTravelRaw, validateTravel } from './travel-save.js';
 import { advanceMaple, attachMei } from './mei-state.js';
 import { BALL_RULES } from './ball-data.js';
@@ -111,9 +111,11 @@ export function validateSave(value) {
   if (!isRecord(p) || !isPointOpen(next.land,p.x,p.z) || !Number.isFinite(p.y) || p.y < -2 || p.y > 16) throw new Error('存档中的角色位置不正确。');
   next.player = { x: p.x, y: p.y, z: p.z };
   if (!isRecord(value.settings) || typeof value.settings.sound !== 'boolean') throw new Error('存档中的设置不正确。');
-  const ageBand = value.settings.ageBand ?? null;
-  if (ageBand !== null && ageBand !== 'little' && ageBand !== 'bigger' && ageBand !== 'older') throw new Error('存档中的年龄档不正确。');
+  const rawAge = value.settings.ageBand ?? null;
+  const ageBand = normalizeAgeBand(rawAge);
+  if (rawAge !== null && ageBand === null) throw new Error('存档中的年龄档不正确。');
   next.settings = { sound: value.settings.sound, ageBand };
+  if (value.settings.quality === 'fast' || value.settings.quality === 'fine') next.settings.quality = value.settings.quality;
   if (!isRecord(value.stats)) throw new Error('存档中的记录不正确。');
   for (const stat of Object.keys(next.stats)) {
     if (!isCount(value.stats[stat])) throw new Error('存档中的记录数量不正确。');
@@ -159,7 +161,7 @@ export function validateSave(value) {
   return next;
 }
 
-const FIGURE_BACKUP_KEYS = [STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, MEI3_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY, RI3_BACKUP_KEY];
+const FIGURE_BACKUP_KEYS = [STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, MEI3_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY, STORY_BACKUP_KEY, RI3_BACKUP_KEY];
 
 function rawHasRi3(raw) {
   const ri = raw?.travel?.realms?.ri;
@@ -298,6 +300,7 @@ export class GameState {
     this.meiSaveText=null;this.meiBackupKey=null;
     this.mei3SaveText=null;this.mei3BackupKey=null;
     this.vistaSaveText=null;this.vistaBackupKey=null;
+    this.storySaveText=null;this.storyBackupKey=null;
     this.ri3SaveText=null;this.ri3BackupKey=null;
     this.load();
   }
@@ -385,6 +388,12 @@ export class GameState {
         this.vistaSaveText=null;
       }catch{this.storageError='远眺升级前的世界未能备份。请先导出存档。';return fail(this.storageError);}
     }
+    if(this.storySaveText!==null){
+      try{
+        this.storyBackupKey=writeOriginalBackup(this.storage,STORY_BACKUP_KEY,this.storySaveText);
+        this.storySaveText=null;
+      }catch{this.storageError='故事升级前的世界未能备份。请先导出存档。';return fail(this.storageError);}
+    }
     if(this.ri3SaveText!==null && ri3InState(this.state)){
       try{
         this.ri3BackupKey=writeOriginalBackup(this.storage,RI3_BACKUP_KEY,this.ri3SaveText);
@@ -454,6 +463,9 @@ export class GameState {
       if(!hasMei3) this.mei3SaveText=text;
       const hasVista = isRecord(raw.travel) && Object.hasOwn(raw.travel, 'discovered') && Object.hasOwn(raw.travel, 'keepsakes');
       if(!hasVista) this.vistaSaveText=text;
+      const storyRaw = raw.travel?.story;
+      const hasStory = isRecord(storyRaw) && Object.hasOwn(storyRaw, 'fogIntro') && Object.hasOwn(storyRaw, 'restored') && Object.hasOwn(storyRaw, 'fogOff');
+      if(!hasStory) this.storySaveText=text;
       if(!rawHasRi3(raw)) this.ri3SaveText=text;
       this.legacySaveText=raw.clock===undefined||raw.flora===undefined||raw.land?.claimed===undefined?text:null;
       this.legacyBackupBase=raw.land?.claimed===undefined?LAND_BACKUP_KEY:LIFE_BACKUP_KEY;
@@ -507,6 +519,10 @@ export class GameState {
   getVistaBackup(){
     if(this.vistaSaveText!==null)return this.vistaSaveText;
     try{return this.storage?.getItem(this.vistaBackupKey||VISTA_BACKUP_KEY)??null;}catch{return null;}
+  }
+  getStoryBackup(){
+    if(this.storySaveText!==null)return this.storySaveText;
+    try{return this.storage?.getItem(this.storyBackupKey||STORY_BACKUP_KEY)??null;}catch{return null;}
   }
   getRi3Backup(){
     if(this.ri3SaveText!==null)return this.ri3SaveText;
@@ -774,6 +790,8 @@ export class GameState {
     if (!recipeId && matches.length > 1) return { ...fail('这个摆法有两种做法，请选想要的物品。'), matches };
     const recipe = recipeId ? matches.find(recipe => recipe.id === recipeId) : matches[0];
     if (!recipe) return fail('选中的物品与格子摆法不同。');
+    const restored = this.state.travel?.story?.restored || [];
+    if (recipe.story && !restored.includes(recipe.story) && !restored.includes('all')) return fail('河水亮起来以后，可以用和纸和树枝做纸灯笼。');
     const required = blankInventory();
     for (const item of recipe.pattern.flat()) if (item) required[item]++;
     const missing = ITEM_KEYS.find(item => this.state.inventory[item] < required[item]);
@@ -1000,6 +1018,18 @@ export class GameState {
       if (!state.travel.story.letters.includes(id)) state.travel.story.letters.push(id);
     });
     return ok('信看过了。想坐船就去渡口，不看信也可以走。');
+  }
+  craftPaperLantern() {
+    const restored = this.state.travel?.story?.restored || [];
+    if (!restored.includes('water') && !restored.includes('all')) return fail('河水亮起来以后，可以用和纸和树枝做纸灯笼。');
+    if ((this.state.inventory.washi || 0) < 1 || (this.state.inventory.branch || 0) < 1) return fail('纸灯笼要用一张和纸和一根树枝。这是游戏约定。');
+    if (!isCount((this.state.inventory['paper-lantern'] || 0) + 1)) return fail('纸灯笼已经很多了。');
+    this.mutate((state) => {
+      state.inventory.washi -= 1;
+      state.inventory.branch -= 1;
+      state.inventory['paper-lantern'] += 1;
+    });
+    return ok('做成一盏纸灯笼。不会真的用火。');
   }
   claimKiln() {
     const kiln = this.state.kiln;

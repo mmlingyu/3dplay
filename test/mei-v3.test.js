@@ -76,13 +76,18 @@ test('家长体验只缺灯，年龄档在美谷本地分成两档', () => {
   assert.equal(meiAgeBand(null), 'junior');
   assert.equal(meiAgeBand('little'), 'junior');
   assert.equal(meiAgeBand('bigger'), 'junior');
+  assert.equal(meiAgeBand('junior'), 'junior');
   assert.equal(meiAgeBand('older'), 'senior');
+  assert.equal(meiAgeBand('senior'), 'senior');
+  assert.equal(meiAgeBand('9-12'), 'senior');
   assert.equal(litStarCount(['mei-arrive', 'vista-mei', 'ri-arrive']), 2);
   assert.equal(litStarCount(Array.from({ length: 20 }, (_, index) => `mei-${index}`)), 8);
 });
 
-test('体验参数写在美谷自己的代码里，不另建 tour-mode', () => {
+test('美谷自己读 tour=1，河谷故事仍用独立的 tour 存档', () => {
   const source = readFileSync(new URL('../src/mei-lot.js', import.meta.url), 'utf8');
   assert.match(source, /new URLSearchParams\(location\.search\)\.get\('tour'\) === '1'/);
-  assert.throws(() => readFileSync(new URL('../src/tour-mode.js', import.meta.url), 'utf8'));
+  assert.doesNotMatch(source, /tour-mode/);
+  const tour = readFileSync(new URL('../src/tour-mode.js', import.meta.url), 'utf8');
+  assert.match(tour, /yuanyuan-river-valley-v1-tour/);
 });

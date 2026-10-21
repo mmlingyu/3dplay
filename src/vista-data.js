@@ -102,6 +102,7 @@ const ROUTE_COLORS = Object.freeze({ ri: '#d98aa4', mei: '#c45c4a', xing: '#6aa6
 
 export function vistaBand(ageBand) {
   if (ageBand === 'bigger' || ageBand === 'older') return ageBand;
+  if (ageBand === 'senior') return 'older';
   return 'little';
 }
 
@@ -241,7 +242,7 @@ function drawRiMark(ctx, x, y, night) {
   ctx.fillText('日', x - 4, y + 26);
 }
 
-export function drawVistaMap(canvas, { discovered = {}, band = 'little', night = false } = {}) {
+export function drawVistaMap(canvas, { discovered = {}, band = 'little', overlay = null, night = false } = {}) {
   if (!canvas?.getContext) return;
   const layout = MAP_LAYOUT;
   const ratio = Math.min(2, canvas.ownerDocument?.defaultView?.devicePixelRatio || 1);
@@ -324,4 +325,5 @@ export function drawVistaMap(canvas, { discovered = {}, band = 'little', night =
   ctx.fill();
   ctx.fillStyle = '#8f6238';
   ctx.fillRect(layout.dock.x - 5, layout.dock.y - 3, 10, 6);
+  if (typeof overlay === 'function') overlay(ctx, layout);
 }

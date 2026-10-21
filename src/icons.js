@@ -102,7 +102,7 @@ const ui = {
 
 /** Return an original inline SVG. Buttons provide their own accessible labels. */
 export function icon(name, size = 24) {
-  name = ({ log: 'wood', brokenBrick: 'shard' })[name] || name;
+  name = ({ log: 'wood', brokenBrick: 'shard', 'paper-lantern': 'lantern' })[name] || name;
   const dimension = Number.isFinite(Number(size)) ? Math.max(8, Number(size)) : 24;
   const drawing = materials[name] || ui[name] || ui.leaf;
   const isMaterial = Object.hasOwn(materials, name);

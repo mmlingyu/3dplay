@@ -36,6 +36,7 @@ const ok = (message, extra = {}) => ({ ok: true, message, ...extra });
 
 export function projectBand(ageBand) {
   if (ageBand === 'bigger' || ageBand === 'older') return ageBand;
+  if (ageBand === 'senior' || ageBand === '9-12') return 'older';
   return 'little';
 }
 

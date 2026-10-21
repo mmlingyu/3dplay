@@ -203,7 +203,7 @@ export function attachMei(GameState) {
     },
     finishQuilt(cells) {
       if (this.currentRealm() !== 'mei') return fail('拼布台在美谷的图书馆旁边。');
-      const band = this.state.settings?.ageBand;
+      const band = projectBand(this.state.settings?.ageBand);
       if (!quiltReady(cells, band)) {
         if (band === 'older') return fail('转一转，让斜对角的颜色一样。');
         if (band === 'bigger') return fail('让左右两边变成对称。');
@@ -228,7 +228,7 @@ export function attachMei(GameState) {
       return ok(`选了${PUMPKIN_FACES.find((item) => item.id === face).name}。暖暖的，不吓人。`);
     },
     tradeMei(id = 'bean-syrup') {
-      if (this.state.settings?.ageBand !== 'older') return fail('交换板是给 10–12 岁看比例的。想送东西，可以直接送礼物。');
+      if (projectBand(this.state.settings?.ageBand) !== 'older') return fail('交换板是给 9–12 岁看比例的。想送东西，可以直接送礼物。');
       if (this.currentRealm() !== 'mei') return fail('交换板在美谷。');
       const offer = MEI_TRADES.find((item) => item.id === id);
       if (!offer) return fail('这一换还没有。');

@@ -10,10 +10,31 @@ export const SUPPLY_COOLDOWN = 180;
 export const SUPPLY_COUNT = 2;
 
 export const AGE_BANDS = Object.freeze([
-  { id: 'little', label: '4–6 岁', npc: '短一点' },
-  { id: 'bigger', label: '7–9 岁', npc: '再长一点' },
-  { id: 'older', label: '10–12 岁', npc: '挑战一下' },
+  { id: 'junior', label: '6–8 岁', npc: '短一点' },
+  { id: 'senior', label: '9–12 岁', npc: '挑战一下' },
 ]);
+
+/** Old 4–6 and 7–9 both read as 6–8. 10–12 reads as 9–12. */
+export function normalizeAgeBand(band) {
+  if (band === 'senior' || band === 'older') return 'senior';
+  if (band === 'junior' || band === 'little' || band === 'bigger') return 'junior';
+  return null;
+}
+
+/** Legacy copy keys. Explicit little / bigger / older stay put so existing scenes keep their lines. */
+export function contentAgeBand(band) {
+  if (band === 'little' || band === 'bigger' || band === 'older') return band;
+  return normalizeAgeBand(band) === 'senior' ? 'older' : 'little';
+}
+
+/** 6–8 merges the younger lines. 9–12 reads the older lines. Legacy ids keep the old order. */
+export function mergedQuizOrder(band) {
+  if (band === 'junior') return ['little', 'bigger'];
+  if (band === 'senior') return ['older'];
+  if (band === 'older') return ['older', 'bigger', 'little'];
+  if (band === 'bigger') return ['bigger', 'little'];
+  return ['little'];
+}
 
 export const FERRY_NOTE = '坐小船可以过海到日谷。路程在游戏里变短了。';
 export const VOYAGE_NOTE = '路程和天气在游戏里被简化了。真实的热气球跨海要看风向和天气。';
@@ -227,7 +248,18 @@ export function defaultTravel() {
     visited: [],
     stamps: [],
     stickers: [],
-    story: { seen: [], letters: [] },
+    story: {
+      seen: [],
+      letters: [],
+      restored: [],
+      fogIntro: false,
+      fogOff: false,
+      hintsOff: false,
+      festival: false,
+      homePlaces: [],
+      nudges: { vista: 0, bottle: 0, dock: 0, balloon: 0, stuck: 0, day: -1, last: '', chapter: 'prologue' },
+      site: null,
+    },
     gifts: { given: [], received: [] },
     supplyAt: 0,
     realms: {},
