@@ -83,25 +83,30 @@ export function mountVistas(scene) {
   const riMat = basic(0.3);
   materials.push(riMat);
   addMesh(ri, mergeParts([
-    cone(7.2, 16, 0, 8, 0, '#f7f4ef', 7),
-    cone(2.4, 5, 3.2, 4.2, 1.2, '#d9e4ea', 6),
-    box(1.5, 7.2, 1.5, -2.4, 3.6, 2.2, '#cbb59a'),
-    cone(1.3, 2.2, -2.4, 8.2, 2.2, '#b4533a', 5),
-    cone(1.6, 3.4, 4.6, 1.8, -1.4, '#e7a0b4', 6),
-    cone(1.3, 2.8, 6.4, 1.5, 0.6, '#f0b7c6', 6),
-    cone(1.1, 2.4, 3.4, 1.3, -2.6, '#e08aa6', 5),
+    cone(7.4, 14.5, -2.2, 7.2, 0.4, '#f7f4ef', 7),
+    cone(2.1, 4, 1.4, 3.2, 1.6, '#e4eef4', 6),
+    box(2.1, 1.5, 1.5, 3.6, 0.85, -1.4, '#8d8f93'),
+    box(1.5, 2.2, 1.3, 5.8, 1.2, 1.1, '#6e7580'),
+    box(0.55, 12.2, 0.55, 4.6, 6.2, -0.4, '#c8402a'),
+    box(0.68, 1.15, 0.68, 4.6, 11.6, -0.4, '#f4efe6'),
+    box(0.62, 1.2, 0.62, 4.6, 9.4, -0.4, '#f4efe6'),
+    box(0.62, 1.2, 0.62, 4.6, 6.6, -0.4, '#f4efe6'),
+    box(8.2, 0.16, 0.26, 0.4, 4.5, 2.2, '#8d8f93'),
   ]), riMat, 'ri', pick);
   const kiteMat = flat('#f6d56a', 0.3);
   const kite = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.8), kiteMat);
-  kite.position.set(3.2, 11.5, 1.4);
+  kite.position.set(-4.2, 11.2, 1.2);
   kite.userData.vistaId = 'ri';
   ri.add(kite);
   materials.push(kiteMat);
   const lanternMat = flat('#ffd27a', 0.3);
-  const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.45, 6, 5), lanternMat);
-  lantern.position.set(-2.4, 6.4, 2.4);
+  const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.42, 6, 5), lanternMat);
+  lantern.position.set(-5.4, 2.4, 1.8);
   lantern.userData.vistaId = 'ri';
-  ri.add(lantern);
+  const towerTip = new THREE.Mesh(new THREE.SphereGeometry(0.34, 6, 5), lanternMat);
+  towerTip.position.set(4.6, 12.6, -0.4);
+  towerTip.userData.vistaId = 'ri';
+  ri.add(lantern, towerTip);
   materials.push(lanternMat);
 
   const mei = new THREE.Group();
@@ -185,6 +190,7 @@ export function mountVistas(scene) {
       kite.visible = signals.kite;
       lanternMat.opacity = signals.lantern ? Math.min(1, opacity + 0.2) : 0.02;
       lantern.visible = signals.lantern;
+      towerTip.visible = signals.lantern;
       blades.rotation.z += dt * 1.4;
       crystalMat.opacity = signals.crystal ? opacity * (0.45 + 0.55 * (0.5 + 0.5 * Math.sin(performance.now() / 280))) : opacity * 0.22;
       planet.rotation.y += dt * 0.25;
