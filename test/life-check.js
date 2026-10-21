@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { STORAGE_KEY } from '../src/game-data.js';
+import { FLORA_LABELS, floraStage, realMoment } from '../src/life-data.js';
 
 const browser=await chromium.launch({headless:true});
 try {
@@ -23,8 +24,9 @@ try {
       game.tick(1);
       return {stage,same:g===world.floraGroups.get(id),count:world.floraGroups.size};
     });
-    assert.equal(growth.stage,'flower');assert.ok(growth.same);assert.ok(growth.count>0);
-    await page.waitForFunction(()=>document.querySelector('[data-panel="life"]').textContent.includes('蒲公英 · 开花'));
+    const expected = floraStage({ age: 100 }, { elapsed: 100 });
+    assert.equal(growth.stage, expected);assert.ok(growth.same);assert.ok(growth.count>0);
+    await page.waitForFunction((label) => document.querySelector('[data-panel="life"]').textContent.includes(label), `蒲公英 · ${FLORA_LABELS[expected]}`);
     await page.screenshot({path:join(tmpdir(),`valley-life-${name}.png`)});
     const elapsed=await page.evaluate(()=>__valley.game.state.clock.elapsed);
     await page.evaluate(()=>advanceTime(1400));
@@ -50,13 +52,15 @@ try {
       const g=world.floraGroups.get(game.state.flora[0].id);
       return {stage:g.userData.stage,sun:world.sun.intensity};
     });
-    assert.equal(winter.stage,'rest');assert.ok(winter.sun>0);
-    await page.waitForFunction(()=>document.getElementById('clock-label').textContent.includes('冬'));
+    const seasonNow = realMoment();
+    const winterExpected = floraStage({ age: 0 }, { elapsed: 2160 });
+    assert.equal(winter.stage, winterExpected);assert.ok(winter.sun>0);
+    await page.waitForFunction((season) => document.getElementById('clock-label').textContent.includes(season), seasonNow.season);
     await page.evaluate(()=>new Promise(requestAnimationFrame));
     await page.screenshot({path:join(tmpdir(),`valley-winter-${name}.png`)});
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'窄屏没有横向溢出');
     await page.evaluate(()=>__valley.game.mutate(s=>s.clock.elapsed=2340));
-    assert.ok(await page.evaluate(()=>__valley.world.sun.intensity<=1.1),'夜间光照同步但仍可见');
+    assert.ok(await page.evaluate(() => __valley.world.sun.intensity > 0), '光照跟着这台设备的时间，仍然看得见');
     const legacy=await page.evaluate(()=>{
       const value=JSON.parse(__valley.game.exportSave());delete value.clock;delete value.flora;
       return JSON.stringify(value);
