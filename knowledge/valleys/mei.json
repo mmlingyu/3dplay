@@ -1,0 +1,16 @@
+{
+  "audience": "4-12",
+  "valley": "mei",
+  "note": "Frontend snapshot. The IdeaLab backend is not in this repository. English lines are drafts. published false entries must not be shown.",
+  "subjects": ["lang-en", "craft", "history", "nature", "math"],
+  "characters": ["maya", "will", "orv", "rivera", "joe"],
+  "hidden": ["draft-hidden"],
+  "audio": ["en-hello", "en-sun", "en-tree", "en-friend", "en-build", "en-cat", "en-measure", "en-test", "en-fix", "en-change"],
+  "refs": {
+    "wright": "https://www.nps.gov/wrbr/learn/historyculture/theroadtothefirstflight.htm",
+    "yellowstone": "https://www.nps.gov/yell/planyourvisit/parkfacts.htm",
+    "foods": "https://www.si.edu/spotlight/thanksgiving/thanksgiving-foods",
+    "syrup": "https://naturalresources.extension.iastate.edu/forestry/forest_products/syrup.html",
+    "apollo": "https://www.nasa.gov/history/apollo-11-mission-overview/"
+  }
+}

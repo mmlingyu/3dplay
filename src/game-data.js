@@ -1,4 +1,5 @@
 import { isCreationReserved } from './creation-data.js';
+import { MEI_COLLECTABLES, MEI_ITEMS, MEI_RECIPES } from './mei-data.js';
 import { isRealmProtected } from './realm-data.js';
 
 export const WORLD_SIZE = 32;
@@ -15,6 +16,7 @@ export const FIGURES_KEY = `${STORAGE_KEY}-figures`;
 export const LIFE_BACKUP_KEY = `${STORAGE_KEY}-before-life`;
 export const LAND_BACKUP_KEY = `${STORAGE_KEY}-before-expansion`;
 export const TRAVEL_BACKUP_KEY = `${STORAGE_KEY}-before-travel`;
+export const MEI_BACKUP_KEY = `${STORAGE_KEY}-before-mei`;
 export const XING_BACKUP_KEY = `${STORAGE_KEY}-before-xing`;
 export const CRAFT_RULES = Object.freeze({ dragThreshold: 7 });
 
@@ -106,10 +108,11 @@ export const ITEMS = {
   'glowmoss-case': { name: '光苔展柜', color: '#b7f3d0', emoji: '🪟', placeable: true, origin: 'xing', fantasy: true, living: false, case: true, description: '光苔放在游戏里直接提供的玻璃罩里。这是装饰，不是种植。光苔是幻想生物。' },
   'glass-dome': { name: '玻璃罩', color: '#d5f3f6', emoji: '🔮', placeable: false, origin: 'xing', description: '游戏里直接提供的玻璃罩。不是沙子变成的玻璃。' },
   'glyph-plaque': { name: '小咕的符号牌', color: '#f2c14e', emoji: '🔤', placeable: true, origin: 'xing', description: '点一下会听到小咕的问候。这是纪念品，不用解谜也能收下。' },
+  ...MEI_ITEMS,
 };
 
-export const COLLECTABLE_ITEMS = ['wood', 'stone', 'clay', 'branch', 'soil', 'water', 'seed', 'kozo', 'bamboo', 'salt', 'meteorite', 'glowmoss', 'glass-dome'];
-export const ROOF_WALLS = ['plank', 'fence', 'post', 'brick', 'door', 'window', 'stone'];
+export const COLLECTABLE_ITEMS = ['wood', 'stone', 'clay', 'branch', 'soil', 'water', 'seed', 'kozo', 'bamboo', 'salt', 'meteorite', 'glowmoss', 'glass-dome', ...MEI_COLLECTABLES.filter((item) => item !== 'branch')];
+export const ROOF_WALLS = ['plank', 'fence', 'post', 'brick', 'door', 'window', 'stone', 'log-wall'];
 export const ROOF_LIMIT = 8;
 
 function roofSolid(list, x, z, y) {
@@ -195,6 +198,7 @@ export const RECIPES = [
   { id: 'paper-koinobori', name: '纸鲤鱼旗', pattern: [['washi', 'bamboo-strip']], output: { item: 'paper-koinobori', count: 1 }, hint: '和纸加竹篾做成纸鲤鱼旗。这是装饰，不是国旗。格子是游戏约定。', group: '日谷', kind: '两种材料', empty: '纸做鱼，篾做骨' },
   { id: 'paper-door', name: '纸拉门', pattern: [['washi', 'stick']], output: { item: 'paper-door', count: 1 }, hint: '和纸加木棍做成纸拉门。格子是游戏约定。', group: '日谷', kind: '两种材料', empty: '纸做面，棍做框' },
   { id: 'glowmoss-case', name: '光苔展柜', pattern: [['glowmoss', 'glass-dome']], output: { item: 'glowmoss-case', count: 1 }, hint: '光苔放进玻璃罩。不能种在菜园。玻璃罩是游戏里直接提供的。', group: '外星谷', kind: '装起来', empty: '苔加罩' },
+  ...MEI_RECIPES,
 ];
 
 export const GARDEN_PLOTS = [

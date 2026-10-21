@@ -1,4 +1,5 @@
 import { landBounds } from './land-data.js';
+import { VOYAGE_MEI_NOTE } from './mei-data.js';
 import { REALMS, VOYAGE_NOTE } from './realm-data.js';
 
 export { VOYAGE_NOTE };
@@ -11,8 +12,7 @@ function flightBounds(land) {
 }
 
 export function balloonBaseFor(realmId = 'he') {
-  if (realmId === 'ri') return REALMS.ri.balloon;
-  if (realmId === 'xing') return REALMS.xing.balloon;
+  if (REALMS[realmId]?.balloon) return REALMS[realmId].balloon;
   return BALLOON_BASE;
 }
 
@@ -150,6 +150,9 @@ export function balloonLook(phase, angle = 0, mode = 'orbit', destination = null
     }
     if (destination === 'he') {
       return { phase, title: '飞回河谷', note: '热气球穿过云，回到家的草坪。', hint: '坐稳。想快一点可以跳过。', landing: true, mode, destination: 'he' };
+    }
+    if (destination === 'mei') {
+      return { phase, title: '看风景去美谷', note: VOYAGE_MEI_NOTE, hint: '坐稳。想快一点可以跳过。', landing: true, mode, destination: 'mei' };
     }
     return { phase, title: '看风景去日谷', note: VOYAGE_NOTE, hint: '坐稳。想快一点可以跳过。', landing: true, mode, destination: 'ri' };
   }

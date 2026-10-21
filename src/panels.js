@@ -6,12 +6,13 @@ import { Workshop3D } from './workshop-3d.js';
 import { BUILD_CASES, PACK_ITEMS, WORKSHOP_FOLDS, combinationTree, lackHint, lackItems, madeLine, mathPits, needLine, putHint, recipeNeeds, resultLine } from './workshop-data.js';
 import { Axle3D } from './axle-3d.js';
 import { createCreationStudio, CREATION_TITLES } from './creation-ui.js';
-import { AGE_BANDS, FOLD_NOTE, STAMPS, WASHI_NOTE } from './realm-data.js';
-import { XING_STAMPS } from './xing-data.js';
+import { AGE_BANDS, FOLD_NOTE, WASHI_NOTE } from './realm-data.js';
+import { STAMP_BOOK } from './stamp-book.js';
+import { MEI_PANEL_TITLES, handleMeiAction, meiPanelHtml } from './mei-panels.js';
 
 const escapeHTML = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 const BUILDABLE = new Set(['plank', 'stone', 'brick', 'ramp', 'post', 'chest', 'workbench', 'roof', 'window', 'door', 'bed', 'fence', 'pot', 'wreath', 'lantern', 'flag']);
-const TITLES = { ...CREATION_TITLES, workshop: '木作工作台', axle: '轮轴试装台', land:'开垦与探索', life:'河谷的时间与生命', inventory: '我的背包', craft: '格子工坊', kiln: '小小砖窑', garden: '我的小菜园', warehouse: '可选补给站', help: '怎么玩', pause: '暂停与存档', chest: '我的储物箱', inspiration: '建筑点子卡', washi: '做和纸', fold: '折一折', stamps: '印章本' };
+const TITLES = { ...CREATION_TITLES, ...MEI_PANEL_TITLES, workshop: '木作工作台', axle: '轮轴试装台', land:'开垦与探索', life:'河谷的时间与生命', inventory: '我的背包', craft: '格子工坊', kiln: '小小砖窑', garden: '我的小菜园', warehouse: '可选补给站', help: '怎么玩', pause: '暂停与存档', chest: '我的储物箱', inspiration: '建筑点子卡', washi: '做和纸', fold: '折一折', stamps: '印章本' };
 const KILN_NAMES = { idle: '还没开始', moistening: '加水与成形', shaping: '成形', drying: '干燥', firing: '烧制', cooling: '冷却', ready: '完成，可以领取', failed: '试样出现裂纹' };
 const itemEntries = Array.isArray(ITEMS) ? ITEMS.map((entry) => [entry.id, entry]) : Object.entries(ITEMS);
 const recipes = Array.isArray(RECIPES) ? RECIPES : Object.values(RECIPES);
@@ -440,15 +441,14 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
   }
   function stampsView() {
     const owned = new Set(game.state.travel?.stamps || []);
-    const book = [...STAMPS, ...XING_STAMPS];
-    return `<div class="stamp-grid">${book.map((stamp) => `<article class="stamp-card ${owned.has(stamp.id) ? 'owned' : ''}">${svg(stamp.icon, 36)}<strong>${escapeHTML(stamp.name)}</strong><p>${owned.has(stamp.id) ? '已经盖上' : escapeHTML(stamp.how)}</p></article>`).join('')}</div>`;
+    return `<div class="stamp-grid">${STAMP_BOOK.map((stamp) => `<article class="stamp-card ${owned.has(stamp.id) ? 'owned' : ''}">${svg(stamp.icon, 36)}<strong>${escapeHTML(stamp.name)}</strong><p>${owned.has(stamp.id) ? '已经盖上' : escapeHTML(stamp.how)}</p></article>`).join('')}</div>`;
   }
   function pauseView() {
     const saveInfo = game.storageError || (!game.storage?.setItem ? '这个窗口暂时保留世界，请下载存档备份。' : (game.accountId ? '背包物品、放下的建筑和设置记在当前登录的账号上。换一个人登录，会进入那个人自己的河谷。' : '还没登录，世界只在这台浏览器里。登录后会记到账号上。'));
     const age = game.state.settings?.ageBand || '';
     const away = (game.state.travel?.current || 'he') !== 'he';
     const ageOptions = [['', '不设置'], ...AGE_BANDS.map((item) => [item.id, item.label])].map(([id, label]) => `<option value="${id}" ${age === id ? 'selected' : ''}>${label}</option>`).join('');
-    return `<div class="panel-note">${svg('save', 32)}<span>${escapeHTML(saveInfo)}</span></div>${readButton(`${saveInfo}大人可以导出备份，也可以导入以前的存档。`)}<div class="panel-row">${button('save', '保存一下', { className: 'primary-btn' })}${button('close', '继续玩', { className: 'primary-btn' })}${away ? button('travel-home', '回家', { className: 'primary-btn', label: '回家' }) : ''}</div>${game.travelNotice ? `<p class="panel-notice" role="status">${escapeHTML(game.travelNotice)}</p>` : ''}<details class="panel-details" ${importPending ? 'open' : ''}><summary>给大人：备份与导入存档</summary><p>${game.accountId ? '已登录时，河谷存在这个账号下，换一台电脑登录也能回来。仍可以导出一份文件备份。' : '还没登录时，存档只在当前浏览器里。登录后会记到账号上。'}</p><label>年龄档（不记录生日）<select id="age-band">${ageOptions}</select></label><p>这只是打开对话时的默认长短。孩子随时可以换，不会扣东西。</p><div class="panel-row">${button('export', '下载存档 JSON')}${button('import-choose', '选择存档文件')}${backupBeforeImport ? button('export-backup', '下载导入前的备份') : ''}${game.getLegacyBackup?.()?button('export-legacy','下载升级前的备份'):''}${game.getTravelBackup?.()?button('export-travel','下载升级前的备份',{label:'下载旅行升级前的备份'}):''}${game.getXingBackup?.()?button('export-xing','下载升级前的备份',{label:'下载外星谷升级前的备份'}):''}</div><input id="save-import-input" type="file" accept=".json,application/json" hidden>${importPending ? `<div class="panel-note warning">已选：${escapeHTML(importPending.name)}。导入会替换当前世界；系统会先保留备份并检查存档。${button('import-confirm', '确认导入', { className: 'primary-btn' })}${button('import-cancel', '取消')}</div>` : ''}</details>${studio.pauseSection()}<p class="panel-notice" role="status">${escapeHTML(pauseNotice)}</p>`;
+    return `<div class="panel-note">${svg('save', 32)}<span>${escapeHTML(saveInfo)}</span></div>${readButton(`${saveInfo}大人可以导出备份，也可以导入以前的存档。`)}<div class="panel-row">${button('save', '保存一下', { className: 'primary-btn' })}${button('close', '继续玩', { className: 'primary-btn' })}${away ? button('travel-home', '回家', { className: 'primary-btn', label: '回家' }) : ''}</div>${game.travelNotice ? `<p class="panel-notice" role="status">${escapeHTML(game.travelNotice)}</p>` : ''}<details class="panel-details" ${importPending ? 'open' : ''}><summary>给大人：备份与导入存档</summary><p>${game.accountId ? '已登录时，河谷存在这个账号下，换一台电脑登录也能回来。仍可以导出一份文件备份。' : '还没登录时，存档只在当前浏览器里。登录后会记到账号上。'}</p><label>年龄档（不记录生日）<select id="age-band">${ageOptions}</select></label><p>这只是打开对话时的默认长短。孩子随时可以换，不会扣东西。</p><div class="panel-row">${button('export', '下载存档 JSON')}${button('import-choose', '选择存档文件')}${backupBeforeImport ? button('export-backup', '下载导入前的备份') : ''}${game.getLegacyBackup?.()?button('export-legacy','下载升级前的备份'):''}${game.getTravelBackup?.()?button('export-travel','下载升级前的备份',{label:'下载旅行升级前的备份'}):''}${game.getMeiBackup?.()?button('export-mei','下载升级前的备份',{label:'下载美谷升级前的备份'}):''}${game.getXingBackup?.()?button('export-xing','下载升级前的备份',{label:'下载外星谷升级前的备份'}):''}</div><input id="save-import-input" type="file" accept=".json,application/json" hidden>${importPending ? `<div class="panel-note warning">已选：${escapeHTML(importPending.name)}。导入会替换当前世界；系统会先保留备份并检查存档。${button('import-confirm', '确认导入', { className: 'primary-btn' })}${button('import-cancel', '取消')}</div>` : ''}</details>${studio.pauseSection()}<p class="panel-notice" role="status">${escapeHTML(pauseNotice)}</p>`;
   }
   function helpView() {
     const cards = [
@@ -459,8 +459,8 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
       ['ball', '推一推球', '木球会从坡道滚下，走过去可以推它。点球，再点收起球，可以重复使用。最多放四个，不会过一会儿就消失。'],
       ['backpack', '造物互动', '单击放到河谷里的模型，旁边的菜单可以做动作、在原来的上面加一块或换颜色，或收回背包。改的还是这一个。双击靠近看看，再双击回到原来的视角。'],
       ['jump', '数字乐园', '走上东边的六边形小岛就会一直跳。点彩色石或卡片换玩法：数一数 4 岁、双数蹦、凑十、跳着数、乘法蹦、质数灯 10 岁。每跳一下出现数字、英文、算式和语音。点停下来才停止。'],
-      ['balloon', '热气球游览', '从小院再往南走，过小路门就到专门的热气球草场。点乘坐就会起飞。可点转一圈看地图，或点自己开：摇杆前后左右飞，升高降低换高度。想下来点降落到草坪基地，热气球会自己飞回去。不消耗材料。空中也可以点看风景去日谷，路程和天气是简化的。'],
-      ['ferry', '去日谷', '走到小溪下游的渡口，点去日谷。坐船的路程在游戏里变短了。日谷里随时可以回家。答题只给一点楮皮，不做也能采集、做纸和折纸。'],
+      ['balloon', '热气球游览', '从小院再往南走，过小路门就到专门的热气球草场。点乘坐就会起飞。可点转一圈看地图，或点自己开：摇杆前后左右飞，升高降低换高度。想下来点降落到草坪基地，热气球会自己飞回去。不消耗材料。空中可以点看风景去日谷、看风景去美谷，或飞向星星。路程和天气是简化的。飞向星星是游戏里的幻想航线。'],
+      ['ferry', '去日谷', '走到小溪下游的渡口，点去日谷或去美谷。坐船的路程在游戏里变短了。外谷里随时可以回家。答题只给一点材料，不做也能采集和做手工。'],
       ['water', '游一游', '浅溪里慢慢走。南侧泳池的水更深，从木坡道进去会浮起划水。摇杆控制方向，游向池沿，或点上岸返回。这里的动作不是现实游泳教学。'],
       ['leaf','时间与生命','点顶部季节按钮，或点一株蒲公英观察。花草会慢慢变化。暂停或离线时停止，不需要赶着看完。'],
       ['kiln', '看条件', '制砖和种植会显示变化，真实时间被快进，原因可以点开看。'],
@@ -496,6 +496,8 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
     if (current === 'washi') return washiView();
     if (current === 'fold') return foldView();
     if (current === 'stamps') return stampsView();
+    const meiBody = meiPanelHtml(current, { game, button, escapeHTML });
+    if (meiBody) return meiBody;
     if (current === 'inspiration') return inspirationView();
     return helpView();
   }
@@ -668,6 +670,7 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
     if (action === 'backdrop') { if (event.target === target) close(); return; }
     if (action === 'close') { close(); return; }
     if (action === 'speak') { safeSpeak(target.dataset.text); return; }
+    if (handleMeiAction({ action, target, game, notifyResult, render })) return;
     if (studio.handle(action, target)) return;
     if (action === 'open-inspiration') { open('inspiration'); return; }
     if (action === 'workshop-flat') { open('craft', { ...context, flat: true }); return; }
@@ -825,6 +828,7 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
     }
     if(action==='export-legacy'){const text=game.getLegacyBackup?.();if(text)download(text,'我的河谷-生命升级前备份.json');else toast('暂时没有升级前备份。');return;}
     if(action==='export-travel'){const text=game.getTravelBackup?.();if(text)download(text,'我的河谷-旅行升级前备份.json');else toast('暂时没有旅行升级前的备份。');return;}
+    if(action==='export-mei'){const text=game.getMeiBackup?.();if(text)download(text,'我的河谷-美谷升级前备份.json');else toast('暂时没有美谷升级前的备份。');return;}
     if(action==='export-xing'){const text=game.getXingBackup?.();if(text)download(text,'我的河谷-外星谷升级前备份.json');else toast('暂时没有外星谷升级前的备份。');return;}
     if(action==='travel-home'){onTravelHome();return;}
     if(action==='washi-start'){const result=game.startWashi();notifyResult(result);render();return;}

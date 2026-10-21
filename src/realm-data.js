@@ -1,4 +1,6 @@
-/** Realm registry. Home stays neutral. Day valley and alien valley are playable. */
+/** Realm registry. Home stays neutral. Day, beauty and alien valleys are playable. */
+
+import { MEI_REALM } from './mei-data.js';
 
 export const EARTH_GRAVITY = 9.8;
 
@@ -118,7 +120,7 @@ export const REALMS = Object.freeze({
       ponta: Object.freeze({ x: 9.2, z: -6.2 }),
     }),
   }),
-  mei: Object.freeze({ id: 'mei', name: '美谷', playable: false, theme: 'usa', gravity: EARTH_GRAVITY }),
+  mei: Object.freeze({ ...MEI_REALM, gravity: EARTH_GRAVITY }),
   xing: Object.freeze({
     id: 'xing',
     name: '外星谷',
@@ -203,8 +205,9 @@ export function isDockCell(x, z, blocks = []) {
 
 export function arrivalFor(realmId, via) {
   if (realmId === 'xing') return { ...XING_LAWN };
-  if (realmId !== 'ri') return { x: -5, y: 0, z: 5, ry: 0 };
-  return via === 'balloon' ? { ...RI_LAWN } : { ...RI_DOCK };
+  const realm = REALMS[realmId];
+  if (!realm?.dock) return { x: -5, y: 0, z: 5, ry: 0 };
+  return via === 'balloon' && realm.lawn ? { ...realm.lawn } : { ...realm.dock };
 }
 
 export function defaultTravel() {
@@ -234,6 +237,11 @@ export function emptyRealm(realmId) {
     realm.glyphs = [];
     realm.puzzles = [];
     realm.experiments = [];
+  }
+  if (realmId === 'mei') {
+    realm.projects = [];
+    realm.trades = [];
+    realm.decor = { face: 'smile' };
   }
   return realm;
 }

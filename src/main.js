@@ -13,7 +13,8 @@ import { startValleySync } from './valley-sync.js';
 import { BOUNCE_ISLAND, PARK_NAME, PLAY_MODES, SKIP_STEPS, TIMES_TABLES, bounceInfo, inNumberPark, onBounceIsland, playMode } from './bounce-data.js';
 import { BALLOON_BASE, BALLOON_NAME, balloonBaseFor, onBalloonLawn } from './balloon-data.js';
 import { gradeQuestion, loadTutorPack, nextQuestion, primeTutorPack, tutorById, tutors, useTutorRealm } from './tutor-data.js';
-import { chooseDockSite, FERRY_NOTE, VOYAGE_NOTE } from './realm-data.js';
+import { chooseDockSite, FERRY_NOTE, REALMS, VOYAGE_NOTE } from './realm-data.js';
+import { MEI_AUDIO, SHIP_NOTE, VOYAGE_MEI_NOTE } from './mei-data.js';
 import { createCutscene } from './travel.js';
 import { sceneStats } from './scene-stats.js';
 import { RI_AUDIO } from './ri-tutors.js';
@@ -37,8 +38,9 @@ let rotation = 0, buildCell = null, chosenTarget = null, modelMenu = null, panel
 let lastFrame = performance.now(), uiTime = 0, completedWish = false, speechTimer;
 let tutorBand = game.state.settings.ageBand || 'little', tutorUsed = [], tutorCurrent = null, tutorPick = null, tutorStage = 'menu', tutorActivity = null, tutorPage = 0, tutorGreeted = new Set();
 let switching = false, cutscene = null, pendingHomeFlight = false, xingPuzzle = null, xingSheet = '', crystalMarkup = '';
-const missingAudio = new Set([...RI_AUDIO, ...XING_AUDIO]);
+const missingAudio = new Set([...RI_AUDIO, ...MEI_AUDIO, ...XING_AUDIO]);
 const riReady = import('./ri-world.js');
+const meiReady = import('./mei-world.js');
 const xingReady = import('./xing-world.js');
 let landHint=null;
 const dismissedFrontiers=new Set();
@@ -159,7 +161,10 @@ function showBalloon(info) {
   if (modes) modes.hidden = !!info.landing;
   if (height) height.hidden = !!info.landing;
   const voyage = $('balloon-voyage');
-  if (voyage) voyage.hidden = info.phase !== 'tour' || (game.state.travel?.current || 'he') !== 'he';
+  const voyageMei = $('balloon-voyage-mei');
+  const touring = info.phase === 'tour' && (game.state.travel?.current || 'he') === 'he';
+  if (voyage) voyage.hidden = !touring;
+  if (voyageMei) voyageMei.hidden = !touring || !REALMS.mei?.playable;
   paintStarButtons();
   for (const btn of document.querySelectorAll('[data-balloon-mode]')) {
     btn.setAttribute('aria-pressed', String(btn.dataset.balloonMode === (info.mode || 'orbit')));
@@ -193,10 +198,12 @@ function storePlayer() {
     }
   }
 }
-function showCutscene(text) {
+function showCutscene(text, realmId = 'ri') {
   const box = $('travel-cutscene');
   if (!box) return;
   $('travel-cutscene-text').textContent = text;
+  box.classList.toggle('craft-ship', realmId === 'mei');
+  box.classList.toggle('craft-boat', realmId !== 'mei');
   box.hidden = false;
 }
 function hideCutscene() {
@@ -215,21 +222,32 @@ function paintTravel() {
   const realm = game.state.travel?.current || 'he';
   const home = $('travel-home');
   const go = $('travel-go');
+  const goMei = $('travel-go-mei');
   const actions = $('ri-actions');
   const xingActions = $('xing-actions');
+  const meiActions = $('mei-actions');
   if (home) home.hidden = realm === 'he';
   if (actions) actions.hidden = realm !== 'ri';
   if (xingActions) xingActions.hidden = realm !== 'xing';
+  if (meiActions) meiActions.hidden = realm !== 'mei';
   const claim = $('ri-claim');
   if (claim) claim.hidden = realm !== 'ri' || !game.washiStatus?.().ready;
-  if (go && world) {
+  const trade = $('mei-trade');
+  if (trade) trade.hidden = game.state.settings?.ageBand !== 'older';
+  const nearDock = () => {
+    if (!world || realm !== 'he') return false;
     const site = chooseDockSite(game.state.blocks);
     const p = world.playerPosition;
-    const near = realm === 'he' && !!p && (!site || Math.hypot(p.x - site.x, p.z - site.z) < (site.radius || 2) + 2.3);
-    go.hidden = !near || !!cutscene;
-  }
+    return !!p && (!site || Math.hypot(p.x - site.x, p.z - site.z) < (site.radius || 2) + 2.3);
+  };
+  const near = nearDock() && !cutscene;
+  if (go) go.hidden = !near;
+  if (goMei) goMei.hidden = !near || !REALMS.mei?.playable;
+  const touring = realm === 'he' && world?.balloon?.phase === 'tour';
   const voyage = $('balloon-voyage');
-  if (voyage) voyage.hidden = !(realm === 'he' && world?.balloon?.phase === 'tour');
+  if (voyage) voyage.hidden = !touring;
+  const voyageMei = $('balloon-voyage-mei');
+  if (voyageMei) voyageMei.hidden = !touring || !REALMS.mei?.playable;
   paintStarButtons();
 }
 function showStar(title = '飞向星星') {
@@ -274,13 +292,14 @@ function worldHooks() {
       hideCutscene();
       if (realmId === 'xing') goXing();
       else if (realmId === 'he' || (game.state.travel?.current || 'he') === 'xing') goHome();
-      else goRealm('balloon');
+      else goRealm('balloon', realmId || 'ri');
     },
   };
 }
 async function mountWorld(realm, mod, options = {}) {
   const canvas = $('world-canvas');
-  if (realm === 'ri' || realm === 'xing') {
+  const outer = realm && realm !== 'he' && REALMS[realm]?.playable;
+  if (outer) {
     useTutorRealm(realm);
     try { primeTutorPack(realm); } catch { /* the scene still opens */ }
     loadTutorPack(realm).catch(() => {});
@@ -293,6 +312,14 @@ async function mountWorld(realm, mod, options = {}) {
     const ready = mod || await riReady;
     world = new ready.RiWorld(canvas, worldHooks());
     const spot = game.state.travel.realms?.ri;
+    if (spot?.player) {
+      world.playerPosition.set(spot.player.x, spot.player.y || 0, spot.player.z);
+      world.facing = spot.player.ry || 0;
+    }
+  } else if (realm === 'mei') {
+    const ready = mod || await meiReady;
+    world = new ready.MeiWorld(canvas, worldHooks());
+    const spot = game.state.travel.realms?.mei;
     if (spot?.player) {
       world.playerPosition.set(spot.player.x, spot.player.y || 0, spot.player.z);
       world.facing = spot.player.ry || 0;
@@ -313,8 +340,8 @@ async function mountWorld(realm, mod, options = {}) {
     attachHomeVisitor(world, game);
   }
   world.sync(game.state);
-  if (realm === 'ri' && game.state.travel.via === 'balloon') world.beginArrivalDescend();
-  if (realm === 'xing' && options.descend) world.beginArrivalDescend();
+  if ((realm === 'ri' || realm === 'mei') && game.state.travel.via === 'balloon') world.beginArrivalDescend?.();
+  if (realm === 'xing' && options.descend) world.beginArrivalDescend?.();
   world.createLabels((target) => approach(target, true));
   paintTravel();
 }
@@ -350,23 +377,26 @@ async function goXing() {
     switching = false;
   }
 }
-async function goRealm(via = 'ferry') {
+async function goRealm(via = 'ferry', realmId = 'ri') {
+  if (realmId === 'xing') return goXing();
   if (switching || (game.state.travel?.current || 'he') !== 'he') return;
+  const id = REALMS[realmId]?.playable && realmId !== 'he' ? realmId : 'ri';
   hideCutscene();
   try {
-    const mod = await riReady;
+    const mod = id === 'mei' ? await meiReady : await riReady;
     if ((game.state.travel?.current || 'he') !== 'he') return;
     storePlayer();
     switching = true;
-    const result = game.beginTravel('ri', via);
+    const result = game.beginTravel(id, via);
     if (!result.ok) { toast(result.message); return; }
-    await mountWorld('ri', mod);
+    await mountWorld(id, mod);
     toast(result.message);
-    speak(via === 'balloon' ? VOYAGE_NOTE : FERRY_NOTE);
+    const note = via === 'balloon' ? (id === 'mei' ? VOYAGE_MEI_NOTE : VOYAGE_NOTE) : (id === 'mei' ? SHIP_NOTE : FERRY_NOTE);
+    speak(note);
     updateContext();
   } catch (error) {
-    console.warn('去日谷没有完成', error);
-    if ((game.state.travel?.current || 'he') === 'ri') game.returnHome();
+    console.warn('出发没有完成', error);
+    if ((game.state.travel?.current || 'he') !== 'he') game.returnHome();
     if (!world || world.released) await mountWorld('he');
     toast('这一次没能出发，还在河谷。');
   } finally {
@@ -390,17 +420,20 @@ async function goHome() {
     switching = false;
   }
 }
-function startFerry() {
+function startFerry(realmId = 'ri') {
   if (cutscene || switching || (game.state.travel?.current || 'he') !== 'he') return;
+  const id = realmId === 'mei' && REALMS.mei?.playable ? 'mei' : 'ri';
   cutscene = createCutscene('ferry', 3);
-  showCutscene(FERRY_NOTE);
+  cutscene.realmId = id;
+  showCutscene(id === 'mei' ? SHIP_NOTE : FERRY_NOTE, id);
 }
 async function finishCutscene() {
   const kind = cutscene?.kind;
+  const realmId = cutscene?.realmId || 'ri';
   cutscene = null;
   hideCutscene();
   hideStar();
-  if (kind === 'ferry') await goRealm('ferry');
+  if (kind === 'ferry') await goRealm('ferry', realmId);
   if (kind === 'voyage' || kind === 'stars') world?.completeVoyage?.();
 }
 function save() { storePlayer(); const result = game.save(); updateSaveStatus(); return result; }
@@ -690,11 +723,11 @@ function paintTutor() {
     tutorPick = { ok: graded.ok, choiceId: action.context?.value };
     if (tutorCurrent?.id) tutorUsed.push(tutorCurrent.id);
     if (graded.ok && tutorActivity?.play === 'quiz') {
-      if (tutor.valley === 'ri') {
-        const supply = game.rewardTutorSupply(tutor.id);
-        if (supply.ok) toast(supply.message);
-      } else if (tutor.valley === 'xing') {
+      if (tutor.valley === 'xing') {
         const supply = game.rewardXingSupply(tutor.id);
+        if (supply.ok) toast(supply.message);
+      } else if (tutor.valley === 'ri' || tutor.valley === 'mei') {
+        const supply = game.rewardTutorSupply(tutor.id);
         if (supply.ok) toast(supply.message);
       }
     }
@@ -846,14 +879,26 @@ function interact(target = null) {
   } else if (target.type === 'tutor') {
     openTutor(target.tutorId);
   } else if (target.type === 'ferry') {
-    if ((game.state.travel?.current || 'he') === 'ri') goHome();
-    else startFerry();
+    if ((game.state.travel?.current || 'he') !== 'he') goHome();
+    else startFerry(target.realmId || 'ri');
   } else if (target.type === 'letter') {
-    const card = $('letter-card');
-    const text = $('letter-text');
-    if (text) text.textContent = '纸船上画着一面缺了角的鲤鱼旗。';
-    if (card) card.hidden = false;
-    game.seeLetter('letter-ri-1');
+    if (target.id === 'mei-letter') {
+      const card = $('mei-letter');
+      if (card) card.hidden = false;
+      game.seeLetter('letter-mei-1');
+    } else if (target.id === 'xing-meteor') {
+      const card = $('letter-card');
+      const text = $('letter-text');
+      if (text) text.textContent = METEOR_LETTER;
+      if (card) card.hidden = false;
+      game.seeLetter('letter-xing-meteor');
+    } else {
+      const card = $('letter-card');
+      const text = $('letter-text');
+      if (text) text.textContent = '纸船上画着一面缺了角的鲤鱼旗。';
+      if (card) card.hidden = false;
+      game.seeLetter('letter-ri-1');
+    }
   } else if (target.type === 'meteor') {
     const card = $('letter-card');
     const text = $('letter-text');
@@ -867,7 +912,9 @@ function interact(target = null) {
       return;
     }
     if (target.xing === 'hopper') { toast(game.seeHopper().message, true); return; }
-    openXing(target.xing === 'moss' ? 'moss' : target.xing === 'lab' ? 'lab' : 'lab');
+    openXing(target.xing === 'moss' ? 'moss' : 'lab');
+  } else if (target.type === 'maple' || target.type === 'project' || target.type === 'quilt') {
+    openPanel(target.type);
   } else if (target.type === 'flag') {
     const result = game.repairKoinobori();
     toast(result.message, result.ok);
@@ -1066,8 +1113,17 @@ function updateContext() {
   }
   const p = world.playerPosition;
   const realmNow = game.state.travel?.current || 'he';
-  const flyingHome = realmNow === 'he' ? (world.balloon?.phase === 'voyage' && world.balloon?.realmId === 'xing' ? '飞向星星' : world.balloon?.phase === 'voyage' ? '看风景去日谷' : world.balloon ? (world.balloonLook().landing ? '飞回草坪基地' : '热气球上看河谷') : '') : '';
-  $('location-name').textContent = realmNow === 'ri' ? '日谷' : realmNow === 'xing' ? (world.balloon?.phase === 'voyage' ? '飞回河谷' : world.balloon ? '外星谷的热气球' : '外星谷') : flyingHome || (tutorNear ? `${tutorNear.name}的${tutorNear.place || '身边'}` : onBalloonLawn(p.x, p.z, 1.2) || p.z > 16 ? BALLOON_NAME : inNumberPark(p.x, p.z, 1.2) ? PARK_NAME : p.x > 5 ? (p.z < 0 ? '溪边球道' : '豆苗的东岸') : p.z < -2 ? '林间小工坊' : '河谷小院');
+  let place = '';
+  if (realmNow === 'ri') place = '日谷';
+  else if (realmNow === 'mei') place = '美谷';
+  else if (realmNow === 'xing') place = world.balloon?.phase === 'voyage' ? '飞回河谷' : world.balloon ? '外星谷的热气球' : '外星谷';
+  else if (world.balloon?.phase === 'voyage') {
+    const id = world.balloon.realmId;
+    place = id === 'xing' ? '飞向星星' : id === 'mei' ? '看风景去美谷' : '看风景去日谷';
+  } else if (world.balloon) place = world.balloonLook().landing ? '飞回草坪基地' : '热气球上看河谷';
+  else if (tutorNear) place = `${tutorNear.name}的${tutorNear.place || '身边'}`;
+  else place = onBalloonLawn(p.x, p.z, 1.2) || p.z > 16 ? BALLOON_NAME : inNumberPark(p.x, p.z, 1.2) ? PARK_NAME : p.x > 5 ? (p.z < 0 ? '溪边球道' : '豆苗的东岸') : p.z < -2 ? '林间小工坊' : '河谷小院';
+  $('location-name').textContent = place;
   paintTravel();
   const clock=realMoment();
   const hh=String(clock.hour).padStart(2,'0'),mm=String(clock.minute).padStart(2,'0');
@@ -1088,8 +1144,8 @@ function start() {
 async function bootValley() {
   await loadTutorPack();
   try {
-  const currentRealm = game.state.travel?.current;
-  const savedRealm = currentRealm === 'ri' || currentRealm === 'xing' ? currentRealm : 'he';
+  const saved = game.state.travel?.current;
+  const savedRealm = REALMS[saved]?.playable && saved !== 'he' ? saved : 'he';
   await mountWorld(savedRealm);
   panels = createPanels({
     game, icon, toast, speak, onSelect: selectItem, onReclaim: reclaimNearby, onPlaceFigure: placeFigureNearby,
@@ -1103,7 +1159,7 @@ async function bootValley() {
     if ((world.realmId || 'he') !== (game.state.travel?.current || 'he')) return;
     if (world.state !== game.state) { chosenTarget = null; buildCell = null; dismissedFrontiers.clear(); world.select(null); }
     world.sync(game.state); updateUI();
-    if (panelType === 'garden' || panelType === 'life' || panelType === 'washi') panels.refresh();
+    if (panelType === 'garden' || panelType === 'life' || panelType === 'washi' || panelType === 'maple' || panelType === 'project' || panelType === 'quilt') panels.refresh();
     if (xingSheet === 'crystal') paintCrystalSheet();
     else if (panelType === 'kiln') panels.touchKiln();
   });
@@ -1182,7 +1238,7 @@ $('ri-flag')?.addEventListener('click', () => {
 });
 $('balloon-voyage')?.addEventListener('click', () => {
   if (!started || !world?.startVoyage?.('ri')) return;
-  showCutscene(VOYAGE_NOTE);
+  showCutscene(VOYAGE_NOTE, 'ri');
   showBalloon(world.balloonLook());
 });
 $('balloon-stars')?.addEventListener('click', () => {
@@ -1207,6 +1263,17 @@ $('xing-case')?.addEventListener('click', () => {
 });
 $('xing-stamps')?.addEventListener('click', () => openPanel('stamps'));
 $('xing-sheet')?.addEventListener('click', handleXingSheet);
+$('balloon-voyage-mei')?.addEventListener('click', () => {
+  if (!started || !REALMS.mei?.playable || !world?.startVoyage?.('mei')) return;
+  showCutscene(VOYAGE_MEI_NOTE, 'mei');
+  showBalloon(world.balloonLook());
+});
+$('travel-go-mei')?.addEventListener('click', () => { if (started && !panels?.isOpen()) startFerry('mei'); });
+$('mei-letter-close')?.addEventListener('click', () => { const card = $('mei-letter'); if (card) card.hidden = true; });
+for (const [id, panel] of [['mei-maple', 'maple'], ['mei-project', 'project'], ['mei-quilt', 'quilt'], ['mei-trade', 'trade'], ['mei-lantern', 'lantern'], ['mei-thanks', 'thanks']]) {
+  $(id)?.addEventListener('click', () => { if (started && (game.state.travel?.current || 'he') === 'mei') openPanel(panel); });
+}
+$('mei-stamps')?.addEventListener('click', () => { if (started) openPanel('stamps'); });
 $('balloon-land')?.addEventListener('click', () => {
   if (!started || !world?.requestBalloonLand()) return;
   toast('好，热气球自己飞回草坪基地。');

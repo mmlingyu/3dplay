@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GameState, createInitialState, validateSave } from '../src/game-state.js';
-import { STORAGE_KEY, XING_BACKUP_KEY } from '../src/game-data.js';
+import { MEI_BACKUP_KEY, STORAGE_KEY, XING_BACKUP_KEY } from '../src/game-data.js';
 import { emptyRealm } from '../src/realm-data.js';
 import { balloonLook } from '../src/balloon-data.js';
 import { XING_STAMPS, starRouteVisible } from '../src/xing-data.js';
@@ -45,6 +45,8 @@ test('幻想航线只在游览时出现，渡船去不了外星谷', () => {
   assert.match(look.note, /幻想航线/);
   assert.match(look.note, /飞不出大气层/);
   assert.equal(balloonLook('voyage', 1, 'orbit').title, '看风景去日谷');
+  assert.equal(balloonLook('voyage', 0, 'orbit', 'mei').title, '看风景去美谷');
+  assert.equal(balloonLook('voyage', 0, 'orbit', 'xing').title, '飞向星星');
   const game = new GameState(new MemoryStorage());
   const ferry = game.beginTravel('xing', 'ferry');
   assert.equal(ferry.ok, false);
@@ -148,8 +150,11 @@ test('没有 travel 的 v1、只有日谷、以及带着美谷原文的存档都
   assert.equal(opened.state.inventory.wood, v1.inventory.wood);
   opened.save();
   assert.equal(plain.getItem(XING_BACKUP_KEY), v1Text);
+  assert.equal(plain.getItem(MEI_BACKUP_KEY), v1Text);
+  assert.notEqual(XING_BACKUP_KEY, MEI_BACKUP_KEY);
   opened.save();
   assert.equal(plain.getItem(`${XING_BACKUP_KEY}-1`), null);
+  assert.equal(plain.getItem(`${MEI_BACKUP_KEY}-1`), null);
 
   const ri = world();
   ri.blocks = [{ id: 'block-3', item: 'plank', x: -2, y: 0, z: 1, rotation: 0, w: 1, d: 1 }];
@@ -173,16 +178,23 @@ test('没有 travel 的 v1、只有日谷、以及带着美谷原文的存档都
   assert.equal(riGame.state.blocks[0].item, 'plank');
 
   const both = JSON.parse(JSON.stringify(ri));
-  both.travel.realms.mei = { note: '美谷还在做', blocks: [{ id: 'block-8', item: 'plank' }] };
+  both.travel.realms.mei = emptyRealm('mei');
+  both.travel.realms.mei.decor.face = 'cat';
+  both.travel.realms.mei.blocks = [{ id: 'block-9', item: 'plank', x: 4, y: 0, z: 6, rotation: 0, w: 1, d: 1 }];
   const meiText = JSON.stringify(both);
   const meiStore = new MemoryStorage();
   meiStore.setItem(STORAGE_KEY, meiText);
+  meiStore.setItem(MEI_BACKUP_KEY, '{"mei-older":true}');
   const meiGame = new GameState(meiStore);
   meiGame.save();
-  assert.deepEqual(meiGame.state.travel.realms.mei, both.travel.realms.mei);
+  assert.equal(meiStore.getItem(MEI_BACKUP_KEY), '{"mei-older":true}');
+  assert.equal(meiStore.getItem(XING_BACKUP_KEY), meiText);
+  assert.equal(meiGame.state.travel.realms.mei.decor.face, 'cat');
+  assert.equal(meiGame.state.travel.realms.mei.blocks[0].id, 'block-9');
   assert.deepEqual(meiGame.state.travel.realms.ri.blocks, riCopy.blocks);
   meiGame.beginTravel('xing', 'balloon');
-  assert.deepEqual(meiGame.state.travel.realms.mei, both.travel.realms.mei);
+  assert.equal(meiGame.state.travel.realms.mei.decor.face, 'cat');
+  assert.equal(meiGame.state.travel.realms.mei.blocks[0].item, 'plank');
 
   const stepwise = new MemoryStorage();
   stepwise.setItem(STORAGE_KEY, v1Text);
@@ -191,7 +203,9 @@ test('没有 travel 的 v1、只有日谷、以及带着美谷原文的存档都
   const second = new GameState(stepwise);
   second.save();
   assert.equal(stepwise.getItem(`${XING_BACKUP_KEY}-1`), null);
+  assert.equal(stepwise.getItem(`${MEI_BACKUP_KEY}-1`), null);
   assert.equal(stepwise.getItem(XING_BACKUP_KEY), v1Text);
+  assert.equal(stepwise.getItem(MEI_BACKUP_KEY), v1Text);
   assert.deepEqual(second.state.travel.realms.xing.glyphs, []);
   assert.equal(second.state.inventory.wood, opened.state.inventory.wood);
   assert.equal(second.state.travel.current, 'he');
@@ -226,7 +240,9 @@ test('外星谷位置坏了回到草坪，记录坏了回河谷，日谷和美�
   save.travel.visited = ['xing'];
   save.travel.realms.ri = emptyRealm('ri');
   save.travel.realms.ri.claimed = ['ri-flag-repaired'];
-  save.travel.realms.mei = { keep: 'mei-blob' };
+  save.travel.realms.mei = emptyRealm('mei');
+  save.travel.realms.mei.decor.face = 'cat';
+  save.travel.realms.mei.claimed = ['mei-kept'];
   save.travel.realms.xing = emptyRealm('xing');
   save.travel.realms.xing.player.y = 80;
   const high = repairTravelRaw(JSON.parse(JSON.stringify(save)));
@@ -234,22 +250,23 @@ test('外星谷位置坏了回到草坪，记录坏了回河谷，日谷和美�
   assert.equal(high.raw.travel.realms.xing.player.y, 0);
   assert.match(high.notice, /热气球草坪/);
   assert.equal(high.raw.travel.realms.ri.claimed[0], 'ri-flag-repaired');
-  assert.deepEqual(high.raw.travel.realms.mei, { keep: 'mei-blob' });
+  assert.equal(high.raw.travel.realms.mei.decor.face, 'cat');
 
   save.travel.realms.xing = { broken: true };
   const bad = repairTravelRaw(JSON.parse(JSON.stringify(save)));
   assert.equal(bad.raw.travel.current, 'he');
   assert.equal(bad.raw.travel.realms.xing, undefined);
   assert.equal(bad.raw.travel.realms.ri.claimed[0], 'ri-flag-repaired');
-  assert.deepEqual(bad.raw.travel.realms.mei, { keep: 'mei-blob' });
+  assert.equal(bad.raw.travel.realms.mei.decor.face, 'cat');
+  assert.equal(bad.raw.travel.realms.mei.claimed[0], 'mei-kept');
   assert.equal(bad.raw.blocks.length, save.blocks.length);
   const checked = validateSave(bad.raw);
   assert.equal(checked.travel.current, 'he');
-  assert.deepEqual(checked.travel.realms.mei, { keep: 'mei-blob' });
+  assert.equal(checked.travel.realms.mei.decor.face, 'cat');
   const storage = new MemoryStorage();
   storage.setItem(STORAGE_KEY, JSON.stringify(save));
   const game = new GameState(storage);
   assert.equal(game.state.travel.current, 'he');
-  assert.deepEqual(game.state.travel.realms.mei, { keep: 'mei-blob' });
+  assert.equal(game.state.travel.realms.mei.decor.face, 'cat');
   assert.equal(game.state.blocks.length, save.blocks.length);
 });

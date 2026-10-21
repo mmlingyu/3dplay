@@ -298,7 +298,7 @@ async function run(kind, viewport, full) {
 
     const broken = await page.evaluate(() => {
       const raw = JSON.parse(localStorage.getItem('yuanyuan-river-valley-v1'));
-      raw.travel.realms.mei = { keep: 'mei-blob' };
+      raw.travel.realms.mei.decor = { ...(raw.travel.realms.mei.decor || {}), face: 'cat' };
       raw.travel.realms.xing = { broken: true };
       raw.travel.current = 'xing';
       return JSON.stringify(raw);
@@ -314,7 +314,7 @@ async function run(kind, viewport, full) {
       mei: __valley.game.state.travel.realms.mei,
       home: __valley.game.state.blocks.some((block) => block.item === 'glowmoss-case'),
     }));
-    check(`${kind} 外星谷记录坏了回到河谷且展柜还在`, repaired.current === 'he' && repaired.mei?.keep === 'mei-blob' && repaired.home);
+    check(`${kind} 外星谷记录坏了回到河谷且展柜还在`, repaired.current === 'he' && repaired.mei?.decor?.face === 'cat' && repaired.home);
 
     const statsBefore = await page.evaluate(() => ({ ...__valley.sceneStats }));
     const trips = Number(process.env.XING_TRIPS || 10);

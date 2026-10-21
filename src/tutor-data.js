@@ -1,5 +1,6 @@
 /** Valley tutors, ages 4–12. Characters and quizzes come from the knowledge pack. */
 
+import { meiTutorPack } from './mei-tutors.js';
 import { riTutorPack } from './ri-tutors.js';
 import { xingTutorPack } from './xing-tutors.js';
 
@@ -50,6 +51,7 @@ function fetchPack(url, ms = 800) {
 
 function applyLocalPack(key) {
   if (key === 'xing') return applyPack(xingTutorPack, 'xing');
+  if (key === 'mei') return applyPack(meiTutorPack, 'mei');
   return applyPack(riTutorPack, key);
 }
 
