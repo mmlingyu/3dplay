@@ -128,10 +128,10 @@ npm run test:browser
 
 浏览器检查默认使用 `http://127.0.0.1:5174`，可通过 `GAME_TEST_URL` 指定其他测试地址。它使用独立浏览器上下文，不清理正常使用者的存档。检查记录写入 `output/browser-verification.json`。
 
-GitHub Pages 预览由 `.github/workflows/preview.yml` 在旅行分支每次 push 时执行 `npm ci && npm run build`，`VITE_BASE=/3dplay/`，再发布到 `gh-pages`。地址是 https://mmlingyu.github.io/3dplay/ 。不设置 `VITE_BASE` 时，构建仍用相对路径，原来的 `/play/` 部署不变。预览没有后端时，游戏只用浏览器里的存档和仓库里的日谷角色，不弹连接失败。若 Pages 还没打开，这个地址会是 404。本机可以看同一份预览构建：
+GitHub Pages 预览由 `.github/workflows/preview.yml` 在 `main` 每次 push 时执行 `npm ci && npm run build`，只在这一步设置 `VITE_BASE=/3dplay/` 和 `VITE_STATIC_PREVIEW=1`，再发布到 `gh-pages`。地址是 https://mmlingyu.github.io/3dplay/ 。`VITE_STATIC_PREVIEW=1` 时，`/api` 和 `/account` 请求不发出，登录入口显示为「本地游玩」，游戏用浏览器里的存档和仓库里的角色。不设置这两个变量时，构建仍用相对路径，原来的 `/play/` 部署会照常请求后端。若 Pages 还没打开，这个地址会是 404。本机可以看同一份预览构建：
 
 ```sh
-VITE_BASE=/3dplay/ npm run build
+VITE_BASE=/3dplay/ VITE_STATIC_PREVIEW=1 npm run build
 VITE_BASE=/3dplay/ npm run preview
 ```
 
