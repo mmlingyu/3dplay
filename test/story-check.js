@@ -104,6 +104,7 @@ try {
     world.yaw = 0.64;
     world.distance = 20;
     world.stopWalking();
+    world.updateCamera(1, true);
   });
   await step(old.page, 2);
   calls.fog = await old.page.evaluate(() => __valley.world.renderer.info.render.calls);
@@ -116,6 +117,7 @@ try {
     world.yaw = yaw;
     world.distance = 9;
     world.stopWalking();
+    world.updateCamera(1, true);
   });
   await step(old.page, 2);
   await shot(old.page, 'story-observatory-disk');
@@ -135,6 +137,7 @@ try {
     world.yaw = -1.15;
     world.distance = 14;
     world.stopWalking();
+    world.updateCamera(1, true);
   });
   await step(old.page, 2);
   await shot(old.page, 'story-restore-before');
@@ -167,6 +170,7 @@ try {
     world.yaw = yaw;
     world.distance = 11;
     world.stopWalking();
+    world.updateCamera(1, true);
   });
   await step(old.page, 2);
   await old.page.evaluate(() => __valley.interact(__valley.world.targets.find((item) => item.storyId === 'disk')));
@@ -219,7 +223,28 @@ try {
   check('体验模式用独立存档', tour.touring === true && tour.child === 'child-save-marker' && tour.tourSave && !tour.tourSave.includes('child-save-marker'));
   check('体验模式直接进入傍晚并触发序章', tour.fog === true && tour.guide.length > 8);
   check('体验模式有跳到下一章', tour.next === true);
+  await tourPage.evaluate(() => {
+    const world = __valley.world;
+    world.playerPosition.set(-5, 0, 5);
+    world.yaw = 0.64;
+    world.distance = 20;
+    world.stopWalking();
+    world.updateCamera(1, true);
+  });
+  await step(tourPage, 2);
   await shot(tourPage, 'story-tour-guide-tablet');
+  await tourPage.evaluate(() => {
+    const site = __valley.story.site();
+    const world = __valley.world;
+    const yaw = 0.64;
+    world.playerPosition.set(site.x + Math.sin(yaw) * 2.4, 0, site.z + Math.cos(yaw) * 2.4);
+    world.yaw = yaw;
+    world.distance = 9;
+    world.stopWalking();
+    world.updateCamera(1, true);
+  });
+  await step(tourPage, 2);
+  await shot(tourPage, 'story-tablet-disk');
   await tourPage.click('#tour-next');
   await step(tourPage, 4);
   const skipped = await tourPage.evaluate(() => ({
