@@ -36,6 +36,7 @@ function savedWorld() {
 test('旧存档没有星网字段时补默认值，并在第一次写入前备份', () => {
   const save = savedWorld();
   save.travel.realms.xing.glyphs = ['drop'];
+  delete save.settings.quality;
   const text = JSON.stringify(save);
   const storage = new MemoryStorage();
   storage.setItem(STORAGE_KEY, text);
@@ -43,7 +44,7 @@ test('旧存档没有星网字段时补默认值，并在第一次写入前备�
   assert.equal(game.state.travel.realms.xing.glyphs[0], 'drop');
   assert.equal(game.state.travel.realms.xing.holo.tier, 1);
   assert.equal(game.state.travel.realms.xing.holo.starlight.story, 0);
-  assert.equal(game.state.settings.quality, undefined);
+  assert.equal(game.state.settings.quality, 'fast');
   game.save();
   assert.equal(storage.getItem(HOLO_BACKUP_KEY), text);
   assert.equal(storage.getItem(`${HOLO_BACKUP_KEY}-1`), null);
@@ -101,10 +102,14 @@ test('非法星网记录用中文拒绝', () => {
   assert.match(game.importSave(JSON.stringify(bad)).message, /化身颜色/);
 });
 
-test('画质可选，缺省时不写入，非法值拒绝', () => {
+test('画质缺省是流畅，旧存档没有这个字段也按流畅，非法值拒绝', () => {
   const storage = new MemoryStorage();
   const game = new GameState(storage);
-  assert.equal(game.state.settings.quality, undefined);
+  assert.equal(game.state.settings.quality, 'fast');
+  const bare = JSON.parse(game.exportSave());
+  delete bare.settings.quality;
+  assert.equal(game.importSave(JSON.stringify(bare)).ok, true);
+  assert.equal(game.state.settings.quality, 'fast');
   assert.match(game.setQuality('fast').message, /流畅/);
   assert.equal(JSON.parse(game.exportSave()).settings.quality, 'fast');
   const bad = JSON.parse(game.exportSave());
@@ -180,4 +185,5 @@ test('画质推断：触屏且短边不大时流畅，选择优先', () => {
   assert.equal(inferQuality({ pointerCoarse: false, maxTouchPoints: 5, shortSide: 390 }), 'fast');
   assert.equal(resolveQuality('fine', { pointerCoarse: true, maxTouchPoints: 2, shortSide: 768 }), 'fine');
   assert.equal(resolveQuality(undefined, { pointerCoarse: true, shortSide: 1024 }), 'fast');
+  assert.equal(resolveQuality(undefined, { pointerCoarse: false, maxTouchPoints: 0, shortSide: 800 }), 'fast');
 });
