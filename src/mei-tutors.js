@@ -3,6 +3,9 @@
 export const MEI_AUDIO = Object.freeze([
   'en-hello', 'en-sun', 'en-tree', 'en-friend', 'en-build',
   'en-cat', 'en-measure', 'en-test', 'en-fix', 'en-change',
+  'en-action', 'en-cut', 'en-camera', 'en-star', 'en-light', 'en-take-two',
+  'en-wide', 'en-medium', 'en-close', 'en-frames', 'en-ship',
+  'zh-action', 'zh-cut', 'zh-board', 'zh-shot', 'zh-frames', 'zh-light', 'zh-shard', 'zh-back', 'zh-premiere',
 ]);
 
 const review = Object.freeze({ status: 'draft', published: true });
@@ -120,6 +123,12 @@ export const meiTutorPack = {
           label: '做手工',
           play: 'text',
           say: '改一个地方再试。不用答题也能做纸飞机和风车。',
+        },
+        {
+          id: 'fix-projector',
+          label: '修放映机',
+          play: 'text',
+          say: '影院的老放映机缺齿轮、镜头和灯。和 Orv、咔嚓一起装上就行。不用答题，也不用先做别的故事。',
         },
       ],
       quiz: {

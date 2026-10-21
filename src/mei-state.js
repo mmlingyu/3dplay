@@ -17,6 +17,16 @@ import {
   quiltReady,
 } from './mei-data.js';
 import {
+  BOARD_CARDS,
+  FILM_LIMIT,
+  PARTS,
+  SHARD_LINE,
+  SHOTS,
+  meiAgeBand,
+  projectorStatus,
+  readTour,
+} from './mei-lot.js';
+import {
   capNote,
   changeProject,
   compareTrials,
@@ -193,7 +203,7 @@ export function attachMei(GameState) {
     },
     finishQuilt(cells) {
       if (this.currentRealm() !== 'mei') return fail('拼布台在美谷的图书馆旁边。');
-      const band = this.state.settings?.ageBand;
+      const band = projectBand(this.state.settings?.ageBand);
       if (!quiltReady(cells, band)) {
         if (band === 'older') return fail('转一转，让斜对角的颜色一样。');
         if (band === 'bigger') return fail('让左右两边变成对称。');
@@ -218,7 +228,7 @@ export function attachMei(GameState) {
       return ok(`选了${PUMPKIN_FACES.find((item) => item.id === face).name}。暖暖的，不吓人。`);
     },
     tradeMei(id = 'bean-syrup') {
-      if (this.state.settings?.ageBand !== 'older') return fail('交换板是给 10–12 岁看比例的。想送东西，可以直接送礼物。');
+      if (projectBand(this.state.settings?.ageBand) !== 'older') return fail('交换板是给 9–12 岁看比例的。想送东西，可以直接送礼物。');
       if (this.currentRealm() !== 'mei') return fail('交换板在美谷。');
       const offer = MEI_TRADES.find((item) => item.id === id);
       if (!offer) return fail('这一换还没有。');
@@ -249,6 +259,84 @@ export function attachMei(GameState) {
       });
       const line = item === 'thanks-card' ? '谢谢你记得收获。' : '谢谢你带来的礼物。';
       return ok(`${names[friend]}说：${line}`);
+    },
+    lotStatus() {
+      const realm = realmOf(this.state) || {};
+      const status = projectorStatus(realm, readTour());
+      return {
+        ...status,
+        storyShard: realm.storyShard === true,
+        films: realm.films || [],
+        premiere: realm.premiere === true,
+        band: meiAgeBand(this.state.settings?.ageBand),
+        parts: PARTS,
+        cards: BOARD_CARDS,
+        shots: SHOTS,
+      };
+    },
+    collectMeiPart(part) {
+      if (this.currentRealm() !== 'mei') return fail('零件在美谷片场里。');
+      const known = PARTS.find((item) => item.id === part);
+      if (!known) return fail('这个不是放映机的零件。');
+      const realm = realmOf(this.state);
+      if (!realm.projector) realm.projector = { gear: false, lens: false, lamp: false };
+      if (realm.projector[part]) return ok(`${known.name}已经在手上了。`);
+      this.mutate((state) => { realmOf(state).projector[part] = true; });
+      return ok(`找到${known.name}。拿到放映机那里装上。不用答题。`, { audio: 'zh-light', speak: `找到${known.name}。` });
+    },
+    fixMeiProjector() {
+      if (this.currentRealm() !== 'mei') return fail('放映机在美谷的星光大影院。');
+      const realm = realmOf(this.state);
+      if (realm?.storyShard) return ok(`光之片已经在你这里。${SHARD_LINE}`, { shard: true, replay: true });
+      const status = projectorStatus(realm, readTour());
+      if (status.missing.length) {
+        const names = status.missing.map((id) => PARTS.find((item) => item.id === id)?.name || id).join('、');
+        const near = status.tour ? '灯就在旁边。' : '齿轮在自行车铺附近，镜头在咔嚓身边，灯在纸架旁边。';
+        return fail(`还缺${names}。${near}和 Will、Orv、咔嚓一起装。不用先做别的故事。`);
+      }
+      this.mutate((state) => {
+        const spot = realmOf(state);
+        spot.projector = { gear: true, lens: true, lamp: true };
+        spot.storyShard = true;
+        grant(state, 'mei-premiere');
+      });
+      return ok(`放映机亮了。你拿到光之片，印章是「首映」。${SHARD_LINE}`, { shard: true, audio: 'zh-shard', speak: SHARD_LINE });
+    },
+    saveMeiFilm(frames) {
+      if (this.currentRealm() !== 'mei') return fail('分镜在美谷摄影棚里排。');
+      const cards = Array.isArray(frames) ? frames.slice(0, 3) : [];
+      if (cards.length !== 3 || cards.some((id) => !BOARD_CARDS.some((card) => card.id === id))) {
+        return fail('选三张图，排成开头、中间、结尾。');
+      }
+      const realm = realmOf(this.state);
+      if ((realm.films || []).length >= FILM_LIMIT) return fail('片子已经很多了。首映夜可以反复放。');
+      let saved = null;
+      this.mutate((state) => {
+        const spot = realmOf(state);
+        const id = `film-${spot.films.length + 1}`;
+        saved = { id, kind: 'film', frames: cards, shot: '', subject: '' };
+        spot.films.push(saved);
+      });
+      return ok('三格分镜排好了。首映夜可以放。不评名次。', { film: saved, audio: 'zh-board', speak: '三格排好了。' });
+    },
+    saveMeiPhoto(subject = 'star', shot = 'medium') {
+      if (this.currentRealm() !== 'mei') return fail('在美谷摄影棚里拍。');
+      const realm = realmOf(this.state);
+      if ((realm.films || []).length >= FILM_LIMIT) return fail('照片已经很多了。');
+      const safeShot = SHOTS.some((item) => item.id === shot) ? shot : 'medium';
+      const safeSubject = BOARD_CARDS.some((item) => item.id === subject) ? subject : 'star';
+      this.mutate((state) => {
+        const spot = realmOf(state);
+        spot.films.push({ id: `film-${spot.films.length + 1}`, kind: 'photo', frames: [], shot: safeShot, subject: safeSubject });
+      });
+      return ok('拍好了。首映夜会放这张。不打分。', { audio: 'zh-shot', speak: '拍好了。' });
+    },
+    openPremiere() {
+      if (this.currentRealm() !== 'mei') return fail('首映夜在美谷的大影院。');
+      const films = realmOf(this.state)?.films || [];
+      this.mutate((state) => { realmOf(state).premiere = true; });
+      if (!films.length) return ok('还没有片子。去摄影棚排三格，或拍一张。没有也能先看星星。不评名次。', { audio: 'zh-premiere', speak: '首映夜不排名。' });
+      return ok(`放你拍的 ${films.length} 部。大家都鼓掌。不评名次。`, { audio: 'zh-premiere', speak: '大家都鼓掌。不排名。' });
     },
   });
 }

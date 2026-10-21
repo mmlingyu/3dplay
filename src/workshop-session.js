@@ -6,8 +6,12 @@ export class WorkshopSession {
   }
   clear(){this.grid=Array.from({length:this.side},()=>Array(this.side).fill(null));this.selectedRecipe=null;}
   valid(x,y){return !this.disposed&&Number.isInteger(x)&&Number.isInteger(y)&&x>=0&&y>=0&&x<this.side&&y<this.side;}
+  openMatches(){
+    const restored = this.game.state.travel?.story?.restored || [];
+    return this.game.getMatches(this.grid).filter((recipe) => !recipe.story || restored.includes(recipe.story) || restored.includes('all'));
+  }
   reconcile(){
-    const matches=this.game.getMatches(this.grid);
+    const matches=this.openMatches();
     if(!matches.some(r=>r.id===this.selectedRecipe))this.selectedRecipe=matches.length===1?matches[0].id:null;
     return matches;
   }
@@ -30,7 +34,7 @@ export class WorkshopSession {
     this.clear();r.pattern.forEach((row,y)=>row.forEach((item,x)=>{this.grid[y][x]=item;}));this.selectedRecipe=id;return true;
   }
   choose(id){
-    if(this.disposed||!this.game.getMatches(this.grid).some(r=>r.id===id))return false;
+    if(this.disposed||!this.openMatches().some(r=>r.id===id))return false;
     this.selectedRecipe=id;return true;
   }
   snapshot(){

@@ -72,8 +72,8 @@ export const BOTTLE_SPOTS = Object.freeze({
 const BOTTLE_WINDOW = Object.freeze({ start: 0.42, end: 0.7 });
 
 export const VISTA_STAMPS = Object.freeze([
-  { id: 'vista-ri', name: '发现日谷', icon: 'ferry', how: '坐热气球升高，看见海边的雪山和小塔。不用答题，渡口也照样能走。' },
-  { id: 'vista-mei', name: '发现美谷', icon: 'leaf', how: '坐热气球升高，看见红谷仓和风车。不用答题。' },
+  { id: 'vista-ri', name: '发现日谷', icon: 'ferry', how: '坐热气球升高，看见雪山和红白铁塔。不用答题，渡口也照样能走。' },
+  { id: 'vista-mei', name: '发现美谷', icon: 'leaf', how: '坐热气球升高，看见山坡上的大字和红色吊桥。不用答题。' },
   { id: 'vista-xing', name: '发现外星谷', icon: 'star', how: '坐热气球升高，看见悬浮岛和带环的星球。这是游戏里的想象。不用答题。' },
 ]);
 
@@ -102,6 +102,7 @@ const ROUTE_COLORS = Object.freeze({ ri: '#d98aa4', mei: '#c45c4a', xing: '#6aa6
 
 export function vistaBand(ageBand) {
   if (ageBand === 'bigger' || ageBand === 'older') return ageBand;
+  if (ageBand === 'senior') return 'older';
   return 'little';
 }
 
@@ -120,7 +121,7 @@ export function vistaOpacity(clarity) {
 export function vistaSignals(moment) {
   const period = moment?.period || '中午';
   const night = period === '晚上' || period === '深夜';
-  return { kite: !night, lantern: night, windmill: true, crystal: night };
+  return { kite: !night, lantern: night, windmill: true, crystal: night, searchlight: night };
 }
 
 export function nearestVista(origin, discovered = {}) {
@@ -211,7 +212,37 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-export function drawVistaMap(canvas, { discovered = {}, band = 'little' } = {}) {
+function drawRiMark(ctx, x, y, night) {
+  ctx.fillStyle = '#f7f4ef';
+  ctx.beginPath();
+  ctx.moveTo(x - 20, y + 12);
+  ctx.lineTo(x - 6, y - 16);
+  ctx.lineTo(x + 6, y + 12);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#c8402a';
+  ctx.fillRect(x + 6, y - 18, 6, 30);
+  ctx.fillStyle = '#f7f4ef';
+  ctx.fillRect(x + 6, y - 8, 6, 7);
+  ctx.fillRect(x + 6, y + 6, 6, 6);
+  if (night) {
+    ctx.fillStyle = '#ffd27a';
+    ctx.beginPath();
+    ctx.arc(x + 9, y - 20, 3.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffb25e';
+    ctx.fillRect(x - 18, y + 4, 5, 8);
+    ctx.beginPath();
+    ctx.arc(x - 15.5, y + 3, 2.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#24344a';
+  ctx.font = '700 11px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('日', x - 4, y + 26);
+}
+
+export function drawVistaMap(canvas, { discovered = {}, band = 'little', overlay = null, night = false } = {}) {
   if (!canvas?.getContext) return;
   const layout = MAP_LAYOUT;
   const ratio = Math.min(2, canvas.ownerDocument?.defaultView?.devicePixelRatio || 1);
@@ -265,12 +296,15 @@ export function drawVistaMap(canvas, { discovered = {}, band = 'little' } = {}) 
       ctx.stroke();
       ctx.restore();
     }
-    ctx.fillStyle = ROUTE_COLORS[id];
-    roundRect(ctx, spot.x - 16, spot.y - 16, 32, 32, 10);
-    ctx.fill();
-    ctx.fillStyle = '#fffaf0';
-    ctx.font = '700 12px sans-serif';
-    ctx.fillText(vista.name.slice(0, 1), spot.x, spot.y + 4);
+    if (id === 'ri') drawRiMark(ctx, spot.x, spot.y, night);
+    else {
+      ctx.fillStyle = ROUTE_COLORS[id];
+      roundRect(ctx, spot.x - 16, spot.y - 16, 32, 32, 10);
+      ctx.fill();
+      ctx.fillStyle = '#fffaf0';
+      ctx.font = '700 12px sans-serif';
+      ctx.fillText(vista.name.slice(0, 1), spot.x, spot.y + 4);
+    }
   }
   if (vistaBand(band) === 'older') {
     ctx.strokeStyle = '#3f6b52';
@@ -291,4 +325,5 @@ export function drawVistaMap(canvas, { discovered = {}, band = 'little' } = {}) 
   ctx.fill();
   ctx.fillStyle = '#8f6238';
   ctx.fillRect(layout.dock.x - 5, layout.dock.y - 3, 10, 6);
+  if (typeof overlay === 'function') overlay(ctx, layout);
 }

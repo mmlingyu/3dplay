@@ -1,8 +1,10 @@
 /** Valley tutors, ages 4–12. Characters and quizzes come from the knowledge pack. */
 
 import { meiTutorPack } from './mei-tutors.js';
+import { mergedQuizOrder } from './realm-data.js';
 import { riTutorPack } from './ri-tutors.js';
 import { xingTutorPack } from './xing-tutors.js';
+import { staticPreviewEnabled } from './static-preview.js';
 
 const packs = {
   he: { audience: '4-12', subjects: [], characters: [] },
@@ -56,6 +58,7 @@ function applyLocalPack(key) {
 }
 
 async function refreshRemotePack(key) {
+  if (staticPreviewEnabled()) return key === 'he' ? packs[key] : applyLocalPack(key);
   const url = key === 'he' ? '/api/knowledge/tutors' : `/api/knowledge/tutors?valley=${encodeURIComponent(key)}`;
   try {
     const response = await fetchPack(url);
@@ -96,12 +99,23 @@ export function careTopics(tutorId) {
 
 export function nextQuestion(tutorId, band, usedIds = []) {
   const book = tutorById(tutorId)?.quiz || {};
-  const order = band === 'older' ? ['older', 'bigger', 'little'] : band === 'bigger' ? ['bigger', 'little'] : ['little'];
+  const order = mergedQuizOrder(band);
   let list = [];
-  for (const name of order) {
-    if (Array.isArray(book[name]) && book[name].length) {
-      list = book[name];
-      break;
+  if (band === 'junior' || band === 'senior') {
+    const seen = new Set();
+    for (const name of order) {
+      for (const item of book[name] || []) {
+        if (!item?.id || seen.has(item.id)) continue;
+        seen.add(item.id);
+        list.push(item);
+      }
+    }
+  } else {
+    for (const name of order) {
+      if (Array.isArray(book[name]) && book[name].length) {
+        list = book[name];
+        break;
+      }
     }
   }
   if (!list.length) return null;

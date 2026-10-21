@@ -116,8 +116,10 @@ test('画质可选，缺省时不写入，非法值拒绝', () => {
 test('年龄只影响星网内容，小的档位进 6–8', () => {
   assert.equal(holoAge('little'), 'young');
   assert.equal(holoAge('bigger'), 'young');
+  assert.equal(holoAge('junior'), 'young');
   assert.equal(holoAge(null), 'young');
   assert.equal(holoAge('older'), 'older');
+  assert.equal(holoAge('senior'), 'older');
   assert.equal(makeStage('little', 'num-1', 'same').kind, 'count');
   assert.equal(makeStage('older', 'num-1', 'same').kind, 'calc');
   assert.equal(tierLabel(8, 'little'), '6 阶（满）');

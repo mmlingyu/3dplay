@@ -1,6 +1,6 @@
 /** Beauty-valley constants. Home stays neutral. This module does not import the travel framework. */
 
-export const SHIP_NOTE = '坐大船可以过大洋到美谷。路程在游戏里变短了。';
+export const SHIP_NOTE = '坐大船可以过大洋到美谷。路程在游戏里变短了。进港时，船从红色吊桥下面穿过。';
 export const VOYAGE_MEI_NOTE = '路程和天气在游戏里被简化了。真实的热气球跨海要看风向和天气。';
 export const MAPLE_NOTE = '枫树汁大部分是水。现实里，含糖大约 2% 的树汁要很多份才能熬出 1 份糖浆。这里收成 10 份熬成 1 份，时间也缩短到大约 20 秒。这是游戏里的简化。';
 export const PLANE_NOTE = '纸飞机的飞行距离来自一张定好的规则表。同样的机头和机翼，结果总是一样。这不是空气动力学计算。';
@@ -47,9 +47,16 @@ export const MEI_STAMPS = Object.freeze([
   { id: 'mei-project', name: '完成一个项目', icon: 'project', how: '在项目板上画、做、试。可以改一个地方，也可以跳过。不用答题。' },
 ]);
 
+export const MEI_PREMIERE_STAMP = Object.freeze(
+  { id: 'mei-premiere', name: '首映', icon: 'star', how: '和 Will、Orv、咔嚓修好影院的老放映机。不用答题，也不用先做别的故事。' },
+);
+
 export const MEI_AUDIO = Object.freeze([
   'en-hello', 'en-sun', 'en-tree', 'en-friend', 'en-build',
   'en-cat', 'en-measure', 'en-test', 'en-fix', 'en-change',
+  'en-action', 'en-cut', 'en-camera', 'en-star', 'en-light', 'en-take-two',
+  'en-wide', 'en-medium', 'en-close', 'en-frames', 'en-ship',
+  'zh-action', 'zh-cut', 'zh-board', 'zh-shot', 'zh-frames', 'zh-light', 'zh-shard', 'zh-back', 'zh-premiere',
 ]);
 
 export const QUILT_COLORS = Object.freeze([
@@ -101,7 +108,9 @@ export const MEI_REALM = Object.freeze({
   theme: 'usa',
   entry: 'dock',
   altEntry: 'balloon',
-  festivals: Object.freeze([]),
+  festivals: Object.freeze([
+    Object.freeze({ id: 'premiere-night', name: '星光首映夜', note: '孩子自己打开。放自己拍的照片和小电影。不评名次。相关手工全年都能做。' }),
+  ]),
   bounds: Object.freeze({ minX: -16, maxX: 15, minZ: -16, maxZ: 15 }),
   flight: Object.freeze({ minX: -14, maxX: 14, minZ: -14, maxZ: 14 }),
   visitor: Object.freeze({ minX: 2, maxX: 10, minZ: 4, maxZ: 11 }),

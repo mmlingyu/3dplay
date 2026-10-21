@@ -11,6 +11,7 @@ import {
   TRADE_NOTE,
 } from './mei-data.js';
 import { PLANE_NOTE, WINDMILL_NOTE, CABIN_NOTE } from './mei-data.js';
+import { LOT_PANEL_TITLES, handleLotAction, lotPanelHtml } from './mei-lot-panels.js';
 import { PROJECT_GOALS, projectBand, resultLine } from './project-board.js';
 
 export const MEI_PANEL_TITLES = {
@@ -20,12 +21,15 @@ export const MEI_PANEL_TITLES = {
   trade: '交换板',
   lantern: '南瓜灯',
   thanks: '感谢卡',
+  ...LOT_PANEL_TITLES,
 };
 
 const NOTES = { windmill: WINDMILL_NOTE, plane: PLANE_NOTE, cabin: CABIN_NOTE };
 let quiltPick = [];
 
-export function meiPanelHtml(type, { game, button, escapeHTML }) {
+export function meiPanelHtml(type, { game, button, escapeHTML, svg }) {
+  const lot = lotPanelHtml(type, { game, button, escapeHTML, svg });
+  if (lot) return lot;
   if (type === 'maple') return mapleView(game, button, escapeHTML);
   if (type === 'project') return projectView(game, button, escapeHTML);
   if (type === 'quilt') return quiltView(game, button, escapeHTML);
@@ -36,6 +40,7 @@ export function meiPanelHtml(type, { game, button, escapeHTML }) {
 }
 
 export function handleMeiAction({ action, target, game, notifyResult, render }) {
+  if (handleLotAction({ action, target, game, notifyResult, render })) return true;
   const known = ['maple-start', 'maple-claim', 'project-goal', 'project-draw', 'project-make', 'project-try', 'project-change', 'project-retry', 'project-skip', 'project-finish', 'quilt-color', 'quilt-done', 'trade-make', 'lantern-face', 'lantern-make', 'thanks-make', 'gift-give'];
   if (!known.includes(action)) return false;
   let result = { ok: false, message: '再点一次。' };
@@ -143,8 +148,8 @@ function quiltView(game, button, escapeHTML) {
 }
 
 function tradeView(game, button, escapeHTML) {
-  if (game.state.settings?.ageBand !== 'older') {
-    return `<p>交换板给 10–12 岁看比例。想送东西，可以直接送礼物。</p><div class="panel-row">${button('gift-give', '送感谢卡', { className: 'primary-btn', label: '送感谢卡', data: { item: 'thanks-card', friend: 'joe' } })}</div>`;
+  if (projectBand(game.state.settings?.ageBand) !== 'older') {
+    return `<p>交换板给 9–12 岁看比例。想送东西，可以直接送礼物。</p><div class="panel-row">${button('gift-give', '送感谢卡', { className: 'primary-btn', label: '送感谢卡', data: { item: 'thanks-card', friend: 'joe' } })}</div>`;
   }
   const offer = MEI_TRADES[0];
   return `<p>${escapeHTML(TRADE_NOTE)} ${escapeHTML(offer.note)}</p><div class="panel-row">${button('trade-make', '交换', { className: 'primary-btn', label: '用豆子换枫糖浆', data: { id: offer.id } })}</div>`;

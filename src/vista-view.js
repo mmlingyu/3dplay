@@ -83,25 +83,30 @@ export function mountVistas(scene) {
   const riMat = basic(0.3);
   materials.push(riMat);
   addMesh(ri, mergeParts([
-    cone(7.2, 16, 0, 8, 0, '#f7f4ef', 7),
-    cone(2.4, 5, 3.2, 4.2, 1.2, '#d9e4ea', 6),
-    box(1.5, 7.2, 1.5, -2.4, 3.6, 2.2, '#cbb59a'),
-    cone(1.3, 2.2, -2.4, 8.2, 2.2, '#b4533a', 5),
-    cone(1.6, 3.4, 4.6, 1.8, -1.4, '#e7a0b4', 6),
-    cone(1.3, 2.8, 6.4, 1.5, 0.6, '#f0b7c6', 6),
-    cone(1.1, 2.4, 3.4, 1.3, -2.6, '#e08aa6', 5),
+    cone(7.4, 14.5, -2.2, 7.2, 0.4, '#f7f4ef', 7),
+    cone(2.1, 4, 1.4, 3.2, 1.6, '#e4eef4', 6),
+    box(2.1, 1.5, 1.5, 3.6, 0.85, -1.4, '#8d8f93'),
+    box(1.5, 2.2, 1.3, 5.8, 1.2, 1.1, '#6e7580'),
+    box(0.55, 12.2, 0.55, 4.6, 6.2, -0.4, '#c8402a'),
+    box(0.68, 1.15, 0.68, 4.6, 11.6, -0.4, '#f4efe6'),
+    box(0.62, 1.2, 0.62, 4.6, 9.4, -0.4, '#f4efe6'),
+    box(0.62, 1.2, 0.62, 4.6, 6.6, -0.4, '#f4efe6'),
+    box(8.2, 0.16, 0.26, 0.4, 4.5, 2.2, '#8d8f93'),
   ]), riMat, 'ri', pick);
   const kiteMat = flat('#f6d56a', 0.3);
   const kite = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.8), kiteMat);
-  kite.position.set(3.2, 11.5, 1.4);
+  kite.position.set(-4.2, 11.2, 1.2);
   kite.userData.vistaId = 'ri';
   ri.add(kite);
   materials.push(kiteMat);
   const lanternMat = flat('#ffd27a', 0.3);
-  const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.45, 6, 5), lanternMat);
-  lantern.position.set(-2.4, 6.4, 2.4);
+  const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.42, 6, 5), lanternMat);
+  lantern.position.set(-5.4, 2.4, 1.8);
   lantern.userData.vistaId = 'ri';
-  ri.add(lantern);
+  const towerTip = new THREE.Mesh(new THREE.SphereGeometry(0.34, 6, 5), lanternMat);
+  towerTip.position.set(4.6, 12.6, -0.4);
+  towerTip.userData.vistaId = 'ri';
+  ri.add(lantern, towerTip);
   materials.push(lanternMat);
 
   const mei = new THREE.Group();
@@ -109,23 +114,39 @@ export function mountVistas(scene) {
   const meiMat = basic(0.3);
   materials.push(meiMat);
   addMesh(mei, mergeParts([
-    box(6.4, 4.2, 4.2, 0, 2.2, 0, '#c45c4a'),
-    box(7.2, 1.6, 4.8, 0, 4.8, 0, '#8f3b32'),
-    box(0.28, 6.4, 0.28, 4.8, 3.2, 0, '#f2e2c4'),
-    cone(1.8, 3.6, -4.2, 1.8, 1.2, '#c4503a', 6),
-    cone(1.5, 3, -6.2, 1.5, -0.4, '#d4653a', 6),
-    cone(1.3, 2.6, -3.2, 1.3, -1.6, '#b84332', 5),
-    cone(1.2, 2.4, -5.4, 1.2, 2.2, '#e07a45', 5),
+    box(7.4, 1.5, 3.2, 0, 1.15, -1.4, '#6a5344'),
+    box(5.4, 1.15, 2.4, 0, 2.35, -1.25, '#7b624f'),
+    box(0.32, 2.15, 0.32, -2.35, 4.2, -0.55, '#f7f4ef'),
+    box(0.32, 2.15, 0.32, -1.25, 4.2, -0.55, '#f7f4ef'),
+    box(1.4, 0.28, 0.28, -1.8, 3.25, -0.55, '#f7f4ef'),
+    box(1.15, 0.24, 0.26, 0.05, 5.15, -0.55, '#f7f4ef'),
+    box(1.15, 0.24, 0.26, 0.05, 4.15, -0.55, '#f7f4ef'),
+    box(1.15, 0.24, 0.26, 0.05, 3.15, -0.55, '#f7f4ef'),
+    box(0.24, 0.85, 0.26, -0.48, 4.55, -0.55, '#f7f4ef'),
+    box(0.24, 0.85, 0.26, 0.58, 3.55, -0.55, '#f7f4ef'),
+    box(0.3, 2.2, 0.3, 1.55, 4.15, -0.55, '#f7f4ef'),
+    box(0.3, 2.2, 0.3, 2.55, 4.15, -0.55, '#f7f4ef'),
+    box(1.15, 0.24, 0.26, 2.05, 4.55, -0.55, '#f7f4ef'),
+    box(0.42, 3.3, 0.42, -3.7, 1.7, 2.5, '#c44536'),
+    box(0.42, 3.3, 0.42, 3.7, 1.7, 2.5, '#c44536'),
+    box(7.8, 0.24, 0.42, 0, 3.15, 2.5, '#a3262a'),
   ]), meiMat, 'mei', pick);
-  const bladeMat = flat('#f7f1e4', 0.3);
-  const blades = new THREE.Mesh(mergeParts([
-    box(4.6, 0.28, 0.18, 0, 0, 0, '#f7f1e4'),
-    box(0.28, 4.6, 0.18, 0, 0, 0, '#f7f1e4'),
-  ]), bladeMat);
-  blades.position.set(4.8, 6.2, 0.4);
-  blades.userData.vistaId = 'mei';
-  mei.add(blades);
-  materials.push(bladeMat);
+  const beamMat = flat('#ffe3a3', 0.02);
+  const beamGeo = new THREE.ConeGeometry(0.38, 3.4, 5, 1, true);
+  beamGeo.translate(0, 1.5, 0);
+  beamGeo.rotateX(1.05);
+  const beamL = new THREE.Mesh(beamGeo, beamMat);
+  const beamRMat = flat('#ffe3a3', 0.02);
+  const beamR = new THREE.Mesh(beamGeo, beamRMat);
+  beamL.position.set(-3.7, 4.5, 2.5);
+  beamR.position.set(3.7, 4.5, 2.5);
+  beamL.userData.vistaId = 'mei';
+  beamR.userData.vistaId = 'mei';
+  beamL.visible = false;
+  beamR.visible = false;
+  mei.add(beamL, beamR);
+  materials.push(beamMat, beamRMat);
+  pick.push(beamL, beamR);
 
   const xing = new THREE.Group();
   xing.position.set(VISTAS.xing.x, VISTAS.xing.y, VISTAS.xing.z);
@@ -193,7 +214,14 @@ export function mountVistas(scene) {
       kite.visible = signals.kite;
       lanternMat.opacity = signals.lantern ? Math.min(1, opacity + 0.2) : 0.02;
       lantern.visible = signals.lantern;
-      blades.rotation.z += dt * 1.4;
+      towerTip.visible = signals.lantern;
+      const sweep = signals.searchlight ? Math.sin(performance.now() / 700) * 0.65 : 0;
+      beamMat.opacity = signals.searchlight ? Math.min(0.85, opacity + 0.2) : 0.02;
+      beamRMat.opacity = beamMat.opacity;
+      beamL.visible = !!signals.searchlight;
+      beamR.visible = !!signals.searchlight;
+      beamL.rotation.y = sweep;
+      beamR.rotation.y = -sweep + 0.35;
       crystalMat.opacity = signals.crystal ? opacity * (0.45 + 0.55 * (0.5 + 0.5 * Math.sin(performance.now() / 280))) : opacity * 0.22;
       const breathe = 0.5 + 0.5 * Math.sin(performance.now() / 900);
       gateRingMat.opacity = signals.crystal ? opacity * (0.55 + 0.45 * breathe) : opacity * 0.4;

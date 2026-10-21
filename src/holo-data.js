@@ -72,7 +72,7 @@ const UNLOCK_IDS = new Set([
 ]);
 
 export function holoAge(ageBand) {
-  return ageBand === 'older' ? 'older' : 'young';
+  return ageBand === 'older' || ageBand === 'senior' ? 'older' : 'young';
 }
 
 export function tierCap(ageBand) {

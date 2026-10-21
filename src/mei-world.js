@@ -1,9 +1,12 @@
 /** Beauty valley scene. Loaded only when the child travels here, and released on the way home. */
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { balloonLook } from './balloon-data.js';
 import { ITEMS } from './game-data.js';
 import { GEYSER_NOTE } from './mei-data.js';
+import { LOT_SITES } from './mei-lot.js';
+import { frameMeiLot, mountMeiLot, syncMeiLot, tickMeiLot } from './mei-lot-view.js';
 import { drawSouvenir, spinSouvenirs } from './mei-models.js';
 import { REALMS, realmTerrainHeight } from './realm-data.js';
 import { realMoment } from './life-data.js';
@@ -12,16 +15,17 @@ import { trackListeners, trackWorldCreated, trackWorldReleased } from './scene-s
 const MEI = REALMS.mei;
 const LISTENER_COUNT = 6;
 
-function person(world, parent, { skin = '#f3d2b5', shirt = '#7eb6e0', hair = '#3a2a22', pants = '#3d4c63', scale = 1, extra = null }) {
+function person(world, parent, { skin = '#f3d2b5', shirt = '#7eb6e0', hair = '#3a2a22', pants = '#3d4c63', scale = 1, extra = null, compact = false }) {
   const g = new THREE.Group();
   g.scale.setScalar(scale);
-  world.mesh(g, world.head, world.matColor(skin), [0, 1.45, 0]);
-  world.mesh(g, world.box, world.matColor(shirt), [0, 0.92, 0], [0.46, 0.52, 0.28]);
-  world.mesh(g, world.box, world.matColor(hair), [0, 1.62, 0], [0.5, 0.22, 0.48]);
-  world.mesh(g, world.eye, world.mats.dark, [-0.1, 1.48, 0.16], [1, 1, 1]);
-  world.mesh(g, world.eye, world.mats.dark, [0.1, 1.48, 0.16], [1, 1, 1]);
-  world.mesh(g, world.box, world.matColor(pants), [-0.12, 0.42, 0], [0.16, 0.42, 0.16]);
-  world.mesh(g, world.box, world.matColor(pants), [0.12, 0.42, 0], [0.16, 0.42, 0.16]);
+  world.mesh(g, world.box, world.matColor(pants), [-0.1, 0.34, 0], [0.14, 0.66, 0.14]);
+  world.mesh(g, world.box, world.matColor(pants), [0.1, 0.34, 0], [0.14, 0.66, 0.14]);
+  world.mesh(g, world.box, world.matColor(shirt), [0, 0.92, 0], [0.38, 0.58, 0.2]);
+  world.mesh(g, world.head, world.matColor(skin), [0, 1.42, 0], [0.5, 0.5, 0.5]);
+  world.mesh(g, world.box, world.matColor(hair), [0, 1.56, 0], [0.28, 0.1, 0.26]);
+  world.mesh(g, world.eye, world.mats.dark, [-0.06, 1.44, 0.15], [1, 1, 1]);
+  world.mesh(g, world.eye, world.mats.dark, [0.06, 1.44, 0.15], [1, 1, 1]);
+  if (compact) g.traverse((obj) => { if (obj.isMesh) obj.userData.compact = true; });
   if (extra) extra(g);
   parent.add(g);
   return g;
@@ -55,8 +59,8 @@ export class MeiWorld {
     this.scene.background = new THREE.Color('#d7e4c8');
     this.scene.fog = new THREE.Fog('#d7e4c8', 28, 64);
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.8));
-    this.renderer.shadowMap.enabled = true;
+    this.renderer.setPixelRatio(1);
+    this.renderer.shadowMap.enabled = false;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.camera = new THREE.PerspectiveCamera(43, 1, 0.1, 140);
     this.lookAt = new THREE.Vector3();
@@ -82,7 +86,11 @@ export class MeiWorld {
     this.scene.add(this.preview);
     this.groundMeshes = [];
     this.creation = { snapshot: () => [], actionLabel: () => '', tryOut: () => '' };
+    this.markCompact = true;
+    this.frameShot = null;
+    this.lotNight = false;
     this.buildScenery();
+    this.applyQuality(null);
     this.bindPointer();
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas);
@@ -111,11 +119,76 @@ export class MeiWorld {
     const material = typeof color === 'object' ? color : this.matColor(color);
     const mesh = this.mesh(parent, this.box, material, pos, scale);
     if (solid) mesh.castShadow = true;
+    if (this.markCompact) mesh.userData.compact = true;
     return mesh;
   }
 
   solid(x, z, w, d) {
     this.decorColliders.push({ x, z, width: w, depth: d });
+  }
+
+  lotSolids() {
+    const s = LOT_SITES;
+    this.solid(s.sign.x, s.sign.z, 6.2, 2.2);
+    this.solid(s.cinema.x, s.cinema.z - 0.15, 5.2, 3.0);
+    this.solid(s.stage.x, s.stage.z, 3.2, 4.0);
+    this.solid(s.street.x - 0.2, s.street.z, 1.5, 4.0);
+    this.solid(s.western.x + 0.15, s.western.z, 1.4, 3.4);
+    this.solid(s.bridge.x - 4.3, s.bridge.z, 0.7, 0.7);
+    this.solid(s.bridge.x + 4.3, s.bridge.z, 0.7, 0.7);
+    this.solid(s.rabbit.x, s.rabbit.z, 1.1, 1.1);
+  }
+
+  compactMarked() {
+    this.scene.updateMatrixWorld(true);
+    const parts = [];
+    const hidden = [];
+    this.scene.traverse((obj) => {
+      if (!obj.isMesh || obj.userData.compact !== true || obj.geometry !== this.box) return;
+      const color = obj.material?.color;
+      if (!color) return;
+      const geometry = this.box.clone();
+      geometry.applyMatrix4(obj.matrixWorld);
+      const tint = new THREE.Color(color);
+      const count = geometry.getAttribute('position').count;
+      const colors = new Float32Array(count * 3);
+      for (let i = 0; i < count; i += 1) {
+        colors[i * 3] = tint.r;
+        colors[i * 3 + 1] = tint.g;
+        colors[i * 3 + 2] = tint.b;
+      }
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      parts.push(geometry);
+      hidden.push(obj);
+    });
+    if (!parts.length) return;
+    const merged = mergeGeometries(parts, false);
+    for (const geometry of parts) geometry.dispose();
+    if (!merged) return;
+    const mesh = new THREE.Mesh(merged, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.86 }));
+    mesh.userData.live = true;
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+    this.scene.add(mesh);
+    for (const obj of hidden) obj.visible = false;
+  }
+
+  applyQuality(state) {
+    const quality = state?.settings?.quality;
+    const fancy = quality === 'pretty' || quality === 'fine' || quality === 'high' || quality === 'beautiful';
+    this.renderer.shadowMap.enabled = fancy;
+    this.sun.castShadow = fancy;
+    this.renderer.setPixelRatio(fancy ? Math.min(window.devicePixelRatio || 1, 1.8) : 1);
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.08;
+  }
+
+  drawCalls() {
+    return this.renderer.info.render.calls;
+  }
+
+  frameLot(id) {
+    return frameMeiLot(this, id);
   }
 
   target(group, data) {
@@ -181,6 +254,9 @@ export class MeiWorld {
     this.npc(MEI.sites.orv, 'orv', 'Orv', { skin: '#8d5a3c', shirt: '#e07a4a', hair: '#1c1410', pants: '#3d4c63', scale: 0.88 });
     this.npc(MEI.sites.rivera, 'rivera', 'Rivera', { skin: '#d7a574', shirt: '#6f8f9a', hair: '#3a2a28', pants: '#4a403c', scale: 1.02 });
     this.npc(MEI.sites.joe, 'joe', 'Joe', { skin: '#e6c2a2', shirt: '#7a8f62', hair: '#d9dde2', pants: '#5c5348', scale: 1.05, bucket: true });
+    mountMeiLot(this);
+    this.lotSolids();
+    this.compactMarked();
   }
 
   place(site, group, id, name, type, action, extra = {}) {
@@ -229,8 +305,10 @@ export class MeiWorld {
     this.cube(g, '#8d5a3c', [0, 2.3, 0.4], [0.2, 0.2, 0.2], true);
     const blades = new THREE.Group();
     blades.position.set(0, 2.3, 0.55);
+    this.markCompact = false;
     this.cube(blades, '#d7c48a', [0, 0, 0], [0.16, 1.8, 0.08], true);
     this.cube(blades, '#d7c48a', [0, 0, 0], [1.8, 0.16, 0.08], true);
+    this.markCompact = true;
     g.add(blades);
     this.windBlades = blades;
     this.place(MEI.sites.windmill, g, 'mei-windmill', '抽水风车', 'scenery', '看看', { w: 1.6, d: 1.6 });
@@ -241,7 +319,9 @@ export class MeiWorld {
     this.cube(g, '#9aa7a4', [0, 0.12, 0], [1.6, 0.16, 1.6], true);
     this.cube(g, '#8ebdc0', [0, 0.22, 0], [0.8, 0.08, 0.8], true);
     const sprayMat = new THREE.MeshStandardMaterial({ color: '#d5f3f6', transparent: true, opacity: 0.72, roughness: 0.35 });
+    this.markCompact = false;
     const spray = this.cube(g, sprayMat, [0, 0.8, 0], [0.28, 0.8, 0.28], true);
+    this.markCompact = true;
     this.geyserSpray = spray;
     this.place(MEI.sites.geyser, g, 'mei-geyser', '间歇泉', 'scenery', '看看', { label: '间歇泉', aria: `间歇泉。${GEYSER_NOTE}` });
   }
@@ -325,8 +405,10 @@ export class MeiWorld {
 
   npc(site, id, name, look) {
     const g = new THREE.Group();
-    person(this, g, look);
+    person(this, g, { ...look, compact: true });
+    this.markCompact = false;
     if (look.bucket) this.cube(g, '#c4a574', [0.42, 0.7, 0.1], [0.22, 0.24, 0.2], true);
+    this.markCompact = true;
     g.position.set(site.x, 0, site.z);
     this.scene.add(g);
     this.target(g, { id: `tutor-${id}`, type: 'tutor', tutorId: id, name, label: name, ariaLabel: name, action: '说说话', position: g.position });
@@ -428,6 +510,8 @@ export class MeiWorld {
       this.buildGroups.set(block.id, group);
       this.target(group, { id: block.id, type: 'block', item: block.item, name: ITEMS[block.item]?.name || block.item, action: '看看方块', block, position: group.position });
     }
+    this.applyQuality(state);
+    syncMeiLot(this, state);
   }
 
   blockModel(block) {
@@ -499,12 +583,24 @@ export class MeiWorld {
     }
     this.player.position.copy(this.playerPosition);
     this.player.rotation.y = this.facing;
-    const center = this.playerPosition.clone();
-    center.y += 0.8;
-    this.lookAt.lerp(center, 1 - Math.exp(-3 * dt));
-    const v = new THREE.Vector3(Math.sin(this.yaw) * this.distance, this.distance * 0.72, Math.cos(this.yaw) * this.distance);
-    this.camera.position.lerp(this.lookAt.clone().add(v), 1 - Math.exp(-5 * dt));
-    this.camera.lookAt(this.lookAt);
+    tickMeiLot(this, paused ? 0 : dt);
+    if (this.frameShot) {
+      const shot = this.frameShot;
+      this.yaw = shot.yaw;
+      this.distance = shot.distance;
+      const center = new THREE.Vector3(shot.x, shot.y, shot.z);
+      this.lookAt.copy(center);
+      const offset = new THREE.Vector3(Math.sin(shot.yaw) * shot.distance, shot.distance * 0.55, Math.cos(shot.yaw) * shot.distance);
+      this.camera.position.copy(center).add(offset);
+      this.camera.lookAt(center);
+    } else {
+      const center = this.playerPosition.clone();
+      center.y += 0.8;
+      this.lookAt.lerp(center, 1 - Math.exp(-3 * dt));
+      const v = new THREE.Vector3(Math.sin(this.yaw) * this.distance, this.distance * 0.72, Math.cos(this.yaw) * this.distance);
+      this.camera.position.lerp(this.lookAt.clone().add(v), 1 - Math.exp(-5 * dt));
+      this.camera.lookAt(this.lookAt);
+    }
     this.renderer.render(this.scene, this.camera);
     this.positionLabels();
     return this.playerPosition;
@@ -542,6 +638,7 @@ export class MeiWorld {
     const h = this.canvas.clientHeight;
     for (const item of this.targets) {
       if (!item.labelElement) continue;
+      if (item.hidden) { item.labelElement.hidden = true; continue; }
       const p = item.position.clone();
       p.y += 1.8;
       p.project(this.camera);
@@ -557,6 +654,7 @@ export class MeiWorld {
     let best = null;
     let dist = max;
     for (const item of this.targets) {
+      if (item.hidden) continue;
       const d = this.distanceTo(item);
       if (d < dist) { best = item; dist = d; }
     }

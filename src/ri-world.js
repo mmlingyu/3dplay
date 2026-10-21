@@ -3,6 +3,8 @@ import { ITEMS } from './game-data.js';
 import { REALMS, realmTerrainHeight } from './realm-data.js';
 import { BALLOON_CONTROL, balloonLook } from './balloon-data.js';
 import { trackListeners, trackWorldCreated, trackWorldReleased } from './scene-stats.js';
+import { attachFigure, stepFigures } from './ri-characters.js';
+import { attachRiCity } from './ri-city.js';
 
 const RI = REALMS.ri;
 const LISTENER_COUNT = 6;
@@ -48,18 +50,23 @@ export class RiWorld {
     this.velocityY = 0;
     this.facing = RI.dock.ry || 0;
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color('#f3e7cf');
-    this.scene.fog = new THREE.Fog('#f3e7cf', 28, 62);
+    this.scene.background = new THREE.Color('#2b3a67');
+    this.scene.fog = new THREE.FogExp2('#3a4d78', 0.02);
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.8));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
     this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.08;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.camera = new THREE.PerspectiveCamera(43, 1, 0.1, 140);
+    this.camera = new THREE.PerspectiveCamera(43, 1, 0.1, 160);
     this.lookAt = new THREE.Vector3();
-    this.sun = new THREE.DirectionalLight('#fff1d2', 2.4);
-    this.sun.position.set(12, 22, 8);
+    this.sun = new THREE.DirectionalLight('#ffc56b', 1.55);
+    this.sun.position.set(-16, 11, 6);
+    this.sun.shadow.mapSize.set(512, 512);
     this.sun.castShadow = true;
-    this.scene.add(this.sun, new THREE.HemisphereLight('#f7f3e8', '#b7a48a', 1.8));
+    this.scene.add(this.sun, new THREE.HemisphereLight('#9eb4d6', '#4a3b52', 0.85));
+    this.figures = [];
     this.box = new THREE.BoxGeometry(1, 1, 1);
     this.head = new THREE.SphereGeometry(0.28, 16, 12);
     this.eye = new THREE.SphereGeometry(0.035, 8, 8);
@@ -70,6 +77,7 @@ export class RiWorld {
     this.previewMaterial = new THREE.MeshStandardMaterial({ color: '#fff0ae', transparent: true, opacity: 0.46, roughness: 0.9, depthWrite: false });
     this.player = new THREE.Group();
     person(this, this.player, { shirt: '#f2d27a', hair: '#4a3428', scale: 0.92 });
+    this.player.traverse((obj) => { if (obj.isMesh) obj.castShadow = true; });
     this.scene.add(this.player);
     this.selectionRing = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.63, 32), new THREE.MeshBasicMaterial({ color: '#fff3be', side: THREE.DoubleSide, transparent: true, opacity: 0.85, depthWrite: false }));
     this.selectionRing.rotation.x = -Math.PI / 2;
@@ -98,7 +106,7 @@ export class RiWorld {
     const m = new THREE.Mesh(geometry, material);
     m.position.set(...pos);
     m.scale.set(...scale);
-    m.castShadow = true;
+    m.castShadow = false;
     m.receiveShadow = true;
     parent.add(m);
     return m;
@@ -168,6 +176,7 @@ export class RiWorld {
     this.npc(RI.sites.koharu, 'koharu', '小春', '#7eb6e0', '#4a3428', 0.82, null);
     this.npc(RI.sites.elder, 'kozo-elder', '楮叶奶奶', '#d8d2c8', '#d9dde2', 0.98, '#c47a60');
     this.animal(RI.sites.ponta);
+    attachRiCity(this);
   }
 
   placeBuilding(site, name, group) {
@@ -266,25 +275,21 @@ export class RiWorld {
   npc(site, id, name, shirt, hair, scale, apron) {
     const g = new THREE.Group();
     g.position.set(site.x, 0, site.z);
-    person(this, g, { shirt, hair, scale, apron });
+    attachFigure(this, g, id);
     this.scene.add(g);
     this.solid(site.x, site.z, 0.7, 0.7);
-    this.target(g, { id: `tutor-${id}`, type: 'tutor', tutorId: id, name, label: name, action: '说说话', reach: 2.7, position: g.position });
+    const made = this.target(g, { id: `tutor-${id}`, type: 'tutor', tutorId: id, name, label: name === '小春' ? '小春' : name, action: '说说话', reach: 2.7, position: g.position });
+    made.labelLift = 2.45;
   }
 
   animal(site) {
     const g = new THREE.Group();
     g.position.set(site.x, 0, site.z);
-    this.mesh(g, this.head, this.matColor('#c48a55'), [0, 0.55, 0], [1.5, 1.2, 1.6]);
-    this.mesh(g, this.head, this.matColor('#c48a55'), [0, 0.95, 0.15], [0.9, 0.8, 0.9]);
-    this.mesh(g, this.eye, this.mats.dark, [-0.12, 1.02, 0.38]);
-    this.mesh(g, this.eye, this.mats.dark, [0.12, 1.02, 0.38]);
-    this.mesh(g, this.head, this.matColor('#a87448'), [-0.22, 1.25, 0], [0.35, 0.45, 0.2]);
-    this.mesh(g, this.head, this.matColor('#a87448'), [0.22, 1.25, 0], [0.35, 0.45, 0.2]);
-    this.cube(g, '#7eb6e0', [0, 0.7, 0.15], [0.55, 0.14, 0.4]);
+    attachFigure(this, g, 'ponta');
     this.scene.add(g);
     this.solid(site.x, site.z, 0.8, 0.8);
-    this.target(g, { id: 'tutor-ponta', type: 'tutor', tutorId: 'ponta', name: '狸猫阿哲', label: '阿哲', action: '说说话', reach: 2.7, position: g.position });
+    const made = this.target(g, { id: 'tutor-ponta', type: 'tutor', tutorId: 'ponta', name: '狸猫阿哲', label: '阿哲', action: '说说话', reach: 2.7, position: g.position });
+    made.labelLift = 2.6;
   }
 
   bindPointer() {
@@ -340,6 +345,8 @@ export class RiWorld {
   }
 
   surfaceAt(x, z) {
+    const city = this.riCity?.floorAt?.(x, z);
+    if (city != null) return city;
     let h = realmTerrainHeight('ri', x);
     if (Math.hypot(x - RI.dock.x, z - RI.dock.z) <= 2.2) h = Math.max(h, 0.28);
     if (Math.abs(x) <= 1.1 && Math.abs(z - RI.sites.bridge.z) <= 1.5) h = Math.max(h, 0.55);
@@ -348,10 +355,12 @@ export class RiWorld {
   }
 
   blocked(x, z) {
+    if (this.riCity?.locksMove?.()) return false;
     if (x < RI.bounds.minX + 0.4 || x > RI.bounds.maxX - 0.4 || z < RI.bounds.minZ + 0.4 || z > RI.bounds.maxZ - 0.4) return true;
     const onDock = Math.hypot(x - RI.dock.x, z - RI.dock.z) <= 2.2;
     const onBridge = Math.abs(z - RI.sites.bridge.z) <= 1.35;
-    if (x >= RI.stream.minX && x <= RI.stream.maxX && !onDock && !onBridge) return true;
+    const onRoad = this.riCity?.onRoad?.(x, z);
+    if (x >= RI.stream.minX && x <= RI.stream.maxX && !onDock && !onBridge && !onRoad) return true;
     return this.decorColliders.some((c) => Math.abs(x - c.x) < c.width / 2 && Math.abs(z - c.z) < c.depth / 2);
   }
 
@@ -371,6 +380,7 @@ export class RiWorld {
       this.flagCloth.scale.set(fixed ? 1.35 : 0.9, fixed ? 0.62 : 0.42, 0.08);
       this.flagCloth.material.color.set(fixed ? '#e07a4a' : '#c98462');
     }
+    this.riCity?.sync(spot);
     const ids = new Set((spot.blocks || []).map((block) => block.id));
     for (const [id, group] of this.buildGroups) {
       if (!ids.has(id)) {
@@ -413,8 +423,18 @@ export class RiWorld {
   update(dt, input = {}, paused = false) {
     if (this.released) return this.playerPosition;
     this.time += dt;
-    let mx = input.x || 0;
-    let mz = input.z || 0;
+    this.riCity?.update(dt, paused);
+    stepFigures(this.figures, this.time, this.playerPosition);
+    const locked = this.riCity?.locksMove?.();
+    if (locked) {
+      const anchor = this.riCity.anchor();
+      if (anchor) {
+        this.playerPosition.set(anchor.x, anchor.y, anchor.z);
+        if (Number.isFinite(anchor.facing)) this.facing = anchor.facing;
+      }
+    }
+    let mx = locked ? 0 : (input.x || 0);
+    let mz = locked ? 0 : (input.z || 0);
     if (!paused && this.balloon?.phase === 'descend') {
       this.balloon.t += dt;
       const u = Math.min(1, this.balloon.t / RI.balloon.descendSeconds);
@@ -425,7 +445,7 @@ export class RiWorld {
         this.playerPosition.y = this.surfaceAt(RI.lawn.x, RI.lawn.z);
         this.callbacks.onBalloonStop?.();
       }
-    } else if (!paused) {
+    } else if (!paused && !locked) {
       if (mx || mz) this.stopWalking();
       if (this.walkTarget) {
         const dx = this.walkTarget.x - this.playerPosition.x;
@@ -460,9 +480,16 @@ export class RiWorld {
     const center = this.playerPosition.clone();
     center.y += 0.8;
     this.lookAt.lerp(center, 1 - Math.exp(-3 * dt));
-    const v = new THREE.Vector3(Math.sin(this.yaw) * this.distance, this.distance * 0.72, Math.cos(this.yaw) * this.distance);
-    this.camera.position.lerp(this.lookAt.clone().add(v), 1 - Math.exp(-5 * dt));
-    this.camera.lookAt(this.lookAt);
+    const pitch = this.pitch ?? 0.72;
+    const v = new THREE.Vector3(Math.sin(this.yaw) * this.distance, this.distance * pitch, Math.cos(this.yaw) * this.distance);
+    const pose = this.riCity?.lookPose?.();
+    if (pose) {
+      this.camera.position.lerp(pose.pos, 1 - Math.exp(-4 * dt));
+      this.camera.lookAt(pose.target);
+    } else {
+      this.camera.position.lerp(this.lookAt.clone().add(v), 1 - Math.exp(-5 * dt));
+      this.camera.lookAt(this.lookAt);
+    }
     this.renderer.render(this.scene, this.camera);
     this.positionLabels();
     return this.playerPosition;
@@ -500,8 +527,9 @@ export class RiWorld {
     const h = this.canvas.clientHeight;
     for (const item of this.targets) {
       if (!item.labelElement) continue;
+      if (item.hideLabel) { item.labelElement.hidden = true; continue; }
       const p = item.position.clone();
-      p.y += 1.8;
+      p.y += item.labelLift || 1.8;
       p.project(this.camera);
       const x = (p.x + 1) * w / 2;
       const y = (-p.y + 1) * h / 2;
@@ -552,6 +580,13 @@ export class RiWorld {
 
   celebrate() {}
   jump() { this.velocityY = 4; }
+  setFigureMode(id, mode) {
+    for (const fig of this.figures || []) {
+      const info = fig.userData.figure;
+      if (!info) continue;
+      info.force = id && info.id === id ? mode : null;
+    }
+  }
   cancelPointerGesture() { if (this.pointerGesture) this.pointerGesture.start = null; }
   serializeBalls() { return []; }
   setFrontier() {}

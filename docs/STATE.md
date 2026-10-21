@@ -64,14 +64,14 @@
 
 本轮 `npm run build` 的主脚本 974 KB（gzip 289 KB），日谷场景另有 16.5 KB 的动态分包。仍超过 500 KB 警告。没有在孩子或真实平板上验证。10 月运行时，两条按暖季推进花序的单元测试和生命浏览器检查里的开花断言会失败，这是季节规则，不是旅行改动。
 
-旅行分支增加了 GitHub Pages 预览工作流。只有这次构建设置 `VITE_BASE=/3dplay/`。预览没有后端时，游戏用本机存档和仓库里的日谷角色，不弹连接失败。地址是 https://mmlingyu.github.io/3dplay/ 。本机冒烟是 `PREVIEW_URL=http://127.0.0.1:4173/3dplay/ node test/preview-smoke.js`。
+GitHub Pages 预览工作流只在构建步骤设置 `VITE_BASE=/3dplay/` 和 `VITE_STATIC_PREVIEW=1`。开关打开时不请求 `/api` 或 `/account`，登录入口显示为「本地游玩」，游戏用本机存档和仓库里的角色。不设置时仍会请求后端。新的后端调用要先看 `staticPreviewEnabled()`（`src/static-preview.js`），为 true 时不要 `fetch`。地址是 https://mmlingyu.github.io/3dplay/ 。本机冒烟是 `PREVIEW_URL=http://127.0.0.1:4173/3dplay/ node test/preview-smoke.js`。
 
 ## 最新接续：外星谷星网一期
 
 2026-10-21。外星谷里加了星门和星网大厅。星网是 `xing` 里面的一层，不是新的谷，也没有改旅行路线。主存档键和版本仍是 `yuanyuan-river-valley-v1` / 1。新的可选字段是 `travel.realms.xing.holo` 和 `settings.quality`。第一次写入星网字段前，原文备份到 `yuanyuan-river-valley-v1-before-holo`。进入河谷的默认相机没有改。
 
-本期没有接入故事线，以后会接入「拯救河谷」主线。故事星光保持 0。穹顶板留了编号。没有加河谷的雾、观星台，也没有写 `travel.story`。
+故事主线在 main 上。星网不写 `travel.story`。故事星光保持 0。穹顶缺口这一期仍是暗的。
 
-星网要念的中文台词用 edge-tts 生成了 40 段，在 `public/voice/holo/`，一共 347703 字节。有文件就播文件，失败时退回浏览器朗读，并跟着声音开关。日语和英语的声音已配好，句子还没翻译。星棱补成设计稿里的晶甲星豹：四条腿、尾巴、耳朵，半透明紫晶体，身体里有小星。
+星网要念的中文台词用 edge-tts 生成了 40 段，在 `public/voice/holo/`，一共 347703 字节。有文件就播文件，失败时退回浏览器朗读，并跟着声音开关。日语和英语的声音已配好，句子还没翻译。星棱补成设计稿里的晶甲星豹：四条腿、尾巴、耳朵，半透明紫晶体，身体里有小星。年龄档 6–8 走年轻挑战，9–12 和原来的 older 走年长挑战。
 
 孩子能不能独立完成、喜不喜欢、真实平板上的帧率，都待真实试玩验证。无头浏览器里的帧率是模拟。细节、门槛表和截图结论见 `外星谷里程碑.md` 的「星网一期」。设计参考在 `docs/design-v0.3/`，只作方向，没有把原型源码或图片打进游戏。

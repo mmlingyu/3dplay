@@ -9,16 +9,21 @@ import { floraStage, realMoment } from './life-data.js';
 import { realAnalogClock } from './clock-ui.js';
 import { nearbyFrontiers, LAND_RULES } from './land-data.js';
 import { accountSession } from './engine-client.js';
+import { markLocalPlayAccount, staticPreviewEnabled } from './static-preview.js';
 import { startValleySync } from './valley-sync.js';
 import { BOUNCE_ISLAND, PARK_NAME, PLAY_MODES, SKIP_STEPS, TIMES_TABLES, bounceInfo, inNumberPark, onBounceIsland, playMode } from './bounce-data.js';
 import { BALLOON_BASE, BALLOON_NAME, balloonBaseFor, onBalloonLawn } from './balloon-data.js';
 import { gradeQuestion, loadTutorPack, nextQuestion, primeTutorPack, tutorById, tutors, useTutorRealm } from './tutor-data.js';
-import { chooseDockSite, FERRY_NOTE, REALMS, VOYAGE_NOTE } from './realm-data.js';
+import { chooseDockSite, contentAgeBand, FERRY_NOTE, REALMS, VOYAGE_NOTE } from './realm-data.js';
 import { VISTAS } from './vista-data.js';
 import { MEI_AUDIO, SHIP_NOTE, VOYAGE_MEI_NOTE } from './mei-data.js';
+import { projectBand } from './project-board.js';
 import { createCutscene } from './travel.js';
 import { sceneStats } from './scene-stats.js';
 import { RI_AUDIO } from './ri-tutors.js';
+import { riBand } from './ri-story.js';
+import { setRiSound, warmRiAudio } from './ri-audio.js';
+import { handleRiTap, playQuestionAudio, resetQuestionAudio, riSheetOpen } from './ri-ui.js';
 import { FANTASY_ROUTE, STAR_SECONDS, XING_AUDIO, XING_OPEN, starRouteVisible } from './xing-data.js';
 import { HOLO_AUDIO, WELCOME_LINE } from './holo-data.js';
 import { recordedIds } from './voice-lines.js';
@@ -30,10 +35,15 @@ import { kindsFor, makePuzzle } from './glyph-data.js';
 import { gravityCompare } from './experiment-lab.js';
 import { renderA2UI } from './a2ui.js';
 import { npcTalkMessages, talkActivities } from './npc-surface.js';
+import { isTour, tourStorage } from './tour-mode.js';
+import { attachValleyStory, storyApi, storyEnter, storyTalk } from './story-flow.js';
 
 const $ = (id) => document.getElementById(id);
 document.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = icon(el.dataset.icon, 24); });
-const game = new GameState();
+const touring = isTour();
+const game = new GameState(touring ? tourStorage(globalThis.localStorage) : undefined);
+game.localPlay = staticPreviewEnabled();
+if (game.localPlay) markLocalPlayAccount(document);
 const hotItems = ['plank', 'brick', 'door', 'window', 'roof', 'ramp'];
 const keys = new Set();
 const joystick = { x: 0, z: 0 };
@@ -47,6 +57,8 @@ let holoUi = null;
 const missingAudio = new Set([...RI_AUDIO, ...MEI_AUDIO, ...XING_AUDIO, ...HOLO_AUDIO]);
 for (const id of recordedIds()) missingAudio.delete(id);
 bindVoiceUnlock();
+warmRiAudio(missingAudio);
+setRiSound(game.state.settings.sound);
 const riReady = import('./ri-world.js');
 const meiReady = import('./mei-world.js');
 const xingReady = import('./xing-world.js');
@@ -256,7 +268,7 @@ function paintTravel() {
   const claim = $('ri-claim');
   if (claim) claim.hidden = realm !== 'ri' || !game.washiStatus?.().ready;
   const trade = $('mei-trade');
-  if (trade) trade.hidden = game.state.settings?.ageBand !== 'older';
+  if (trade) trade.hidden = projectBand(game.state.settings?.ageBand) !== 'older';
   const nearDock = () => {
     if (!world || realm !== 'he') return false;
     const site = chooseDockSite(game.state.blocks);
@@ -456,6 +468,8 @@ async function mountWorld(realm, mod, options = {}) {
     world = new RiverWorld(canvas, worldHooks());
     world.facing = 0;
     attachHomeVisitor(world, game);
+    attachValleyStory(world, game, { speak, toast, touring });
+    if (started) storyEnter();
   }
   if (realm === 'xing' && world.deviceEnv) world.deviceEnv = qualityEnv();
   world.sync(game.state);
@@ -563,13 +577,21 @@ function save() {
   updateSaveStatus();
   return result;
 }
-const valleySync = startValleySync(game);
+const valleySync = touring
+  ? { bind: async () => ({ changed: false, source: 'tour' }), flush: async () => false }
+  : startValleySync(game);
 function figureNames() {
   return (game.state.creation?.figures || []).map(item => item.figure?.name).filter(Boolean);
 }
 async function refreshAccount() {
   const chip = $('account-chip'), label = $('account-label'), dot = $('account-dot');
   if (!chip || !label) return;
+  if (staticPreviewEnabled()) {
+    markLocalPlayAccount(document);
+    updateSaveStatus();
+    refreshWelcome();
+    return;
+  }
   const session = await accountSession();
   const user = session.user;
   setPlayerName(user);
@@ -620,7 +642,9 @@ function updateSaveStatus() {
     ? '当前窗口无法持久保存，请在暂停菜单导出备份。'
     : (game.accountId
       ? '背包物品、放下的建筑和设置保存在当前登录账号上。换一个人登录，会进入那个人自己的河谷。'
-      : '还没登录，只保存在这台浏览器。登录后会记到账号上。'));
+      : (staticPreviewEnabled()
+        ? '本地游玩，只保存在这台浏览器。'
+        : '还没登录，只保存在这台浏览器。登录后会记到账号上。')));
 }
 function resetInput() {
   keys.clear(); joystick.x = joystick.z = 0;
@@ -860,6 +884,7 @@ function paintTutor() {
     speak(graded.ok ? '对了' : '再选一次');
     paintTutor();
   });
+  if (tutor?.valley === 'ri' && tutorActivity?.play === 'quiz') playQuestionAudio(tutorCurrent, riBand(tutorBand), speak);
 }
 function openTutor(tutorId) {
   const tutor = tutorById(tutorId);
@@ -874,18 +899,21 @@ function openTutor(tutorId) {
   if (tutorId === 'lingyi') world?.setFigureMode?.('zero', 'scan');
   $('tutor-card').hidden = false;
   $('tutor-card').dataset.tutor = tutor.id;
+  resetQuestionAudio();
+  world?.setFigureMode?.(tutor.id, 'talk');
   paintTutor();
   world?.stopWalking();
 }
 function closeTutor() {
   if ($('tutor-card')) $('tutor-card').hidden = true;
   tutorCurrent = null;
+  resetQuestionAudio();
   world?.setFigureMode?.('gugu', 'idle');
   world?.setFigureMode?.('zero', 'idle');
+  world?.setFigureMode?.(null, null);
 }
 function bandName() {
-  const age = game.state.settings?.ageBand || tutorBand || 'little';
-  return age === 'bigger' || age === 'older' ? age : 'little';
+  return contentAgeBand(game.state.settings?.ageBand || tutorBand || 'little');
 }
 function openXing(kind = 'lab') {
   const sheet = $('xing-sheet');
@@ -977,7 +1005,7 @@ function handleXingSheet(event) {
   }
 }
 function interact(target = null) {
-  if (!started || panels.isOpen() || tutorOpen()) return;
+  if (!started || panels.isOpen() || tutorOpen() || riSheetOpen()) return;
   if (!target && mode === 'build') return build();
   target ||= chosenTarget || world.nearestTarget(2.8);
   if(mode!=='remove'&&world.locomotion==='swim'&&world.pool&&(!target||target.type==='pool')){
@@ -994,6 +1022,11 @@ function interact(target = null) {
     if (result.ok) { chosenTarget = null; world.select(null); world.celebrate(target.position); updateUI(); }
     return;
   }
+  if (target.riKind) {
+    handleRiTap(target, { game, world, toast, speak, band: riBand(game.state.settings?.ageBand || tutorBand) });
+    updateContext();
+    return;
+  }
   if (target.type === 'resource') {
     const now = performance.now();
     if (now - (cooldowns.get(target.id) || -10000) < 1500) { toast('刚取过啦，材料很快补好。'); return; }
@@ -1006,6 +1039,9 @@ function interact(target = null) {
   else if (target.type === 'bounce') {
     if (world.bounce) { world.stopBounce(); toast('停下来啦。想再跳，再走上小岛。'); }
     else world.walkTo(target.position);
+  } else if (target.type === 'story') {
+    storyTalk(target);
+    return;
   } else if (target.type === 'tutor') {
     openTutor(target.tutorId);
   } else if (target.type === 'ferry') {
@@ -1046,6 +1082,12 @@ function interact(target = null) {
     }
     if (target.xing === 'hopper') { toast(game.seeHopper().message, true); return; }
     openXing(target.xing === 'moss' ? 'moss' : 'lab');
+  } else if (target.type === 'mei-part') {
+    const result = game.collectMeiPart(target.part);
+    toast(result.message, result.ok);
+    speak(result.speak || result.message);
+    world.sync?.(game.state);
+    return;
   } else if (target.type === 'maple' || target.type === 'project' || target.type === 'quilt') {
     openPanel(target.type);
   } else if (target.type === 'flag') {
@@ -1284,8 +1326,9 @@ function updateContext() {
 function start() {
   if (!world) return;
   started = true; $('welcome').hidden = true; resetInput(); save();
-  toast('去逛逛吧！左边摇杆走路，点材料，再点右边采集。');
-  speak('欢迎来到河谷。想去哪里，由你决定。');
+  storyEnter();
+  toast(touring ? '体验模式。右上角可以跳到下一章。孩子的存档不会被改。' : '去逛逛吧！左边摇杆走路，点材料，再点右边采集。');
+  speak(touring ? '雾慢慢进来了。它不会伤害任何东西。' : '欢迎来到河谷。想去哪里，由你决定。');
   updateContext();
   if (game.storageError) toast(game.storageError);
 }
@@ -1343,7 +1386,7 @@ $('land-question-skip').addEventListener('click',()=>{
 $('pause-button').addEventListener('click', () => openPanel('pause'));
 $('craft-button').addEventListener('click', () => openPanel('craft'));
 $('inventory-button').addEventListener('click', () => openPanel('inventory'));
-$('sound-button').addEventListener('click', () => { game.mutate(s => { s.settings.sound = !s.settings.sound; }); if (!game.state.settings.sound) { clearTimeout(speechTimer); stopVoice(); window.speechSynthesis?.cancel(); } else speak('声音打开了。点喇叭可以听说明。'); });
+$('sound-button').addEventListener('click', () => { game.mutate(s => { s.settings.sound = !s.settings.sound; }); setRiSound(game.state.settings.sound); if (!game.state.settings.sound) { clearTimeout(speechTimer); stopVoice(); window.speechSynthesis?.cancel(); } else speak('声音打开了。点喇叭可以听说明。'); });
 $('wish-dismiss').addEventListener('click', () => { $('wish-card').hidden = true; });
 $('wish-read').addEventListener('click', () => speak(`${$('wish-title').textContent}。${$('wish-description').textContent}`));
 $('action-button').addEventListener('click', () => interact());
@@ -1424,7 +1467,7 @@ $('balloon-voyage-mei')?.addEventListener('click', () => {
 });
 $('travel-go-mei')?.addEventListener('click', () => { if (started && !panels?.isOpen()) startFerry('mei'); });
 $('mei-letter-close')?.addEventListener('click', () => { const card = $('mei-letter'); if (card) card.hidden = true; });
-for (const [id, panel] of [['mei-maple', 'maple'], ['mei-project', 'project'], ['mei-quilt', 'quilt'], ['mei-trade', 'trade'], ['mei-lantern', 'lantern'], ['mei-thanks', 'thanks']]) {
+for (const [id, panel] of [['mei-maple', 'maple'], ['mei-project', 'project'], ['mei-quilt', 'quilt'], ['mei-trade', 'trade'], ['mei-lantern', 'lantern'], ['mei-thanks', 'thanks'], ['mei-stage', 'stage'], ['mei-projector', 'projector'], ['mei-premiere', 'premiere']]) {
   $(id)?.addEventListener('click', () => { if (started && (game.state.travel?.current || 'he') === 'mei') openPanel(panel); });
 }
 $('mei-stamps')?.addEventListener('click', () => { if (started) openPanel('stamps'); });
@@ -1515,7 +1558,9 @@ function frame(now) {
   if (world && !document.hidden && !switching) {
     const input = { x: joystick.x + (keys.has('d') || keys.has('arrowright') ? 1 : 0) - (keys.has('a') || keys.has('arrowleft') ? 1 : 0), z: joystick.z + (keys.has('s') || keys.has('arrowdown') ? 1 : 0) - (keys.has('w') || keys.has('arrowup') ? 1 : 0) };
     const holding = !!cutscene && cutscene.kind === 'ferry';
-    world.update(dt, input, !started || panels.isOpen() || holding); storePlayer();
+    const sheet = riSheetOpen();
+    setRiSound(game.state.settings.sound);
+    world.update(dt, sheet ? { x: 0, z: 0 } : input, !started || panels.isOpen() || holding); storePlayer();
     if (cutscene?.kind === 'ferry' || cutscene?.kind === 'stars') {
       const done = cutscene.tick(dt, { paused: !started || panelType === 'pause' || panels.isOpen(), hidden: false });
       if (done) finishCutscene();
@@ -1532,7 +1577,7 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // The browser checks inspect state and exercise the same actions used by the UI.
-window.__valley = { game, get world() { return world; }, get panels() { return panels; }, start, openPanel, selectItem, changeMode, interact, goHome, goRealm, goXing, openXing, closeXing, startFerry, sceneStats, missingAudio: () => [...missingAudio], voiceReady, playerName: () => playerName, setBuildCell: cell => { buildCell = cell; updateContext(); }, gravityCompare, advanceCrystal: (seconds, flags = {}) => { if (flags?.paused || flags?.hidden) return game.crystalStatus(); game.tick(seconds); return game.crystalStatus(); }, setAge: (band) => { tutorBand = ['little', 'bigger', 'older'].includes(band) ? band : 'little'; }, step(dt = 0.05) { if (!world || world.released || switching) return { realm: game.state.travel?.current || 'he', phase: null, holo: null }; world.update(dt, { x: 0, z: 0 }, false); if (cutscene?.kind === 'stars' || cutscene?.kind === 'ferry') { const done = cutscene.tick(dt, { paused: panelType === 'pause' || !!panels?.isOpen(), hidden: false }); if (done) finishCutscene(); } paintTravel(); return { realm: game.state.travel?.current || 'he', phase: world.balloon?.phase || null, cutscene: cutscene?.kind || null, holo: world.holo?.phase || null }; }, enterHolo() { return world?.beginHolo?.() || false; }, skipHolo() { return world?.skipHolo?.() || false; }, leaveHolo() { return world?.leaveHolo?.() || false; }, holoPhase() { return world?.holo?.phase || 'off'; }, openHoloStage(id) { holoUi?.openStage(id); }, peekStage() { return holoUi?.peek?.() || null; }, setNight(value) { if (world) world.nightOverride = value; if (world) world.vistaMomentOverride = value ? { period: '晚上' } : null; }, sampleStats() { return world?.sampleStats?.() || null; }, quality() { return world?.qualityMode || game.state.settings?.quality || null; } };
+window.__valley = { game, get world() { return world; }, get panels() { return panels; }, get story() { return storyApi(); }, touring, start, openPanel, selectItem, changeMode, interact, goHome, goRealm, goXing, openXing, closeXing, startFerry, sceneStats, missingAudio: () => [...missingAudio], voiceReady, playerName: () => playerName, setBuildCell: cell => { buildCell = cell; updateContext(); }, gravityCompare, advanceCrystal: (seconds, flags = {}) => { if (flags?.paused || flags?.hidden) return game.crystalStatus(); game.tick(seconds); return game.crystalStatus(); }, setAge: (band) => { const known = ['little', 'bigger', 'older', 'junior', 'senior']; tutorBand = known.includes(band) ? band : 'little'; }, step(dt = 0.05) { if (!world || world.released || switching) return { realm: game.state.travel?.current || 'he', phase: null, holo: null }; world.update(dt, { x: 0, z: 0 }, false); if (cutscene?.kind === 'stars' || cutscene?.kind === 'ferry') { const done = cutscene.tick(dt, { paused: panelType === 'pause' || !!panels?.isOpen(), hidden: false }); if (done) finishCutscene(); } paintTravel(); return { realm: game.state.travel?.current || 'he', phase: world.balloon?.phase || null, cutscene: cutscene?.kind || null, holo: world.holo?.phase || null }; }, enterHolo() { return world?.beginHolo?.() || false; }, skipHolo() { return world?.skipHolo?.() || false; }, leaveHolo() { return world?.leaveHolo?.() || false; }, holoPhase() { return world?.holo?.phase || 'off'; }, openHoloStage(id) { holoUi?.openStage(id); }, peekStage() { return holoUi?.peek?.() || null; }, setNight(value) { if (world) world.nightOverride = value; if (world) world.vistaMomentOverride = value ? { period: '晚上' } : null; }, sampleStats() { return world?.sampleStats?.() || null; }, quality() { return world?.qualityMode || game.state.settings?.quality || null; } };
 window.render_game_to_text = () => JSON.stringify({
   coords: 'world x/east, y/up, z/south; integer building grid',
   started, mode, selectedItem, rotation, buildCell, panel: panels?.type() ?? null,

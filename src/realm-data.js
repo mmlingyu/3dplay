@@ -10,10 +10,31 @@ export const SUPPLY_COOLDOWN = 180;
 export const SUPPLY_COUNT = 2;
 
 export const AGE_BANDS = Object.freeze([
-  { id: 'little', label: '4–6 岁', npc: '短一点' },
-  { id: 'bigger', label: '7–9 岁', npc: '再长一点' },
-  { id: 'older', label: '10–12 岁', npc: '挑战一下' },
+  { id: 'junior', label: '6–8 岁', npc: '短一点' },
+  { id: 'senior', label: '9–12 岁', npc: '挑战一下' },
 ]);
+
+/** Old 4–6 and 7–9 both read as 6–8. 10–12 reads as 9–12. */
+export function normalizeAgeBand(band) {
+  if (band === 'senior' || band === 'older') return 'senior';
+  if (band === 'junior' || band === 'little' || band === 'bigger') return 'junior';
+  return null;
+}
+
+/** Legacy copy keys. Explicit little / bigger / older stay put so existing scenes keep their lines. */
+export function contentAgeBand(band) {
+  if (band === 'little' || band === 'bigger' || band === 'older') return band;
+  return normalizeAgeBand(band) === 'senior' ? 'older' : 'little';
+}
+
+/** 6–8 merges the younger lines. 9–12 reads the older lines. Legacy ids keep the old order. */
+export function mergedQuizOrder(band) {
+  if (band === 'junior') return ['little', 'bigger'];
+  if (band === 'senior') return ['older'];
+  if (band === 'older') return ['older', 'bigger', 'little'];
+  if (band === 'bigger') return ['bigger', 'little'];
+  return ['little'];
+}
 
 export const FERRY_NOTE = '坐小船可以过海到日谷。路程在游戏里变短了。';
 export const VOYAGE_NOTE = '路程和天气在游戏里被简化了。真实的热气球跨海要看风向和天气。';
@@ -42,6 +63,10 @@ export const STAMPS = Object.freeze([
   { id: 'ri-washi-first', name: '第一张和纸', icon: 'paper', how: '在纸坊用楮皮做和纸。不用答题。' },
   { id: 'ri-crane-first', name: '第一只纸鹤', icon: 'crane', how: '用和纸折一只纸鹤。不用答题。' },
   { id: 'ri-help-koharu', name: '帮小春修鲤鱼旗', icon: 'carp', how: '做好纸鲤鱼旗，到旗杆补上。不用答题。' },
+]);
+
+export const RI_STORY_STAMPS = Object.freeze([
+  { id: 'ri-tide-shard', name: '潮之片', icon: 'water', how: '在日谷车站的失物柜，三件事里完成两件就能打开。不用先做完别的章节。' },
 ]);
 
 export const HOME_DOCKS = Object.freeze([
@@ -99,8 +124,9 @@ export const REALMS = Object.freeze({
     gravity: EARTH_GRAVITY,
     entry: 'dock',
     altEntry: 'balloon',
-    // Festivals stay empty until a later season. The field is here so the shape can grow.
-    festivals: Object.freeze([]),
+    festivals: Object.freeze([
+      Object.freeze({ id: 'sakura-lantern', name: '樱花灯笼祭', note: '街上挂着纸灯笼，寺社石阶有樱花。鲤鱼旗全年都能补。没有限时奖励。' }),
+    ]),
     bounds: Object.freeze({ minX: -16, maxX: 15, minZ: -16, maxZ: 15 }),
     flight: Object.freeze({ minX: -14, maxX: 14, minZ: -14, maxZ: 14 }),
     visitor: Object.freeze({ minX: 2, maxX: 10, minZ: 5, maxZ: 12 }),
@@ -118,6 +144,10 @@ export const REALMS = Object.freeze({
       koharu: Object.freeze({ x: -6.2, z: -4.2 }),
       elder: Object.freeze({ x: -9.2, z: -4.5 }),
       ponta: Object.freeze({ x: 9.2, z: -6.2 }),
+      gate: Object.freeze({ x: 0, z: -8, name: '大灯笼门' }),
+      tower: Object.freeze({ x: 13, z: 7, name: '红白铁塔' }),
+      shrine: Object.freeze({ x: -13.2, z: 7.2, name: '山坡寺社' }),
+      cabinet: Object.freeze({ x: 3.55, z: -10.35, name: '失物招领柜' }),
     }),
   }),
   mei: Object.freeze({ ...MEI_REALM, gravity: EARTH_GRAVITY }),
@@ -218,7 +248,18 @@ export function defaultTravel() {
     visited: [],
     stamps: [],
     stickers: [],
-    story: { seen: [], letters: [] },
+    story: {
+      seen: [],
+      letters: [],
+      restored: [],
+      fogIntro: false,
+      fogOff: false,
+      hintsOff: false,
+      festival: false,
+      homePlaces: [],
+      nudges: { vista: 0, bottle: 0, dock: 0, balloon: 0, stuck: 0, day: -1, last: '', chapter: 'prologue' },
+      site: null,
+    },
     gifts: { given: [], received: [] },
     supplyAt: 0,
     realms: {},
@@ -244,6 +285,10 @@ export function emptyRealm(realmId) {
     realm.projects = [];
     realm.trades = [];
     realm.decor = { face: 'smile' };
+    realm.storyShard = false;
+    realm.projector = { gear: false, lens: false, lamp: false };
+    realm.films = [];
+    realm.premiere = false;
   }
   return realm;
 }

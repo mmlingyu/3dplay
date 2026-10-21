@@ -1,5 +1,5 @@
-import { ITEMS, RECIPES, COLLECTABLE_ITEMS, GARDEN_PLOTS, MAX_BUILD_HEIGHT, STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY, HOLO_BACKUP_KEY, terrainHeight, isProtectedCell, roofSpan, roofWallAt } from './game-data.js';
-import { REALM_BLOCK_LIMIT, REALMS, SUPPLY_COOLDOWN, SUPPLY_COUNT, WASHI_STAGES, WASHI_TOTAL_SECONDS, arrivalFor, defaultTravel, emptyRealm, inVisitorYard, isDockCell, realmContains, realmTerrainHeight, washiStage } from './realm-data.js';
+import { ITEMS, RECIPES, COLLECTABLE_ITEMS, GARDEN_PLOTS, MAX_BUILD_HEIGHT, STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, MEI3_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY, HOLO_BACKUP_KEY, STORY_BACKUP_KEY, RI3_BACKUP_KEY, terrainHeight, isProtectedCell, roofSpan, roofWallAt } from './game-data.js';
+import { REALM_BLOCK_LIMIT, REALMS, SUPPLY_COOLDOWN, SUPPLY_COUNT, WASHI_STAGES, WASHI_TOTAL_SECONDS, arrivalFor, defaultTravel, emptyRealm, inVisitorYard, isDockCell, normalizeAgeBand, realmContains, realmTerrainHeight, washiStage } from './realm-data.js';
 import { TravelError, repairTravelRaw, validateTravel } from './travel-save.js';
 import { advanceMaple, attachMei } from './mei-state.js';
 import { BALL_RULES } from './ball-data.js';
@@ -13,6 +13,7 @@ import { KEEPSAKES, VISTAS } from './vista-data.js';
 import { claimCrystal as takeCrystal, crystalStatus as crystalNow, grantPlaque as givePlaque, learnGlyphs as rememberGlyphs, recordExperiment as noteExperiment, releaseCheck, reuniteGugu as bringGugu, rewardXingSupply as payXingSupply, seeHopper as markHopper, seeMoss as markMoss, solvePuzzle as gradeXingPuzzle, sowCheck, startCrystal as beginCrystal, tickCrystals } from './xing-actions.js';
 import { ensureHolo, markWelcomed, noteStage, setAvatar, snapshotGrowth, syncFieldStarlight } from './holo-actions.js';
 import { WELCOME_LINE } from './holo-data.js';
+import { LANTERN_ALL, MIKO_CLUE, SHOP_ALL, canOpenCabinet, freshCity, shardNeed, shardTasks } from './ri-story.js';
 
 const ITEM_KEYS = Object.keys(ITEMS);
 const KILN_STAGES = ['idle', 'moistening', 'drying', 'firing', 'cooling', 'ready', 'failed'];
@@ -112,8 +113,9 @@ export function validateSave(value) {
   if (!isRecord(p) || !isPointOpen(next.land,p.x,p.z) || !Number.isFinite(p.y) || p.y < -2 || p.y > 16) throw new Error('存档中的角色位置不正确。');
   next.player = { x: p.x, y: p.y, z: p.z };
   if (!isRecord(value.settings) || typeof value.settings.sound !== 'boolean') throw new Error('存档中的设置不正确。');
-  const ageBand = value.settings.ageBand ?? null;
-  if (ageBand !== null && ageBand !== 'little' && ageBand !== 'bigger' && ageBand !== 'older') throw new Error('存档中的年龄档不正确。');
+  const rawAge = value.settings.ageBand ?? null;
+  const ageBand = normalizeAgeBand(rawAge);
+  if (rawAge !== null && ageBand === null) throw new Error('存档中的年龄档不正确。');
   const quality = value.settings.quality;
   if (quality !== undefined && quality !== 'fast' && quality !== 'fine') throw new Error('存档中的画质不正确。');
   next.settings = { sound: value.settings.sound, ageBand };
@@ -175,7 +177,17 @@ function settleHolo(state) {
   syncFieldStarlight(state);
 }
 
-const FIGURE_BACKUP_KEYS = [STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY, HOLO_BACKUP_KEY];
+const FIGURE_BACKUP_KEYS = [STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, MEI3_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY, HOLO_BACKUP_KEY, STORY_BACKUP_KEY, RI3_BACKUP_KEY];
+
+function rawHasRi3(raw) {
+  const ri = raw?.travel?.realms?.ri;
+  return isRecord(ri) && (Object.hasOwn(ri, 'storyShard') || Object.hasOwn(ri, 'city'));
+}
+
+function ri3InState(state) {
+  const ri = state?.travel?.realms?.ri;
+  return isRecord(ri) && (ri.storyShard === true || isRecord(ri.city));
+}
 
 function writeOriginalBackup(storage, baseKey, text) {
   for (let i = 0; i < 100; i++) {
@@ -302,8 +314,11 @@ export class GameState {
     this.travelSaveText=null;this.travelBackupKey=null;this.travelNotice=null;
     this.xingSaveText=null;this.xingBackupKey=null;
     this.meiSaveText=null;this.meiBackupKey=null;
+    this.mei3SaveText=null;this.mei3BackupKey=null;
     this.vistaSaveText=null;this.vistaBackupKey=null;
     this.holoSaveText=null;this.holoBackupKey=null;
+    this.storySaveText=null;this.storyBackupKey=null;
+    this.ri3SaveText=null;this.ri3BackupKey=null;
     this.load();
   }
 
@@ -378,6 +393,12 @@ export class GameState {
         this.meiSaveText=null;
       }catch{this.storageError='美谷升级前的世界未能备份。请先导出存档。';return fail(this.storageError);}
     }
+    if(this.mei3SaveText!==null){
+      try{
+        this.mei3BackupKey=writeOriginalBackup(this.storage,MEI3_BACKUP_KEY,this.mei3SaveText);
+        this.mei3SaveText=null;
+      }catch{this.storageError='美谷片场升级前的世界未能备份。请先导出存档。';return fail(this.storageError);}
+    }
     if(this.vistaSaveText!==null){
       try{
         this.vistaBackupKey=writeOriginalBackup(this.storage,VISTA_BACKUP_KEY,this.vistaSaveText);
@@ -389,6 +410,18 @@ export class GameState {
         this.holoBackupKey=writeOriginalBackup(this.storage,HOLO_BACKUP_KEY,this.holoSaveText);
         this.holoSaveText=null;
       }catch{this.storageError='星网升级前的世界未能备份。请先导出存档。';return fail(this.storageError);}
+    }
+    if(this.storySaveText!==null){
+      try{
+        this.storyBackupKey=writeOriginalBackup(this.storage,STORY_BACKUP_KEY,this.storySaveText);
+        this.storySaveText=null;
+      }catch{this.storageError='故事升级前的世界未能备份。请先导出存档。';return fail(this.storageError);}
+    }
+    if(this.ri3SaveText!==null && ri3InState(this.state)){
+      try{
+        this.ri3BackupKey=writeOriginalBackup(this.storage,RI3_BACKUP_KEY,this.ri3SaveText);
+        this.ri3SaveText=null;
+      }catch{this.storageError='日谷升级前的世界未能备份。请先导出存档。';return fail(this.storageError);}
     }
     if(this.legacySaveText!==null){
       try{
@@ -450,9 +483,15 @@ export class GameState {
       const hasMei = Boolean(realmBag && Object.hasOwn(realmBag, 'mei'));
       if(!hasXing) this.xingSaveText=text;
       if(!hasMei) this.meiSaveText=text;
+      const hasMei3 = Boolean(realmBag?.mei && typeof realmBag.mei.storyShard === 'boolean');
+      if(!hasMei3) this.mei3SaveText=text;
       const hasVista = isRecord(raw.travel) && Object.hasOwn(raw.travel, 'discovered') && Object.hasOwn(raw.travel, 'keepsakes');
       if(!hasVista) this.vistaSaveText=text;
       if(xingLacksHolo(raw)) this.holoSaveText=text;
+      const storyRaw = raw.travel?.story;
+      const hasStory = isRecord(storyRaw) && Object.hasOwn(storyRaw, 'fogIntro') && Object.hasOwn(storyRaw, 'restored') && Object.hasOwn(storyRaw, 'fogOff');
+      if(!hasStory) this.storySaveText=text;
+      if(!rawHasRi3(raw)) this.ri3SaveText=text;
       this.legacySaveText=raw.clock===undefined||raw.flora===undefined||raw.land?.claimed===undefined?text:null;
       this.legacyBackupBase=raw.land?.claimed===undefined?LAND_BACKUP_KEY:LIFE_BACKUP_KEY;
       this.state = next;
@@ -499,6 +538,10 @@ export class GameState {
     if(this.meiSaveText!==null)return this.meiSaveText;
     try{return this.storage?.getItem(this.meiBackupKey||MEI_BACKUP_KEY)??null;}catch{return null;}
   }
+  getMei3Backup(){
+    if(this.mei3SaveText!==null)return this.mei3SaveText;
+    try{return this.storage?.getItem(this.mei3BackupKey||MEI3_BACKUP_KEY)??null;}catch{return null;}
+  }
   getVistaBackup(){
     if(this.vistaSaveText!==null)return this.vistaSaveText;
     try{return this.storage?.getItem(this.vistaBackupKey||VISTA_BACKUP_KEY)??null;}catch{return null;}
@@ -506,6 +549,14 @@ export class GameState {
   getHoloBackup(){
     if(this.holoSaveText!==null)return this.holoSaveText;
     try{return this.storage?.getItem(this.holoBackupKey||HOLO_BACKUP_KEY)??null;}catch{return null;}
+  }
+  getStoryBackup(){
+    if(this.storySaveText!==null)return this.storySaveText;
+    try{return this.storage?.getItem(this.storyBackupKey||STORY_BACKUP_KEY)??null;}catch{return null;}
+  }
+  getRi3Backup(){
+    if(this.ri3SaveText!==null)return this.ri3SaveText;
+    try{return this.storage?.getItem(this.ri3BackupKey||RI3_BACKUP_KEY)??null;}catch{return null;}
   }
 
   importSave(text) {
@@ -524,9 +575,12 @@ export class GameState {
         if (this.meiSaveText === null) this.meiSaveText = text;
         if (!next.travel.realms.mei) next.travel.realms.mei = emptyRealm('mei');
       }
+      const hasMei3 = Boolean(realmBag?.mei && typeof realmBag.mei.storyShard === 'boolean');
+      if (!hasMei3 && this.mei3SaveText === null) this.mei3SaveText = text;
       const hasVista = isRecord(raw.travel) && Object.hasOwn(raw.travel, 'discovered') && Object.hasOwn(raw.travel, 'keepsakes');
       if (!hasVista && this.vistaSaveText === null) this.vistaSaveText = text;
       if (xingLacksHolo(raw) && this.holoSaveText === null) this.holoSaveText = text;
+      if (!rawHasRi3(raw) && this.ri3SaveText === null) this.ri3SaveText = text;
       settleHolo(next);
       this.state = next;
       this.history = [];
@@ -768,6 +822,8 @@ export class GameState {
     if (!recipeId && matches.length > 1) return { ...fail('这个摆法有两种做法，请选想要的物品。'), matches };
     const recipe = recipeId ? matches.find(recipe => recipe.id === recipeId) : matches[0];
     if (!recipe) return fail('选中的物品与格子摆法不同。');
+    const restored = this.state.travel?.story?.restored || [];
+    if (recipe.story && !restored.includes(recipe.story) && !restored.includes('all')) return fail('河水亮起来以后，可以用和纸和树枝做纸灯笼。');
     const required = blankInventory();
     for (const item of recipe.pattern.flat()) if (item) required[item]++;
     const missing = ITEM_KEYS.find(item => this.state.inventory[item] < required[item]);
@@ -915,6 +971,61 @@ export class GameState {
     });
     return ok('纸鲤鱼旗补上了。小春说谢谢。这面旗还在背包里，也可以带回河谷。');
   }
+  lightRiLantern(index) {
+    if (this.currentRealm() !== 'ri' || !this.state.travel.realms?.ri) return fail('先到日谷的寺社。');
+    if (!Number.isInteger(index) || index < 0 || index > 3) return fail('这盏石灯笼点不着。');
+    const bit = 1 << index;
+    this.mutate((state) => { const city = state.travel.realms.ri.city || freshCity(); city.lanterns |= bit; state.travel.realms.ri.city = city; });
+    const all = (this.state.travel.realms.ri.city.lanterns & LANTERN_ALL) === LANTERN_ALL;
+    return ok(all ? '四盏石灯笼都亮了。' : '石灯笼亮了。', { all, kind: 'lantern' });
+  }
+  lightRiShop(index) {
+    if (this.currentRealm() !== 'ri' || !this.state.travel.realms?.ri) return fail('先到日谷的招牌街。');
+    if (!Number.isInteger(index) || index < 0 || index > 5) return fail('这家店还没开门。');
+    const bit = 1 << index;
+    this.mutate((state) => { const city = state.travel.realms.ri.city || freshCity(); city.shops |= bit; state.travel.realms.ri.city = city; });
+    const all = (this.state.travel.realms.ri.city.shops & SHOP_ALL) === SHOP_ALL;
+    return ok(all ? '整条招牌街都亮了。' : '招牌亮了。', { all, kind: 'shop' });
+  }
+  finishRiTrain() {
+    if (this.currentRealm() !== 'ri' || !this.state.travel.realms?.ri) return fail('先到日谷坐电车。');
+    this.mutate((state) => {
+      const city = state.travel.realms.ri.city || freshCity();
+      city.trainLoops = Math.min(99, (city.trainLoops || 0) + 1);
+      state.travel.realms.ri.city = city;
+    });
+    return ok('电车绕了一圈，三站都停过了。', { kind: 'train' });
+  }
+  markRiManner(kind) {
+    if (this.currentRealm() !== 'ri' || !this.state.travel.realms?.ri) return fail('先到日谷。');
+    const lines = { queue: '排好队了。', signal: '绿灯的时候再走。', shoes: '鞋已经脱在门口。', thanks: 'いただきます。' };
+    if (!Object.hasOwn(lines, kind)) return fail('这一步先看图标。');
+    this.mutate((state) => {
+      const city = state.travel.realms.ri.city || freshCity();
+      city[kind] = true;
+      state.travel.realms.ri.city = city;
+    });
+    return ok(lines[kind], { kind });
+  }
+  claimRiShard() {
+    if (this.currentRealm() !== 'ri' || !this.state.travel.realms?.ri) return fail('先到日谷的车站。');
+    const realm = this.state.travel.realms.ri;
+    if (realm.storyShard === true) return ok('潮之片已经拿到了。', { already: true, line: MIKO_CLUE });
+    if (!canOpenCabinet(realm)) {
+      const tasks = shardTasks(realm);
+      const left = [];
+      if (!tasks.flag) left.push('修鲤鱼旗');
+      if (!tasks.street) left.push('点亮招牌');
+      if (!tasks.train) left.push('坐一圈电车');
+      const need = shardNeed();
+      return fail(need === 1 ? `再完成一件就行：${left.join('、')}。` : `三件事里做到两件，柜子才会开。还可以：${left.join('、')}。`);
+    }
+    this.mutate((state) => {
+      state.travel.realms.ri.storyShard = true;
+      grantStamp(state, 'ri-tide-shard');
+    });
+    return ok('柜子开了。蓝色石片上有海浪，边上是一排小方孔。', { shard: true, line: MIKO_CLUE });
+  }
   rewardTutorSupply(tutorId = 'ri') {
     if (typeof tutorId !== 'string' || !/^[a-z0-9-]{1,64}$/.test(tutorId)) return fail('这份补给的内容不正确。');
     const mei = this.currentRealm() === 'mei';
@@ -939,6 +1050,18 @@ export class GameState {
       if (!state.travel.story.letters.includes(id)) state.travel.story.letters.push(id);
     });
     return ok('信看过了。想坐船就去渡口，不看信也可以走。');
+  }
+  craftPaperLantern() {
+    const restored = this.state.travel?.story?.restored || [];
+    if (!restored.includes('water') && !restored.includes('all')) return fail('河水亮起来以后，可以用和纸和树枝做纸灯笼。');
+    if ((this.state.inventory.washi || 0) < 1 || (this.state.inventory.branch || 0) < 1) return fail('纸灯笼要用一张和纸和一根树枝。这是游戏约定。');
+    if (!isCount((this.state.inventory['paper-lantern'] || 0) + 1)) return fail('纸灯笼已经很多了。');
+    this.mutate((state) => {
+      state.inventory.washi -= 1;
+      state.inventory.branch -= 1;
+      state.inventory['paper-lantern'] += 1;
+    });
+    return ok('做成一盏纸灯笼。不会真的用火。');
   }
   claimKiln() {
     const kiln = this.state.kiln;

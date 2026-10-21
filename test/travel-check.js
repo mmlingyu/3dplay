@@ -392,8 +392,8 @@ async function runViewport(kind, viewport, full) {
       return readFileSync(file, 'utf8');
     });
     check('暂停里单独的按钮下载旅行升级前的原文', downloaded === stripped.next && download.suggestedFilename().includes('旅行'));
-    await page.locator('#age-band').selectOption('little');
-    check('年龄档可以设置且说明不记录生日', await page.evaluate(() => __valley.game.state.settings.ageBand === 'little') && (await page.locator('.game-panel').innerText()).includes('不记录生日'));
+    await page.locator('#age-band').selectOption('junior');
+    check('年龄档可以设置且说明不记录生日', await page.evaluate(() => __valley.game.state.settings.ageBand === 'junior') && (await page.locator('.game-panel').innerText()).includes('不记录生日'));
     await page.locator('.panel-header [data-action="close"]').click();
 
     const statsBefore = await page.evaluate(() => ({ ...__valley.sceneStats }));
