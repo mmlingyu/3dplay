@@ -1,4 +1,4 @@
-import { ITEMS, RECIPES, COLLECTABLE_ITEMS, GARDEN_PLOTS, MAX_BUILD_HEIGHT, STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY, terrainHeight, isProtectedCell, roofSpan, roofWallAt } from './game-data.js';
+import { ITEMS, RECIPES, COLLECTABLE_ITEMS, GARDEN_PLOTS, MAX_BUILD_HEIGHT, STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY, HOLO_BACKUP_KEY, terrainHeight, isProtectedCell, roofSpan, roofWallAt } from './game-data.js';
 import { REALM_BLOCK_LIMIT, REALMS, SUPPLY_COOLDOWN, SUPPLY_COUNT, WASHI_STAGES, WASHI_TOTAL_SECONDS, arrivalFor, defaultTravel, emptyRealm, inVisitorYard, isDockCell, realmContains, realmTerrainHeight, washiStage } from './realm-data.js';
 import { TravelError, repairTravelRaw, validateTravel } from './travel-save.js';
 import { advanceMaple, attachMei } from './mei-state.js';
@@ -11,6 +11,8 @@ import { homeHasFantasyLiving, isFantasyLiving } from './xing-save.js';
 import { QUARANTINE_NOTE } from './xing-data.js';
 import { KEEPSAKES, VISTAS } from './vista-data.js';
 import { claimCrystal as takeCrystal, crystalStatus as crystalNow, grantPlaque as givePlaque, learnGlyphs as rememberGlyphs, recordExperiment as noteExperiment, releaseCheck, reuniteGugu as bringGugu, rewardXingSupply as payXingSupply, seeHopper as markHopper, seeMoss as markMoss, solvePuzzle as gradeXingPuzzle, sowCheck, startCrystal as beginCrystal, tickCrystals } from './xing-actions.js';
+import { ensureHolo, markWelcomed, noteStage, setAvatar, snapshotGrowth, syncFieldStarlight } from './holo-actions.js';
+import { WELCOME_LINE } from './holo-data.js';
 
 const ITEM_KEYS = Object.keys(ITEMS);
 const KILN_STAGES = ['idle', 'moistening', 'drying', 'firing', 'cooling', 'ready', 'failed'];
@@ -112,7 +114,10 @@ export function validateSave(value) {
   if (!isRecord(value.settings) || typeof value.settings.sound !== 'boolean') throw new Error('存档中的设置不正确。');
   const ageBand = value.settings.ageBand ?? null;
   if (ageBand !== null && ageBand !== 'little' && ageBand !== 'bigger' && ageBand !== 'older') throw new Error('存档中的年龄档不正确。');
+  const quality = value.settings.quality;
+  if (quality !== undefined && quality !== 'fast' && quality !== 'fine') throw new Error('存档中的画质不正确。');
   next.settings = { sound: value.settings.sound, ageBand };
+  if (quality === 'fast' || quality === 'fine') next.settings.quality = quality;
   if (!isRecord(value.stats)) throw new Error('存档中的记录不正确。');
   for (const stat of Object.keys(next.stats)) {
     if (!isCount(value.stats[stat])) throw new Error('存档中的记录数量不正确。');
@@ -155,10 +160,22 @@ export function validateSave(value) {
   const maxId = Math.max(0, ...[...seenIds].map(id => Number(String(id).slice(6))));
   if (!Number.isSafeInteger(maxId) || maxId >= 1000000000) throw new Error('存档中的建筑编号不正确。');
   next.nextId = Math.max(maxId + 1, isPositive(value.nextId) ? value.nextId : 1);
+  settleHolo(next);
   return next;
 }
 
-const FIGURE_BACKUP_KEYS = [STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY];
+function xingLacksHolo(raw) {
+  const xing = raw?.travel?.realms?.xing;
+  return !isRecord(xing) || !Object.hasOwn(xing, 'holo');
+}
+
+function settleHolo(state) {
+  if (!state?.travel?.realms?.xing) return;
+  ensureHolo(state);
+  syncFieldStarlight(state);
+}
+
+const FIGURE_BACKUP_KEYS = [STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY, HOLO_BACKUP_KEY];
 
 function writeOriginalBackup(storage, baseKey, text) {
   for (let i = 0; i < 100; i++) {
@@ -286,6 +303,7 @@ export class GameState {
     this.xingSaveText=null;this.xingBackupKey=null;
     this.meiSaveText=null;this.meiBackupKey=null;
     this.vistaSaveText=null;this.vistaBackupKey=null;
+    this.holoSaveText=null;this.holoBackupKey=null;
     this.load();
   }
 
@@ -366,6 +384,12 @@ export class GameState {
         this.vistaSaveText=null;
       }catch{this.storageError='远眺升级前的世界未能备份。请先导出存档。';return fail(this.storageError);}
     }
+    if(this.holoSaveText!==null){
+      try{
+        this.holoBackupKey=writeOriginalBackup(this.storage,HOLO_BACKUP_KEY,this.holoSaveText);
+        this.holoSaveText=null;
+      }catch{this.storageError='星网升级前的世界未能备份。请先导出存档。';return fail(this.storageError);}
+    }
     if(this.legacySaveText!==null){
       try{
         this.legacyBackupKey=writeOriginalBackup(this.storage,this.legacyBackupBase,this.legacySaveText);
@@ -387,6 +411,7 @@ export class GameState {
     this.rememberFigures();
     if(this.xingSaveText===null && this.state.travel && !this.state.travel.realms.xing) this.state.travel.realms.xing = emptyRealm('xing');
     if(this.meiSaveText===null && this.state.travel && !this.state.travel.realms.mei) this.state.travel.realms.mei = emptyRealm('mei');
+    settleHolo(this.state);
     try {
       this.storage.setItem(STORAGE_KEY, this.exportSave());
       this.storageError = null;
@@ -427,11 +452,13 @@ export class GameState {
       if(!hasMei) this.meiSaveText=text;
       const hasVista = isRecord(raw.travel) && Object.hasOwn(raw.travel, 'discovered') && Object.hasOwn(raw.travel, 'keepsakes');
       if(!hasVista) this.vistaSaveText=text;
+      if(xingLacksHolo(raw)) this.holoSaveText=text;
       this.legacySaveText=raw.clock===undefined||raw.flora===undefined||raw.land?.claimed===undefined?text:null;
       this.legacyBackupBase=raw.land?.claimed===undefined?LAND_BACKUP_KEY:LIFE_BACKUP_KEY;
       this.state = next;
       if(!hasXing && !this.state.travel.realms.xing) this.state.travel.realms.xing = emptyRealm('xing');
       if(!hasMei && !this.state.travel.realms.mei) this.state.travel.realms.mei = emptyRealm('mei');
+      settleHolo(this.state);
       this.history = [];
       this.tickRemainder = 0;
       this.storageError = null;
@@ -476,6 +503,10 @@ export class GameState {
     if(this.vistaSaveText!==null)return this.vistaSaveText;
     try{return this.storage?.getItem(this.vistaBackupKey||VISTA_BACKUP_KEY)??null;}catch{return null;}
   }
+  getHoloBackup(){
+    if(this.holoSaveText!==null)return this.holoSaveText;
+    try{return this.storage?.getItem(this.holoBackupKey||HOLO_BACKUP_KEY)??null;}catch{return null;}
+  }
 
   importSave(text) {
     try {
@@ -495,6 +526,8 @@ export class GameState {
       }
       const hasVista = isRecord(raw.travel) && Object.hasOwn(raw.travel, 'discovered') && Object.hasOwn(raw.travel, 'keepsakes');
       if (!hasVista && this.vistaSaveText === null) this.vistaSaveText = text;
+      if (xingLacksHolo(raw) && this.holoSaveText === null) this.holoSaveText = text;
+      settleHolo(next);
       this.state = next;
       this.history = [];
       this.tickRemainder = 0;
@@ -1016,6 +1049,32 @@ export class GameState {
   learnGlyphs(ids) { return rememberGlyphs(this, ids); }
   solvePuzzle(puzzle, choiceId) { return gradeXingPuzzle(this, puzzle, choiceId); }
   rewardXingSupply(tutorId) { return payXingSupply(this, tutorId); }
+  setQuality(mode) {
+    if (mode !== 'fast' && mode !== 'fine') return fail('画质不正确。');
+    this.mutate((state) => { state.settings.quality = mode; });
+    return ok(mode === 'fast' ? '已换成流畅。' : '已换成精美。');
+  }
+  noteHoloWelcome() {
+    const fresh = markWelcomed(this.state);
+    if (fresh) this.save();
+    return { fresh, line: WELCOME_LINE };
+  }
+  noteHoloStage(stageId, record) {
+    const result = noteStage(this.state, stageId, record);
+    if (result.ok) this.save();
+    return result;
+  }
+  setHoloAvatar(patch) {
+    const changed = setAvatar(this.state, patch);
+    if (changed) this.save();
+    return changed;
+  }
+  recordHoloGrowth(now) {
+    const before = JSON.stringify(this.state.travel?.realms?.xing?.holo?.growth || []);
+    const growth = snapshotGrowth(this.state, now);
+    if (JSON.stringify(growth) !== before) this.save();
+    return growth;
+  }
   sow(plotId, itemId = 'seed') {
     const blocked = sowCheck(itemId);
     if (blocked) return blocked;

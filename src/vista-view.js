@@ -154,6 +154,14 @@ export function mountVistas(scene) {
   xing.add(planet);
   materials.push(planetMat, ringMat);
   pick.push(planetBall);
+  const gateRingMat = flat('#36E0E8', 0.3);
+  const gateRing = new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.06, 6, 6), gateRingMat);
+  gateRing.rotation.x = Math.PI / 2;
+  gateRing.position.set(0.2, 1.15, 0.15);
+  gateRing.name = 'vista-star-gate';
+  gateRing.userData.vistaId = 'xing';
+  xing.add(gateRing);
+  materials.push(gateRingMat);
 
   const seaMat = flat('#8ebdc0', 0.22);
   const sea = new THREE.Mesh(new THREE.PlaneGeometry(96, 42), seaMat);
@@ -179,7 +187,7 @@ export function mountVistas(scene) {
       const signals = vistaSignals(moment);
       view.signals = signals;
       for (const material of materials) {
-        if (material !== crystalMat && material !== kiteMat && material !== lanternMat) material.opacity = material === seaMat ? 0.12 + clarity * 0.28 : opacity;
+        if (material !== crystalMat && material !== kiteMat && material !== lanternMat && material !== gateRingMat) material.opacity = material === seaMat ? 0.12 + clarity * 0.28 : opacity;
       }
       kiteMat.opacity = signals.kite ? opacity : 0.02;
       kite.visible = signals.kite;
@@ -187,6 +195,8 @@ export function mountVistas(scene) {
       lantern.visible = signals.lantern;
       blades.rotation.z += dt * 1.4;
       crystalMat.opacity = signals.crystal ? opacity * (0.45 + 0.55 * (0.5 + 0.5 * Math.sin(performance.now() / 280))) : opacity * 0.22;
+      const breathe = 0.5 + 0.5 * Math.sin(performance.now() / 900);
+      gateRingMat.opacity = signals.crystal ? opacity * (0.55 + 0.45 * breathe) : opacity * 0.4;
       planet.rotation.y += dt * 0.25;
       kite.position.y = 11.5 + Math.sin(performance.now() / 500) * 0.45;
     },
