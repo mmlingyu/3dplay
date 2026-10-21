@@ -17,6 +17,7 @@ export const LIFE_BACKUP_KEY = `${STORAGE_KEY}-before-life`;
 export const LAND_BACKUP_KEY = `${STORAGE_KEY}-before-expansion`;
 export const TRAVEL_BACKUP_KEY = `${STORAGE_KEY}-before-travel`;
 export const MEI_BACKUP_KEY = `${STORAGE_KEY}-before-mei`;
+export const MEI3_BACKUP_KEY = `${STORAGE_KEY}-before-mei3`;
 export const XING_BACKUP_KEY = `${STORAGE_KEY}-before-xing`;
 export const VISTA_BACKUP_KEY = `${STORAGE_KEY}-before-vista`;
 export const RI3_BACKUP_KEY = `${STORAGE_KEY}-before-ri3`;

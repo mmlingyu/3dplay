@@ -114,23 +114,39 @@ export function mountVistas(scene) {
   const meiMat = basic(0.3);
   materials.push(meiMat);
   addMesh(mei, mergeParts([
-    box(6.4, 4.2, 4.2, 0, 2.2, 0, '#c45c4a'),
-    box(7.2, 1.6, 4.8, 0, 4.8, 0, '#8f3b32'),
-    box(0.28, 6.4, 0.28, 4.8, 3.2, 0, '#f2e2c4'),
-    cone(1.8, 3.6, -4.2, 1.8, 1.2, '#c4503a', 6),
-    cone(1.5, 3, -6.2, 1.5, -0.4, '#d4653a', 6),
-    cone(1.3, 2.6, -3.2, 1.3, -1.6, '#b84332', 5),
-    cone(1.2, 2.4, -5.4, 1.2, 2.2, '#e07a45', 5),
+    box(7.4, 1.5, 3.2, 0, 1.15, -1.4, '#6a5344'),
+    box(5.4, 1.15, 2.4, 0, 2.35, -1.25, '#7b624f'),
+    box(0.32, 2.15, 0.32, -2.35, 4.2, -0.55, '#f7f4ef'),
+    box(0.32, 2.15, 0.32, -1.25, 4.2, -0.55, '#f7f4ef'),
+    box(1.4, 0.28, 0.28, -1.8, 3.25, -0.55, '#f7f4ef'),
+    box(1.15, 0.24, 0.26, 0.05, 5.15, -0.55, '#f7f4ef'),
+    box(1.15, 0.24, 0.26, 0.05, 4.15, -0.55, '#f7f4ef'),
+    box(1.15, 0.24, 0.26, 0.05, 3.15, -0.55, '#f7f4ef'),
+    box(0.24, 0.85, 0.26, -0.48, 4.55, -0.55, '#f7f4ef'),
+    box(0.24, 0.85, 0.26, 0.58, 3.55, -0.55, '#f7f4ef'),
+    box(0.3, 2.2, 0.3, 1.55, 4.15, -0.55, '#f7f4ef'),
+    box(0.3, 2.2, 0.3, 2.55, 4.15, -0.55, '#f7f4ef'),
+    box(1.15, 0.24, 0.26, 2.05, 4.55, -0.55, '#f7f4ef'),
+    box(0.42, 3.3, 0.42, -3.7, 1.7, 2.5, '#c44536'),
+    box(0.42, 3.3, 0.42, 3.7, 1.7, 2.5, '#c44536'),
+    box(7.8, 0.24, 0.42, 0, 3.15, 2.5, '#a3262a'),
   ]), meiMat, 'mei', pick);
-  const bladeMat = flat('#f7f1e4', 0.3);
-  const blades = new THREE.Mesh(mergeParts([
-    box(4.6, 0.28, 0.18, 0, 0, 0, '#f7f1e4'),
-    box(0.28, 4.6, 0.18, 0, 0, 0, '#f7f1e4'),
-  ]), bladeMat);
-  blades.position.set(4.8, 6.2, 0.4);
-  blades.userData.vistaId = 'mei';
-  mei.add(blades);
-  materials.push(bladeMat);
+  const beamMat = flat('#ffe3a3', 0.02);
+  const beamGeo = new THREE.ConeGeometry(0.38, 3.4, 5, 1, true);
+  beamGeo.translate(0, 1.5, 0);
+  beamGeo.rotateX(1.05);
+  const beamL = new THREE.Mesh(beamGeo, beamMat);
+  const beamRMat = flat('#ffe3a3', 0.02);
+  const beamR = new THREE.Mesh(beamGeo, beamRMat);
+  beamL.position.set(-3.7, 4.5, 2.5);
+  beamR.position.set(3.7, 4.5, 2.5);
+  beamL.userData.vistaId = 'mei';
+  beamR.userData.vistaId = 'mei';
+  beamL.visible = false;
+  beamR.visible = false;
+  mei.add(beamL, beamR);
+  materials.push(beamMat, beamRMat);
+  pick.push(beamL, beamR);
 
   const xing = new THREE.Group();
   xing.position.set(VISTAS.xing.x, VISTAS.xing.y, VISTAS.xing.z);
@@ -191,7 +207,13 @@ export function mountVistas(scene) {
       lanternMat.opacity = signals.lantern ? Math.min(1, opacity + 0.2) : 0.02;
       lantern.visible = signals.lantern;
       towerTip.visible = signals.lantern;
-      blades.rotation.z += dt * 1.4;
+      const sweep = signals.searchlight ? Math.sin(performance.now() / 700) * 0.65 : 0;
+      beamMat.opacity = signals.searchlight ? Math.min(0.85, opacity + 0.2) : 0.02;
+      beamRMat.opacity = beamMat.opacity;
+      beamL.visible = !!signals.searchlight;
+      beamR.visible = !!signals.searchlight;
+      beamL.rotation.y = sweep;
+      beamR.rotation.y = -sweep + 0.35;
       crystalMat.opacity = signals.crystal ? opacity * (0.45 + 0.55 * (0.5 + 0.5 * Math.sin(performance.now() / 280))) : opacity * 0.22;
       planet.rotation.y += dt * 0.25;
       kite.position.y = 11.5 + Math.sin(performance.now() / 500) * 0.45;

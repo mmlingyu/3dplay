@@ -1,10 +1,13 @@
 /** Checks for fields that live only inside travel.realms.mei. */
 
 import { PUMPKIN_FACES } from './mei-data.js';
+import { BOARD_CARDS, FILM_LIMIT, SHOTS } from './mei-lot.js';
 import { PROJECT_CARD_LIMIT, PROJECT_GOALS, sanitizeParts } from './project-board.js';
 
 const GOAL_IDS = new Set(PROJECT_GOALS.map((item) => item.id));
 const FACE_IDS = new Set(PUMPKIN_FACES.map((item) => item.id));
+const CARD_IDS = new Set(BOARD_CARDS.map((item) => item.id));
+const SHOT_IDS = new Set(SHOTS.map((item) => item.id));
 const STEPS = new Set(['draw', 'make', 'try', 'change', 'done']);
 const ID_TEXT = /^card-[1-9]\d*$/;
 
@@ -75,5 +78,43 @@ export function validateMeiFields(realm) {
   if (!isRecord(decorIn)) throw fail('美谷的装饰记录不正确。');
   const face = decorIn.face ?? 'smile';
   if (!FACE_IDS.has(face)) throw fail('美谷的南瓜灯表情不正确。');
-  return { projects, trades, decor: { face } };
+  return { projects, trades, decor: { face }, ...readLot(realm) };
+}
+
+function readFlag(value, label) {
+  if (value == null) return false;
+  if (typeof value !== 'boolean') throw fail(label);
+  return value;
+}
+
+function readLot(realm) {
+  const projectorIn = realm.projector ?? {};
+  if (!isRecord(projectorIn)) throw fail('美谷的放映机不正确。');
+  const projector = {
+    gear: readFlag(projectorIn.gear, '美谷的齿轮不正确。'),
+    lens: readFlag(projectorIn.lens, '美谷的镜头不正确。'),
+    lamp: readFlag(projectorIn.lamp, '美谷的灯不正确。'),
+  };
+  const filmsIn = realm.films ?? [];
+  if (!Array.isArray(filmsIn) || filmsIn.length > FILM_LIMIT) throw fail('美谷的片子太多了。');
+  const ids = new Set();
+  const films = filmsIn.map((film) => {
+    if (!isRecord(film) || typeof film.id !== 'string' || !/^film-[1-9]\d*$/.test(film.id) || ids.has(film.id)) {
+      throw fail('美谷的片子不正确。');
+    }
+    if (film.kind !== 'film' && film.kind !== 'photo') throw fail('美谷的片子不正确。');
+    const frames = film.frames ?? [];
+    if (!Array.isArray(frames) || frames.length > 3 || frames.some((id) => !CARD_IDS.has(id))) throw fail('美谷的分镜不正确。');
+    const shot = film.shot ?? '';
+    if (typeof shot !== 'string' || (shot && !SHOT_IDS.has(shot))) throw fail('美谷的镜头不正确。');
+    const subject = typeof film.subject === 'string' ? film.subject.slice(0, 16) : '';
+    ids.add(film.id);
+    return { id: film.id, kind: film.kind, frames: [...frames], shot, subject };
+  });
+  return {
+    storyShard: readFlag(realm.storyShard, '美谷的光之片不正确。'),
+    projector,
+    films,
+    premiere: readFlag(realm.premiere, '美谷的首映夜不正确。'),
+  };
 }
