@@ -254,12 +254,42 @@ async function run(kind, contextOptions, { phone = false, shots = false } = {}) 
       for (let i = 0; i < 12; i += 1) __valley.step(0.08);
     });
     await shot(page, `holo-${kind}-hall`);
+    await page.evaluate(() => {
+      const world = __valley.world;
+      const y = world.surfaceAt(0.2, 1.2);
+      world.playerPosition.set(0.2, Math.max(y, 2), 1.2);
+      world.yaw = -Math.PI / 2;
+      world.distance = 4.2;
+      world.lookAt.copy(world.playerPosition);
+      const body = world.holoLayer?.starling?.group;
+      if (body) body.rotation.y = 0.85;
+      for (let i = 0; i < 30; i += 1) __valley.step(0.05);
+    });
+    await shot(page, `holo-${kind}-starling`);
   }
   await page.evaluate(() => __valley.leaveHolo());
   await page.waitForFunction(() => __valley.holoPhase() === 'off');
 
   await enterHall(page, { skip: false });
   check(`${kind} 不跳过大约三秒后进入`, true);
+
+  if (kind === 'desktop') {
+    await page.evaluate(() => { __valley.game.state.settings.sound = true; });
+    await page.keyboard.press('Shift');
+    await page.waitForFunction(() => __valley.voiceReady() === 'running');
+    check(`${kind} 按键之后可以出声`, true);
+    await press(page, '化身');
+    await page.waitForFunction(() => document.querySelector('#holo-panel [data-holo="speak"]'));
+    const clip = page.waitForResponse((response) => response.url().includes('/voice/holo/holo-avatar.mp3') && response.status() === 200);
+    await page.evaluate(() => document.querySelector('#holo-panel [data-holo="speak"]')?.click());
+    await clip;
+    check(`${kind} 化身说明播的是录音`, true);
+    const quiet = page.waitForRequest((request) => request.url().includes('/voice/holo/'), { timeout: 1500 }).then(() => true).catch(() => false);
+    await page.evaluate(() => { __valley.game.state.settings.sound = false; });
+    await page.evaluate(() => document.querySelector('#holo-panel [data-holo="speak"]')?.click());
+    check(`${kind} 关掉声音不再请求录音`, await quiet === false);
+    await page.evaluate(() => document.getElementById('holo-panel')?.querySelector('[data-holo="close"]')?.click());
+  }
 
   await page.evaluate(() => {
     __valley.setAge('little');

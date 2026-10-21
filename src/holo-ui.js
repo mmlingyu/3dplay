@@ -1,5 +1,6 @@
 /** Star-net panels. HTML only: no 3D text. */
 
+import { countWord } from './voice-lines.js';
 import {
   GLOW_COLORS,
   HOLO_PADS,
@@ -132,7 +133,7 @@ export function mountHoloUi({ game, speak, toast, world, band, onPaint }) {
       return `<li>${item.name}${on ? '，已经有了' : `，${item.tier} 阶之后`}</li>`;
     }).join('');
     const storedNote = record.tier > cap ? `存着的是 ${record.tier} 阶，这个年龄先显示到这里。` : '';
-    paint(`<h2>星阶</h2><p class="holo-tier">${tierLabel(record.tier, age)}</p><p>${storedNote}</p><div class="holo-axes" aria-label="成长">${rows}</div><p>${compare}</p><ul class="holo-colors">${colors}</ul><p class="holo-quiet">星光来自数之环，也来自外星谷里已经做过的观察。故事先记着 0。</p><div class="panel-row"><button type="button" class="primary-btn" data-holo="close">先离开</button><button type="button" class="secondary-btn" data-holo="speak" data-text="${tierLabel(record.tier, age)}。只和自己比。">听一听</button></div>`);
+    paint(`<h2>星阶</h2><p class="holo-tier">${tierLabel(record.tier, age)}</p><p>${storedNote}</p><div class="holo-axes" aria-label="成长">${rows}</div><p>${compare}</p><ul class="holo-colors">${colors}</ul><p class="holo-quiet">星光来自数之环，也来自外星谷里已经做过的观察。故事先记着 0。</p><div class="panel-row"><button type="button" class="primary-btn" data-holo="close">先离开</button><button type="button" class="secondary-btn" data-holo="speak" data-text="这是你的星阶。只和自己比。">听一听</button></div>`);
   }
 
   function openStage(stageId) {
@@ -252,6 +253,8 @@ export function mountHoloUi({ game, speak, toast, world, band, onPaint }) {
       const index = Number(button.dataset.index);
       lamps = lamps.includes(index) ? lamps.filter((item) => item !== index) : lamps.concat(index);
       renderStage();
+      const word = countWord(lamps.length);
+      if (word) say(word);
       return;
     }
     if (act === 'block') {

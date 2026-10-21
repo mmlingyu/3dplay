@@ -21,6 +21,8 @@ import { sceneStats } from './scene-stats.js';
 import { RI_AUDIO } from './ri-tutors.js';
 import { FANTASY_ROUTE, STAR_SECONDS, XING_AUDIO, XING_OPEN, starRouteVisible } from './xing-data.js';
 import { HOLO_AUDIO, WELCOME_LINE } from './holo-data.js';
+import { recordedIds } from './voice-lines.js';
+import { bindVoiceUnlock, clipIdFor, playVoice, stopVoice, voiceReady } from './voice.js';
 import { mountHoloUi } from './holo-ui.js';
 import { attachHomeVisitor, METEOR_LETTER } from './xing-home.js';
 import { closeXingSheet, crystalView, guguView, labView, mossView, paintXingSheet, puzzleView } from './xing-ui.js';
@@ -43,6 +45,8 @@ let tutorBand = game.state.settings.ageBand || 'little', tutorUsed = [], tutorCu
 let switching = false, cutscene = null, pendingHomeFlight = false, xingPuzzle = null, xingSheet = '', crystalMarkup = '';
 let holoUi = null;
 const missingAudio = new Set([...RI_AUDIO, ...MEI_AUDIO, ...XING_AUDIO, ...HOLO_AUDIO]);
+for (const id of recordedIds()) missingAudio.delete(id);
+bindVoiceUnlock();
 const riReady = import('./ri-world.js');
 const meiReady = import('./mei-world.js');
 const xingReady = import('./xing-world.js');
@@ -67,16 +71,27 @@ function toast(message, gain = false) {
   while ($('toast-root').children.length > 3) $('toast-root').firstChild.remove();
   setTimeout(() => el.remove(), 3400);
 }
+function synth(text) {
+  if (!game.state.settings.sound || !('speechSynthesis' in window) || !text) return;
+  const voices = speechSynthesis.getVoices();
+  const voice = voices.find(v => v.lang.startsWith('zh') && /Ting|婷婷|中文|Mandarin/.test(v.name)) || voices.find(v => v.lang.startsWith('zh'));
+  const utterance = new SpeechSynthesisUtterance(text); utterance.lang = 'zh-CN'; utterance.rate = .9; utterance.volume = .65;
+  if (voice) utterance.voice = voice;
+  speechSynthesis.cancel(); speechSynthesis.speak(utterance);
+}
 function speak(text) {
-  if (!game.state.settings.sound || !('speechSynthesis' in window)) return;
+  if (!game.state.settings.sound || !text) return;
   clearTimeout(speechTimer);
-  speechTimer = setTimeout(() => {
-    const voices = speechSynthesis.getVoices();
-    const voice = voices.find(v => v.lang.startsWith('zh') && /Ting|婷婷|中文|Mandarin/.test(v.name)) || voices.find(v => v.lang.startsWith('zh'));
-    const utterance = new SpeechSynthesisUtterance(text); utterance.lang = 'zh-CN'; utterance.rate = .9; utterance.volume = .65;
-    if (voice) utterance.voice = voice;
-    speechSynthesis.cancel(); speechSynthesis.speak(utterance);
-  }, 80);
+  const id = clipIdFor(text);
+  if (!id) {
+    stopVoice();
+    speechTimer = setTimeout(() => synth(text), 80);
+    return;
+  }
+  window.speechSynthesis?.cancel();
+  playVoice(id, { enabled: () => game.state.settings.sound !== false }).then((ok) => {
+    if (!ok && game.state.settings.sound) synth(text);
+  });
 }
 function speakBounce(info) {
   if (!game.state.settings.sound || !('speechSynthesis' in window) || !info) return;
@@ -1328,7 +1343,7 @@ $('land-question-skip').addEventListener('click',()=>{
 $('pause-button').addEventListener('click', () => openPanel('pause'));
 $('craft-button').addEventListener('click', () => openPanel('craft'));
 $('inventory-button').addEventListener('click', () => openPanel('inventory'));
-$('sound-button').addEventListener('click', () => { game.mutate(s => { s.settings.sound = !s.settings.sound; }); if (!game.state.settings.sound) { clearTimeout(speechTimer); window.speechSynthesis?.cancel(); } else speak('声音打开了。点喇叭可以听说明。'); });
+$('sound-button').addEventListener('click', () => { game.mutate(s => { s.settings.sound = !s.settings.sound; }); if (!game.state.settings.sound) { clearTimeout(speechTimer); stopVoice(); window.speechSynthesis?.cancel(); } else speak('声音打开了。点喇叭可以听说明。'); });
 $('wish-dismiss').addEventListener('click', () => { $('wish-card').hidden = true; });
 $('wish-read').addEventListener('click', () => speak(`${$('wish-title').textContent}。${$('wish-description').textContent}`));
 $('action-button').addEventListener('click', () => interact());
@@ -1517,7 +1532,7 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // The browser checks inspect state and exercise the same actions used by the UI.
-window.__valley = { game, get world() { return world; }, get panels() { return panels; }, start, openPanel, selectItem, changeMode, interact, goHome, goRealm, goXing, openXing, closeXing, startFerry, sceneStats, missingAudio: () => [...missingAudio], playerName: () => playerName, setBuildCell: cell => { buildCell = cell; updateContext(); }, gravityCompare, advanceCrystal: (seconds, flags = {}) => { if (flags?.paused || flags?.hidden) return game.crystalStatus(); game.tick(seconds); return game.crystalStatus(); }, setAge: (band) => { tutorBand = ['little', 'bigger', 'older'].includes(band) ? band : 'little'; }, step(dt = 0.05) { if (!world || world.released || switching) return { realm: game.state.travel?.current || 'he', phase: null, holo: null }; world.update(dt, { x: 0, z: 0 }, false); if (cutscene?.kind === 'stars' || cutscene?.kind === 'ferry') { const done = cutscene.tick(dt, { paused: panelType === 'pause' || !!panels?.isOpen(), hidden: false }); if (done) finishCutscene(); } paintTravel(); return { realm: game.state.travel?.current || 'he', phase: world.balloon?.phase || null, cutscene: cutscene?.kind || null, holo: world.holo?.phase || null }; }, enterHolo() { return world?.beginHolo?.() || false; }, skipHolo() { return world?.skipHolo?.() || false; }, leaveHolo() { return world?.leaveHolo?.() || false; }, holoPhase() { return world?.holo?.phase || 'off'; }, openHoloStage(id) { holoUi?.openStage(id); }, peekStage() { return holoUi?.peek?.() || null; }, setNight(value) { if (world) world.nightOverride = value; if (world) world.vistaMomentOverride = value ? { period: '晚上' } : null; }, sampleStats() { return world?.sampleStats?.() || null; }, quality() { return world?.qualityMode || game.state.settings?.quality || null; } };
+window.__valley = { game, get world() { return world; }, get panels() { return panels; }, start, openPanel, selectItem, changeMode, interact, goHome, goRealm, goXing, openXing, closeXing, startFerry, sceneStats, missingAudio: () => [...missingAudio], voiceReady, playerName: () => playerName, setBuildCell: cell => { buildCell = cell; updateContext(); }, gravityCompare, advanceCrystal: (seconds, flags = {}) => { if (flags?.paused || flags?.hidden) return game.crystalStatus(); game.tick(seconds); return game.crystalStatus(); }, setAge: (band) => { tutorBand = ['little', 'bigger', 'older'].includes(band) ? band : 'little'; }, step(dt = 0.05) { if (!world || world.released || switching) return { realm: game.state.travel?.current || 'he', phase: null, holo: null }; world.update(dt, { x: 0, z: 0 }, false); if (cutscene?.kind === 'stars' || cutscene?.kind === 'ferry') { const done = cutscene.tick(dt, { paused: panelType === 'pause' || !!panels?.isOpen(), hidden: false }); if (done) finishCutscene(); } paintTravel(); return { realm: game.state.travel?.current || 'he', phase: world.balloon?.phase || null, cutscene: cutscene?.kind || null, holo: world.holo?.phase || null }; }, enterHolo() { return world?.beginHolo?.() || false; }, skipHolo() { return world?.skipHolo?.() || false; }, leaveHolo() { return world?.leaveHolo?.() || false; }, holoPhase() { return world?.holo?.phase || 'off'; }, openHoloStage(id) { holoUi?.openStage(id); }, peekStage() { return holoUi?.peek?.() || null; }, setNight(value) { if (world) world.nightOverride = value; if (world) world.vistaMomentOverride = value ? { period: '晚上' } : null; }, sampleStats() { return world?.sampleStats?.() || null; }, quality() { return world?.qualityMode || game.state.settings?.quality || null; } };
 window.render_game_to_text = () => JSON.stringify({
   coords: 'world x/east, y/up, z/south; integer building grid',
   started, mode, selectedItem, rotation, buildCell, panel: panels?.type() ?? null,

@@ -223,18 +223,46 @@ export function makeAvatar() {
 
 export function makeStarling() {
   const root = new THREE.Group();
-  const bodyMat = material('#9D7BFF', { e: '#9D7BFF', ei: 0.35, op: 0.72, r: 0.2, m: 0.1 });
-  const body = bone(root, 0, 4, 0);
-  boxes(body, bodyMat, [-3.2, 0, -1.4], 6.4, 3.2, 2.8);
-  boxes(body, bodyMat, [2.4, 0.4, -1], 2.2, 2, 2);
-  boxes(body, bodyMat, [-4.6, 1.2, -0.8], 1.8, 1.6, 1.6);
+  const crystal = material('#9D7BFF', { e: '#7A5CFF', ei: 0.28, op: 0.7, r: 0.18, m: 0.08 });
+  crystal.depthWrite = false;
+  const core = material('#F4F7FF', { e: '#F4F7FF', ei: 1.5, r: 0.25 });
+  const eye = material('#36E0E8', { e: '#36E0E8', ei: 0.7, r: 0.3 });
+  const body = bone(root, 0, 7.2, 0);
+  boxes(body, crystal, [-3.1, 0, -6.2], 6.2, 4.4, 10.6);
+  boxes(body, crystal, [-3.4, -0.3, -7.4], 6.8, 3.4, 2.8);
+  boxes(body, crystal, [-1.5, 2.4, 3.6], 3, 2.2, 2.2);
+  const head = bone(body, 0, 4.4, 5.4);
+  boxes(head, crystal, [-1.7, 0, 0], 3.4, 2.6, 3.2);
+  boxes(head, crystal, [-1.7, 2.2, 0.2], 0.9, 1.8, 0.8);
+  boxes(head, crystal, [0.8, 2.2, 0.2], 0.9, 1.8, 0.8);
+  boxes(head, crystal, [-1, 0.2, 2.8], 2, 1.2, 1.5);
+  boxes(head, eye, [-1.2, 1.2, 4], 0.5, 0.42, 0.16);
+  boxes(head, eye, [0.7, 1.2, 4], 0.5, 0.42, 0.16);
+  const tail = bone(body, 0, 2.2, -6.6);
+  boxes(tail, crystal, [-0.7, -0.2, -4.2], 1.4, 1.3, 4.2);
+  boxes(tail, crystal, [-0.45, 0.1, -7.4], 0.9, 0.8, 3.2);
+  const hips = [[-2.2, 1.6], [2.2, 1.6], [-2.1, -4.6], [2.1, -4.6]];
+  const legs = hips.map(([x, z]) => {
+    const leg = bone(body, x, 0, z);
+    boxes(leg, crystal, [-0.85, -7.2, -0.85], 1.7, 7.2, 1.7);
+    boxes(leg, crystal, [-1, -7.5, -1.1], 2, 0.7, 2.2);
+    return leg;
+  });
+  root.scale.setScalar(1.25);
+  const stars = [];
+  for (let i = 0; i < 5; i += 1) {
+    const mesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.04, 0), core);
+    mesh.position.set(-0.12 + i * 0.06, 0.2, -0.02);
+    body.add(mesh);
+    stars.push(mesh);
+  }
   const dots = [];
-  const dotMat = material('#F4F7FF', { e: '#F4F7FF', ei: 1.4, r: 0.2 });
+  const dotMat = material('#F4F7FF', { e: '#F4F7FF', ei: 1.5, r: 0.2 });
   for (let i = 0; i < 20; i += 1) {
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 5), dotMat);
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.028, 6, 5), dotMat);
     const col = i % 5;
     const row = Math.floor(i / 5);
-    mesh.position.set(-0.18 + col * 0.09, 0.42 + (row % 2) * 0.06, 0.16);
+    mesh.position.set(0.48, 0.16 + row * 0.07, 0.22 - col * 0.08);
     mesh.visible = false;
     body.add(mesh);
     dots.push(mesh);
@@ -242,12 +270,24 @@ export function makeStarling() {
   return {
     group: root,
     setDots(count) {
-      dots.forEach((dot, index) => { dot.visible = index < count; });
+      const n = Math.max(0, Math.min(20, Number(count) || 0));
+      dots.forEach((dot, index) => { dot.visible = index < n; });
     },
     update(t) {
-      body.position.y = 4 * V + Math.sin(t * 1.4) * 0.03;
-      root.position.x = Math.sin(t * 0.6) * 0.08;
-      dotMat.emissiveIntensity = 1 + Math.sin(t * 2) * 0.3;
+      const step = Math.sin(t * 2.1) * 0.28;
+      legs[0].rotation.x = step;
+      legs[3].rotation.x = step;
+      legs[1].rotation.x = -step;
+      legs[2].rotation.x = -step;
+      body.position.y = 7.2 * V + Math.abs(Math.sin(t * 2.1)) * 0.015;
+      tail.rotation.x = -0.4;
+      tail.rotation.y = Math.sin(t * 1.2) * 0.22;
+      head.rotation.y = Math.sin(t * 0.6) * 0.1;
+      stars.forEach((star, index) => {
+        star.position.y = 0.16 + Math.sin(t * 1.5 + index) * 0.035;
+        star.rotation.y = t * 0.7 + index;
+      });
+      dotMat.emissiveIntensity = 1.1 + Math.sin(t * 2) * 0.25;
     },
   };
 }

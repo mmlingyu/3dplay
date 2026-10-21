@@ -1,0 +1,69 @@
+{
+  "languages": {
+    "zh": {
+      "voices": {
+        "narrator": { "voice": "zh-CN-XiaoxiaoNeural", "rate": "-12%", "pitch": "+0Hz" },
+        "gugu": { "voice": "zh-CN-XiaoyiNeural", "rate": "-8%", "pitch": "+2Hz" },
+        "zero": { "voice": "zh-CN-YunxiNeural", "rate": "-18%", "pitch": "-2Hz" }
+      },
+      "lines": [
+        { "id": "holo-zero-welcome", "role": "zero", "text": "这里是星网，你的光的身体在这里。" },
+        { "id": "holo-count", "role": "narrator", "text": "再点一盏。跟着声音数。一，二，三，四，五，六，七，八，九，十。", "alias": ["再点一盏。跟着声音数。"] },
+        { "id": "holo-color-cyan", "role": "narrator", "text": "青" },
+        { "id": "holo-color-amber", "role": "narrator", "text": "琥珀" },
+        { "id": "holo-color-purple", "role": "narrator", "text": "紫" },
+        { "id": "holo-color-white", "role": "narrator", "text": "白" },
+        { "id": "holo-color-green", "role": "narrator", "text": "绿" },
+        { "id": "holo-hint", "role": "zero", "text": "再试一次也没关系。" },
+        { "id": "holo-hint-more", "role": "zero", "text": "灯亮得比光点多了。熄掉一盏再数。" },
+        { "id": "holo-hint-ten", "role": "zero", "text": "找两块，加起来正好是十。", "alias": ["找两块，加起来正好是 10。"] },
+        { "id": "holo-hint-twelve", "role": "zero", "text": "找两块，加起来正好是十二。", "alias": ["找两块，加起来正好是 12。"] },
+        { "id": "holo-hint-math", "role": "zero", "text": "再算一次。错了也不扣东西。" },
+        { "id": "holo-hint-fingers", "role": "gugu", "text": "小咕有四根手指。外星的 10 等于我们的 4。" },
+        { "id": "holo-tier", "role": "narrator", "text": "这是你的星阶。只和自己比。" },
+        { "id": "holo-echo", "role": "zero", "text": "这是你的第一次记录" },
+        { "id": "holo-ok", "role": "narrator", "text": "点亮了。" },
+        { "id": "holo-stage-count", "role": "narrator", "text": "数一数光点，点亮一样多的灯。" },
+        { "id": "holo-stage-ten", "role": "narrator", "text": "找两块，加起来是十。" },
+        { "id": "holo-gugu-fuel", "role": "gugu", "text": "找两块，加起来是十二。" },
+        { "id": "holo-avatar", "role": "narrator", "text": "这是你的光的身体。点颜色可以换光。" },
+        { "id": "holo-count-1", "role": "narrator", "text": "一" },
+        { "id": "holo-count-2", "role": "narrator", "text": "二" },
+        { "id": "holo-count-3", "role": "narrator", "text": "三" },
+        { "id": "holo-count-4", "role": "narrator", "text": "四" },
+        { "id": "holo-count-5", "role": "narrator", "text": "五" },
+        { "id": "holo-count-6", "role": "narrator", "text": "六" },
+        { "id": "holo-count-7", "role": "narrator", "text": "七" },
+        { "id": "holo-count-8", "role": "narrator", "text": "八" },
+        { "id": "holo-count-9", "role": "narrator", "text": "九" },
+        { "id": "holo-count-10", "role": "narrator", "text": "十" },
+        { "id": "holo-count-11", "role": "narrator", "text": "十一" },
+        { "id": "holo-count-12", "role": "narrator", "text": "十二" },
+        { "id": "holo-count-13", "role": "narrator", "text": "十三" },
+        { "id": "holo-count-14", "role": "narrator", "text": "十四" },
+        { "id": "holo-count-15", "role": "narrator", "text": "十五" },
+        { "id": "holo-count-16", "role": "narrator", "text": "十六" },
+        { "id": "holo-count-17", "role": "narrator", "text": "十七" },
+        { "id": "holo-count-18", "role": "narrator", "text": "十八" },
+        { "id": "holo-count-19", "role": "narrator", "text": "十九" },
+        { "id": "holo-count-20", "role": "narrator", "text": "二十" }
+      ]
+    },
+    "ja": {
+      "voices": {
+        "narrator": { "voice": "ja-JP-NanamiNeural", "rate": "-12%", "pitch": "+0Hz" },
+        "gugu": { "voice": "ja-JP-AoiNeural", "rate": "-8%", "pitch": "+2Hz" },
+        "zero": { "voice": "ja-JP-KeitaNeural", "rate": "-15%", "pitch": "-2Hz" }
+      },
+      "lines": []
+    },
+    "en": {
+      "voices": {
+        "narrator": { "voice": "en-US-JennyNeural", "rate": "-10%", "pitch": "+0Hz" },
+        "gugu": { "voice": "en-US-AnaNeural", "rate": "-6%", "pitch": "+2Hz" },
+        "zero": { "voice": "en-US-GuyNeural", "rate": "-12%", "pitch": "-2Hz" }
+      },
+      "lines": []
+    }
+  }
+}

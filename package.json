@@ -10,7 +10,8 @@
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --test test/*.test.js",
     "test:browser": "node test/browser-check.js",
-    "test:axle": "node test/axle-browser-check.js"
+    "test:axle": "node test/axle-browser-check.js",
+    "voice": "node scripts/generate-voice.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "3.7.1",
