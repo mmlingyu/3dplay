@@ -3,7 +3,8 @@ name: preview
 on:
   push:
     branches:
-      - cursor/travel-ri-mvp-76ec
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
