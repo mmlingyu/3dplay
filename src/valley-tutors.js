@@ -18,6 +18,8 @@ export const VALLEY_AUDIO = Object.freeze([
 
 export const LIBAI_FOG_LINE = '雾不会伤害任何东西，只是让大家看不清彼此。把星河图拼回来，雾就会散。';
 
+export const FINALE_LINE = '最后一片，大概只有住在这儿的人才画得出来。选 3 个最喜欢的地方。';
+
 export const PAPER_BOAT_LETTER = '纸船上画着三格：红白铁塔、一列电车、河边的渡口。小燕说，海那边的日谷有这样的塔。不去也没关系。';
 
 export const VALLEY_CAST = Object.freeze([

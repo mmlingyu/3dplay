@@ -22,7 +22,7 @@ import {
   storyFog,
 } from './story-data.js';
 import { createStoryScene } from './story-scene.js';
-import { LIBAI_FOG_LINE, RESTORE_LINES, restoreLine, valleyLine } from './valley-tutors.js';
+import { FINALE_LINE, LIBAI_FOG_LINE, RESTORE_LINES, restoreLine, valleyLine } from './valley-tutors.js';
 
 let bound = null;
 let momentOverride = null;
@@ -35,11 +35,41 @@ function baseUrl() {
   return base.endsWith('/') ? base : `${base}/`;
 }
 
-function playLine(id, text, speak) {
-  const audio = new Audio(`${baseUrl()}audio/story/${id}.mp3`);
+function clipUrl(id) {
+  return `${baseUrl()}voice/story/${id}.mp3`;
+}
+
+function playClip(id, text, speak) {
+  const audio = new Audio(clipUrl(id));
   audio.volume = 0.8;
-  const fallback = () => { if (speak && text) speak(text); };
-  audio.play().then(() => {}, fallback);
+  let fell = false;
+  const fallback = () => {
+    if (fell) return;
+    fell = true;
+    if (speak && text) speak(text);
+  };
+  audio.addEventListener('error', fallback, { once: true });
+  const played = audio.play();
+  if (played?.catch) played.catch(fallback);
+}
+
+function playLine(id, text, speak, ageBand = null) {
+  const senior = normalizeAgeBand(ageBand) === 'senior';
+  if (!senior) {
+    playClip(id, text, speak);
+    return;
+  }
+  const audio = new Audio(clipUrl(`${id}-senior`));
+  audio.volume = 0.8;
+  let used = false;
+  const useBase = () => {
+    if (used) return;
+    used = true;
+    playClip(id, text, speak);
+  };
+  audio.addEventListener('error', useBase, { once: true });
+  const played = audio.play();
+  if (played?.catch) played.catch(useBase);
 }
 
 function ageOf(game) {
@@ -104,14 +134,14 @@ function paintGuide() {
   if (text) text.textContent = guideText(bound.game.state.travel);
 }
 
-function showBanner(text, seconds, audioId) {
+function showBanner(text, seconds, audioId, ageBand = null) {
   const banner = $('story-banner');
   const node = $('story-banner-text');
   if (node) node.textContent = text;
   if (banner) banner.hidden = false;
   bound.bannerUntil = (bound.world?.time || 0) + seconds;
   bound.bannerLeft = seconds;
-  playLine(audioId || 'fog-libai', text, bound.ui.speak);
+  playLine(audioId || 'fog-libai', text, bound.ui.speak, ageBand);
 }
 
 function hideBanner() {
@@ -227,7 +257,7 @@ function openBoatLetter() {
   if (text) text.textContent = PAPER_BOAT_TEXT;
   if (card) card.hidden = false;
   bound.game.seeLetter?.(STORY_LETTER_ID);
-  playLine('swallow', valleyLine('swallow', ageOf(bound.game)), bound.ui.speak);
+  playLine('swallow', valleyLine('swallow', ageOf(bound.game)), bound.ui.speak, ageOf(bound.game));
 }
 
 function considerRestore() {
@@ -242,7 +272,7 @@ function considerRestore() {
     if (!state.travel.story.seen.includes(id)) state.travel.story.seen.push(id);
   });
   const line = restoreLine(zone, ageOf(bound.game));
-  showBanner(line, zone === 'all' ? 12 : 10, `restore-${zone}`);
+  showBanner(line, zone === 'all' ? 12 : 10, `restore-${zone}`, ageOf(bound.game));
   bound.ui.toast?.(line);
 }
 
@@ -321,7 +351,7 @@ export function storyTalk(target) {
   }
   const card = $('story-talk');
   if (card) card.hidden = false;
-  playLine(id === 'aunt' ? 'aunt' : id, line, senior ? null : bound.ui.speak);
+  playLine(id, line, senior ? null : bound.ui.speak, ageOf(bound.game));
 }
 
 function openDisk() {
@@ -365,9 +395,9 @@ function openHomePicker() {
     box.appendChild(button);
   }
   card.hidden = false;
-  const line = '最后一片，大概只有住在这儿的人才画得出来。选 3 个最喜欢的地方。';
+  const line = FINALE_LINE;
   bound.ui.speak?.(line);
-  playLine('finale-libai', line, bound.ui.speak);
+  playLine('finale-libai', line, bound.ui.speak, ageOf(bound.game));
 }
 
 function confirmHome() {
