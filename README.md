@@ -115,6 +115,8 @@ npm run preview -- --port 5174
 
 美谷新物品 id：`maple-sap`、`maple-syrup`、`log`、`log-wall`、`cloth`、`quilt-patch`、`quilt`、`paper`、`axle`、`paper-plane`、`windmill-mini`、`pumpkin`、`pumpkin-lantern`、`thanks-card`。不认识这些 id 的旧前端会拒绝带它们的存档。
 
+远眺使用可选字段 `travel.discovered`（`ri` / `mei` / `xing`）和 `travel.keepsakes`。主存档键和版本仍是 `yuanyuan-river-valley-v1` / 1。旧存档没有这些字段时，会按 `travel.visited`、当前所在的谷，以及 `travel.realms` 里已经留下的建筑、加工或离开码头的位置，把去过的谷视为已发现。空的美谷、外星谷记录不会因此被当成发现。第一次把这份原文写成带远眺字段的存档之前，写到 `yuanyuan-river-valley-v1-before-vista` 并读回核对；已有不同内容时用数字后缀。备份写失败就不覆盖主存档，也不覆盖已有的 `before-mei` 和 `before-xing`。新游戏没有旧原文，不写这份备份。暂停菜单里“下载远眺升级前的备份”下载的是这份原文。发现不是出发门槛：渡口和热气球按钮照样能用。漂流瓶纪念只记在 `travel.keepsakes`，不进材料表，不限时，不扣东西。
+
 ## 检查与开发
 
 ```sh
