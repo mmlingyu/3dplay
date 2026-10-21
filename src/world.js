@@ -24,27 +24,6 @@ function lerpAngle(a, b, t) {
 function vistaYaw(from, vista) {
   return Math.atan2(vista.x - from.x, vista.z - from.z) + Math.PI;
 }
-function horizonAim(yaw, origin) {
-  if (!origin) return null;
-  const lx = -Math.sin(yaw);
-  const lz = -Math.cos(yaw);
-  let x = 0;
-  let y = 0;
-  let z = 0;
-  let count = 0;
-  for (const vista of Object.values(VISTAS)) {
-    const dx = vista.x - origin.x;
-    const dz = vista.z - origin.z;
-    const align = (dx * lx + dz * lz) / (Math.hypot(dx, dz) || 1);
-    if (align <= 0.75) continue;
-    x += vista.x;
-    y += (vista.y || 0) + 12;
-    z += vista.z;
-    count += 1;
-  }
-  if (!count) return null;
-  return { x: x / count, y: y / count, z: z / count };
-}
 const seeded = (x, z, n = 0) => { const s = Math.sin(x * 127.1 + z * 311.7 + n * 74.7) * 43758.5453; return s - Math.floor(s); };
 function texture(kind, color) {
   const canvas = document.createElement('canvas'); canvas.width = canvas.height = 128;
@@ -1361,9 +1340,11 @@ export class RiverWorld {
     this.maybeSpotVista();
   }
   updateCamera(dt,instant=false){
-    if (this.vistaGlance?.phase === 'zoom') {
-      const vista = VISTAS[this.vistaGlance.id];
-      const u = Math.min(1, this.vistaGlance.t / 3.2);
+    const glance = this.vistaGlance;
+    // 压低俯仰只发生在远眺引导的转身和靠近。平时地面 .76、飞行 .48，不因朝向远景改变。
+    if (glance?.phase === 'zoom') {
+      const vista = VISTAS[glance.id];
+      const u = Math.min(1, glance.t / 3.2);
       const ease = u * u * (3 - 2 * u);
       const focus = new THREE.Vector3(vista.x, (vista.y || 0) + 8, vista.z);
       this.lookAt.lerp(focus, instant ? 1 : 1 - Math.exp(-2.4 * dt));
@@ -1381,28 +1362,24 @@ export class RiverWorld {
     const flying = !!this.balloon;
     const center = focus ? focus.point.clone() : this.playerPosition.clone();
     center.y += focus ? focus.lift : flying ? 1.8 : .45;
-    const glance = this.vistaGlance;
-    const glanced = glance ? VISTAS[glance.id] : null;
-    if (flying && this.balloon.mode !== 'steer' && this.state?.land && !glance) {
+    const turning = glance?.phase === 'turn' ? VISTAS[glance.id] : null;
+    if (flying && this.balloon.mode !== 'steer' && this.state?.land && !turning) {
       const tour = balloonTourPoint(this.state.land, this.balloon.angle, this.balloon.scale);
       center.x += (tour.cx - center.x) * 0.35;
       center.z += (tour.cz - center.z) * 0.35;
       center.y = Math.max(2.4, center.y - 4);
     }
-    const faced = !focus && !glance ? horizonAim(this.yaw, this.playerPosition) : null;
     let glanceEase = 0;
-    if (glanced && glance.phase !== 'zoom') {
-      const aim = new THREE.Vector3(glanced.x, (glanced.y || 0) + 8, glanced.z);
-      const u = glance.phase === 'hold' ? 1 : Math.min(1, glance.t / 1.25);
+    if (turning) {
+      const aim = new THREE.Vector3(turning.x, (turning.y || 0) + 8, turning.z);
+      const u = Math.min(1, glance.t / 1.25);
       glanceEase = u * u * (3 - 2 * u);
       center.lerp(aim, 0.92 * glanceEase);
-    } else if (faced) {
-      center.lerp(new THREE.Vector3(faced.x, faced.y, faced.z), flying ? 0.32 : 0.4);
     }
     this.lookAt.lerp(center, instant ? 1 : 1 - Math.exp(-3 * dt));
     let dist = focus ? focus.distance : flying ? Math.max(this.distance, 24) : this.distance;
-    if (glance && !focus) dist = 26 - glanceEase * 14;
-    const pitch = focus ? .42 : glance ? .16 : flying ? (faced ? .24 : .48) : (faced ? .2 : .76);
+    if (turning && !focus) dist = 26 - glanceEase * 14;
+    const pitch = focus ? .42 : turning ? .16 : flying ? .48 : .76;
     const v = new THREE.Vector3(Math.sin(this.yaw) * dist, dist * pitch, Math.cos(this.yaw) * dist);
     const desired = this.lookAt.clone().add(v);
     this.camera.position.lerp(desired, instant ? 1 : 1 - Math.exp(-5 * dt));
