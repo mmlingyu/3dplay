@@ -1,4 +1,4 @@
-import { ITEMS, RECIPES, COLLECTABLE_ITEMS, GARDEN_PLOTS, MAX_BUILD_HEIGHT, STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY, terrainHeight, isProtectedCell, roofSpan, roofWallAt } from './game-data.js';
+import { ITEMS, RECIPES, COLLECTABLE_ITEMS, GARDEN_PLOTS, MAX_BUILD_HEIGHT, STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, MEI3_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY, terrainHeight, isProtectedCell, roofSpan, roofWallAt } from './game-data.js';
 import { REALM_BLOCK_LIMIT, REALMS, SUPPLY_COOLDOWN, SUPPLY_COUNT, WASHI_STAGES, WASHI_TOTAL_SECONDS, arrivalFor, defaultTravel, emptyRealm, inVisitorYard, isDockCell, realmContains, realmTerrainHeight, washiStage } from './realm-data.js';
 import { TravelError, repairTravelRaw, validateTravel } from './travel-save.js';
 import { advanceMaple, attachMei } from './mei-state.js';
@@ -158,7 +158,7 @@ export function validateSave(value) {
   return next;
 }
 
-const FIGURE_BACKUP_KEYS = [STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY];
+const FIGURE_BACKUP_KEYS = [STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, MEI3_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY];
 
 function writeOriginalBackup(storage, baseKey, text) {
   for (let i = 0; i < 100; i++) {
@@ -285,6 +285,7 @@ export class GameState {
     this.travelSaveText=null;this.travelBackupKey=null;this.travelNotice=null;
     this.xingSaveText=null;this.xingBackupKey=null;
     this.meiSaveText=null;this.meiBackupKey=null;
+    this.mei3SaveText=null;this.mei3BackupKey=null;
     this.vistaSaveText=null;this.vistaBackupKey=null;
     this.load();
   }
@@ -360,6 +361,12 @@ export class GameState {
         this.meiSaveText=null;
       }catch{this.storageError='美谷升级前的世界未能备份。请先导出存档。';return fail(this.storageError);}
     }
+    if(this.mei3SaveText!==null){
+      try{
+        this.mei3BackupKey=writeOriginalBackup(this.storage,MEI3_BACKUP_KEY,this.mei3SaveText);
+        this.mei3SaveText=null;
+      }catch{this.storageError='美谷片场升级前的世界未能备份。请先导出存档。';return fail(this.storageError);}
+    }
     if(this.vistaSaveText!==null){
       try{
         this.vistaBackupKey=writeOriginalBackup(this.storage,VISTA_BACKUP_KEY,this.vistaSaveText);
@@ -425,6 +432,8 @@ export class GameState {
       const hasMei = Boolean(realmBag && Object.hasOwn(realmBag, 'mei'));
       if(!hasXing) this.xingSaveText=text;
       if(!hasMei) this.meiSaveText=text;
+      const hasMei3 = Boolean(realmBag?.mei && typeof realmBag.mei.storyShard === 'boolean');
+      if(!hasMei3) this.mei3SaveText=text;
       const hasVista = isRecord(raw.travel) && Object.hasOwn(raw.travel, 'discovered') && Object.hasOwn(raw.travel, 'keepsakes');
       if(!hasVista) this.vistaSaveText=text;
       this.legacySaveText=raw.clock===undefined||raw.flora===undefined||raw.land?.claimed===undefined?text:null;
@@ -472,6 +481,10 @@ export class GameState {
     if(this.meiSaveText!==null)return this.meiSaveText;
     try{return this.storage?.getItem(this.meiBackupKey||MEI_BACKUP_KEY)??null;}catch{return null;}
   }
+  getMei3Backup(){
+    if(this.mei3SaveText!==null)return this.mei3SaveText;
+    try{return this.storage?.getItem(this.mei3BackupKey||MEI3_BACKUP_KEY)??null;}catch{return null;}
+  }
   getVistaBackup(){
     if(this.vistaSaveText!==null)return this.vistaSaveText;
     try{return this.storage?.getItem(this.vistaBackupKey||VISTA_BACKUP_KEY)??null;}catch{return null;}
@@ -493,6 +506,8 @@ export class GameState {
         if (this.meiSaveText === null) this.meiSaveText = text;
         if (!next.travel.realms.mei) next.travel.realms.mei = emptyRealm('mei');
       }
+      const hasMei3 = Boolean(realmBag?.mei && typeof realmBag.mei.storyShard === 'boolean');
+      if (!hasMei3 && this.mei3SaveText === null) this.mei3SaveText = text;
       const hasVista = isRecord(raw.travel) && Object.hasOwn(raw.travel, 'discovered') && Object.hasOwn(raw.travel, 'keepsakes');
       if (!hasVista && this.vistaSaveText === null) this.vistaSaveText = text;
       this.state = next;

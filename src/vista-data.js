@@ -73,7 +73,7 @@ const BOTTLE_WINDOW = Object.freeze({ start: 0.42, end: 0.7 });
 
 export const VISTA_STAMPS = Object.freeze([
   { id: 'vista-ri', name: '发现日谷', icon: 'ferry', how: '坐热气球升高，看见海边的雪山和小塔。不用答题，渡口也照样能走。' },
-  { id: 'vista-mei', name: '发现美谷', icon: 'leaf', how: '坐热气球升高，看见红谷仓和风车。不用答题。' },
+  { id: 'vista-mei', name: '发现美谷', icon: 'leaf', how: '坐热气球升高，看见山坡上的大字和红色吊桥。不用答题。' },
   { id: 'vista-xing', name: '发现外星谷', icon: 'star', how: '坐热气球升高，看见悬浮岛和带环的星球。这是游戏里的想象。不用答题。' },
 ]);
 
@@ -120,7 +120,7 @@ export function vistaOpacity(clarity) {
 export function vistaSignals(moment) {
   const period = moment?.period || '中午';
   const night = period === '晚上' || period === '深夜';
-  return { kite: !night, lantern: night, windmill: true, crystal: night };
+  return { kite: !night, lantern: night, windmill: true, crystal: night, searchlight: night };
 }
 
 export function nearestVista(origin, discovered = {}) {

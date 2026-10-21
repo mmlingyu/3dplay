@@ -979,6 +979,12 @@ function interact(target = null) {
     }
     if (target.xing === 'hopper') { toast(game.seeHopper().message, true); return; }
     openXing(target.xing === 'moss' ? 'moss' : 'lab');
+  } else if (target.type === 'mei-part') {
+    const result = game.collectMeiPart(target.part);
+    toast(result.message, result.ok);
+    speak(result.speak || result.message);
+    world.sync?.(game.state);
+    return;
   } else if (target.type === 'maple' || target.type === 'project' || target.type === 'quilt') {
     openPanel(target.type);
   } else if (target.type === 'flag') {
@@ -1352,7 +1358,7 @@ $('balloon-voyage-mei')?.addEventListener('click', () => {
 });
 $('travel-go-mei')?.addEventListener('click', () => { if (started && !panels?.isOpen()) startFerry('mei'); });
 $('mei-letter-close')?.addEventListener('click', () => { const card = $('mei-letter'); if (card) card.hidden = true; });
-for (const [id, panel] of [['mei-maple', 'maple'], ['mei-project', 'project'], ['mei-quilt', 'quilt'], ['mei-trade', 'trade'], ['mei-lantern', 'lantern'], ['mei-thanks', 'thanks']]) {
+for (const [id, panel] of [['mei-maple', 'maple'], ['mei-project', 'project'], ['mei-quilt', 'quilt'], ['mei-trade', 'trade'], ['mei-lantern', 'lantern'], ['mei-thanks', 'thanks'], ['mei-stage', 'stage'], ['mei-projector', 'projector'], ['mei-premiere', 'premiere']]) {
   $(id)?.addEventListener('click', () => { if (started && (game.state.travel?.current || 'he') === 'mei') openPanel(panel); });
 }
 $('mei-stamps')?.addEventListener('click', () => { if (started) openPanel('stamps'); });
