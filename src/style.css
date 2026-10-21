@@ -147,6 +147,9 @@ button.world-label { min-width: 44px; min-height: 44px; }
 #travel-home[hidden], #travel-go[hidden], #ri-actions[hidden], #xing-actions[hidden], #travel-cutscene[hidden], #letter-card[hidden], #star-cutscene[hidden], #xing-sheet[hidden], #balloon-stars[hidden], #balloon-return[hidden], #holo-back[hidden], #holo-transition[hidden], #holo-bar[hidden], #holo-panel[hidden] { display: none !important; }
 #holo-back { position: absolute; z-index: 24; top: calc(max(72px, env(safe-area-inset-top) + 64px) + 56px); left: 50%; transform: translateX(-50%); min-height: 48px; min-width: 112px; }
 #holo-bar { position: absolute; z-index: 24; left: 12px; top: 72px; display: flex; flex-direction: column; gap: 8px; max-width: 148px; }
+.holo-star { min-height: 72px; font-size: 22px; }
+.holo-moons { display: flex; gap: 18px; justify-content: center; margin: 8px 0 12px; }
+.holo-moons i { width: 72px; height: 72px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff, #f4e4b0 55%, #c9b56a); display: block; }
 #holo-bar button { min-height: 48px; min-width: 88px; }
 #holo-later { margin: 0; color: #d5e7ea; background: rgba(11, 22, 48, 0.72); border-radius: 12px; padding: 8px; font-size: 13px; }
 #holo-transition { position: absolute; inset: 0; z-index: 30; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 16px; padding: 28px 18px 18vh; color: #f4f7ff; background: radial-gradient(circle at 50% 78%, rgba(54, 224, 232, 0.28), rgba(11, 22, 48, 0.94) 58%); animation: holo-rise 2.8s ease-in-out infinite; }

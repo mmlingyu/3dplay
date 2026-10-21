@@ -54,7 +54,7 @@ test('幻想航线只在游览时出现，渡船去不了外星谷', () => {
   assert.equal(game.state.travel.current, 'he');
 });
 
-test('五枚印章和纪念品都不用答题，也不会重复', () => {
+test('地面印章不用答题，补穹顶的印章要另外拿', () => {
   const game = new GameState(new MemoryStorage());
   game.beginTravel('xing', 'balloon');
   game.addItem('salt', 4);
@@ -67,7 +67,9 @@ test('五枚印章和纪念品都不用答题，也不会重复', () => {
   game.reuniteGugu();
   game.grantPlaque();
   const ids = game.state.travel.stamps.filter((id) => id.startsWith('xing-'));
-  assert.deepEqual([...ids].sort(), XING_STAMPS.map((stamp) => stamp.id).sort());
+  const field = XING_STAMPS.map((stamp) => stamp.id).filter((id) => id !== 'xing-dome').sort();
+  assert.deepEqual([...ids].sort(), field);
+  assert.equal(ids.includes('xing-dome'), false);
   assert.equal(new Set(ids).size, ids.length);
   assert.equal(game.state.inventory['glyph-plaque'], 1);
   assert.equal(game.state.inventory['salt-crystal'], 1);

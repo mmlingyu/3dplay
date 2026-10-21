@@ -1,4 +1,4 @@
-import { ITEMS, RECIPES, COLLECTABLE_ITEMS, GARDEN_PLOTS, MAX_BUILD_HEIGHT, STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, MEI3_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY, HOLO_BACKUP_KEY, STORY_BACKUP_KEY, RI3_BACKUP_KEY, terrainHeight, isProtectedCell, roofSpan, roofWallAt } from './game-data.js';
+import { ITEMS, RECIPES, COLLECTABLE_ITEMS, GARDEN_PLOTS, MAX_BUILD_HEIGHT, STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, MEI3_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY, HOLO_BACKUP_KEY, XING_SHARD_BACKUP_KEY, STORY_BACKUP_KEY, RI3_BACKUP_KEY, terrainHeight, isProtectedCell, roofSpan, roofWallAt } from './game-data.js';
 import { REALM_BLOCK_LIMIT, REALMS, SUPPLY_COOLDOWN, SUPPLY_COUNT, WASHI_STAGES, WASHI_TOTAL_SECONDS, arrivalFor, defaultTravel, emptyRealm, inVisitorYard, isDockCell, normalizeAgeBand, realmContains, realmTerrainHeight, washiStage } from './realm-data.js';
 import { TravelError, repairTravelRaw, validateTravel } from './travel-save.js';
 import { advanceMaple, attachMei } from './mei-state.js';
@@ -11,7 +11,7 @@ import { homeHasFantasyLiving, isFantasyLiving } from './xing-save.js';
 import { QUARANTINE_NOTE } from './xing-data.js';
 import { KEEPSAKES, VISTAS } from './vista-data.js';
 import { claimCrystal as takeCrystal, crystalStatus as crystalNow, grantPlaque as givePlaque, learnGlyphs as rememberGlyphs, recordExperiment as noteExperiment, releaseCheck, reuniteGugu as bringGugu, rewardXingSupply as payXingSupply, seeHopper as markHopper, seeMoss as markMoss, solvePuzzle as gradeXingPuzzle, sowCheck, startCrystal as beginCrystal, tickCrystals } from './xing-actions.js';
-import { ensureHolo, markWelcomed, noteStage, setAvatar, snapshotGrowth, syncFieldStarlight } from './holo-actions.js';
+import { claimDome, ensureHolo, markWelcomed, noteStage, noteTogether, setAvatar, snapshotGrowth, syncFieldStarlight } from './holo-actions.js';
 import { WELCOME_LINE } from './holo-data.js';
 import { LANTERN_ALL, MIKO_CLUE, SHOP_ALL, canOpenCabinet, freshCity, shardNeed, shardTasks } from './ri-story.js';
 
@@ -177,7 +177,7 @@ function settleHolo(state) {
   syncFieldStarlight(state);
 }
 
-const FIGURE_BACKUP_KEYS = [STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, MEI3_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY, HOLO_BACKUP_KEY, STORY_BACKUP_KEY, RI3_BACKUP_KEY];
+const FIGURE_BACKUP_KEYS = [STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, MEI3_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY, HOLO_BACKUP_KEY, XING_SHARD_BACKUP_KEY, STORY_BACKUP_KEY, RI3_BACKUP_KEY];
 
 function rawHasRi3(raw) {
   const ri = raw?.travel?.realms?.ri;
@@ -317,6 +317,7 @@ export class GameState {
     this.mei3SaveText=null;this.mei3BackupKey=null;
     this.vistaSaveText=null;this.vistaBackupKey=null;
     this.holoSaveText=null;this.holoBackupKey=null;
+    this.xingShardSaveText=null;this.xingShardBackupKey=null;
     this.storySaveText=null;this.storyBackupKey=null;
     this.ri3SaveText=null;this.ri3BackupKey=null;
     this.load();
@@ -411,6 +412,12 @@ export class GameState {
         this.holoSaveText=null;
       }catch{this.storageError='星网升级前的世界未能备份。请先导出存档。';return fail(this.storageError);}
     }
+    if(this.xingShardSaveText!==null && this.state.travel?.realms?.xing?.storyShard === true){
+      try{
+        this.xingShardBackupKey=writeOriginalBackup(this.storage,XING_SHARD_BACKUP_KEY,this.xingShardSaveText);
+        this.xingShardSaveText=null;
+      }catch{this.storageError='星之片升级前的世界未能备份。请先导出存档。';return fail(this.storageError);}
+    }
     if(this.storySaveText!==null){
       try{
         this.storyBackupKey=writeOriginalBackup(this.storage,STORY_BACKUP_KEY,this.storySaveText);
@@ -488,6 +495,8 @@ export class GameState {
       const hasVista = isRecord(raw.travel) && Object.hasOwn(raw.travel, 'discovered') && Object.hasOwn(raw.travel, 'keepsakes');
       if(!hasVista) this.vistaSaveText=text;
       if(xingLacksHolo(raw)) this.holoSaveText=text;
+      const hasXingShard = Boolean(realmBag?.xing && typeof realmBag.xing.storyShard === 'boolean');
+      if(!hasXingShard) this.xingShardSaveText=text;
       const storyRaw = raw.travel?.story;
       const hasStory = isRecord(storyRaw) && Object.hasOwn(storyRaw, 'fogIntro') && Object.hasOwn(storyRaw, 'restored') && Object.hasOwn(storyRaw, 'fogOff');
       if(!hasStory) this.storySaveText=text;
@@ -550,6 +559,10 @@ export class GameState {
     if(this.holoSaveText!==null)return this.holoSaveText;
     try{return this.storage?.getItem(this.holoBackupKey||HOLO_BACKUP_KEY)??null;}catch{return null;}
   }
+  getXingShardBackup(){
+    if(this.xingShardSaveText!==null)return this.xingShardSaveText;
+    try{return this.storage?.getItem(this.xingShardBackupKey||XING_SHARD_BACKUP_KEY)??null;}catch{return null;}
+  }
   getStoryBackup(){
     if(this.storySaveText!==null)return this.storySaveText;
     try{return this.storage?.getItem(this.storyBackupKey||STORY_BACKUP_KEY)??null;}catch{return null;}
@@ -580,6 +593,8 @@ export class GameState {
       const hasVista = isRecord(raw.travel) && Object.hasOwn(raw.travel, 'discovered') && Object.hasOwn(raw.travel, 'keepsakes');
       if (!hasVista && this.vistaSaveText === null) this.vistaSaveText = text;
       if (xingLacksHolo(raw) && this.holoSaveText === null) this.holoSaveText = text;
+      const hasXingShard = Boolean(realmBag?.xing && typeof realmBag.xing.storyShard === 'boolean');
+      if (!hasXingShard && this.xingShardSaveText === null) this.xingShardSaveText = text;
       if (!rawHasRi3(raw) && this.ri3SaveText === null) this.ri3SaveText = text;
       settleHolo(next);
       this.state = next;
@@ -1186,6 +1201,33 @@ export class GameState {
     const result = noteStage(this.state, stageId, record);
     if (result.ok) this.save();
     return result;
+  }
+  claimXingShard(choice, options = {}) {
+    if (this.currentRealm() !== 'xing' || !this.state.travel.realms?.xing) return fail('先到外星谷的星网。');
+    if (this.xingShardSaveText === null && this.storage?.getItem) {
+      try {
+        const existing = this.storage.getItem(STORAGE_KEY);
+        if (typeof existing === 'string') {
+          const raw = JSON.parse(existing);
+          if (typeof raw?.travel?.realms?.xing?.storyShard !== 'boolean') this.xingShardSaveText = existing;
+        }
+      } catch { /* 没有旧档时，不额外做备份 */ }
+    }
+    const story = JSON.stringify(this.state.travel.story || {});
+    const result = claimDome(this.state, choice, options);
+    if (JSON.stringify(this.state.travel.story || {}) !== story) return fail('星之片不能改河谷的故事。');
+    if (!result.ok) return fail(result.message);
+    if (result.shard) this.save();
+    this.notify();
+    return ok(result.message, result);
+  }
+  noteHoloTogether() {
+    if (this.currentRealm() !== 'xing' || !this.state.travel.realms?.xing) return fail('先到外星谷的星网。');
+    const result = noteTogether(this.state);
+    if (!result.ok) return fail(result.message || '还不能一起算。');
+    this.save();
+    this.notify();
+    return ok(result.message, result);
   }
   setHoloAvatar(patch) {
     const changed = setAvatar(this.state, patch);

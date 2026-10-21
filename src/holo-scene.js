@@ -175,8 +175,17 @@ export function createHoloLayer() {
     }
   });
   group.add(echo.group);
+  const shard = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.42, 0),
+    new THREE.MeshStandardMaterial({ color: '#9ecbff', emissive: new THREE.Color('#7eb6ff'), emissiveIntensity: 0.9, roughness: 0.35 }),
+  );
+  shard.name = 'holo-shard';
+  shard.position.set(0.9, 2.6, 0.2);
+  shard.visible = false;
+  group.add(shard);
   let sea = null;
   let fast = true;
+  let gapFilled = false;
   let breathAt = 0;
   let echoPath = [];
   let echoClock = 0;
@@ -215,15 +224,24 @@ export function createHoloLayer() {
       echo.group.visible = false;
       echoPath = [];
     },
+    setGapFilled(on) {
+      gapFilled = Boolean(on);
+      shard.visible = gapFilled;
+    },
     update(t, dt, pose = {}) {
       const step = fast ? 0.4 : 0;
+      if (gapFilled) shard.rotation.y = t * 0.6;
       if (!fast || t - breathAt >= step) {
         breathAt = t;
         const night = pose.night ? 1.15 : 0.85;
         dome.points.forEach((item, index) => {
           let level = 0.55 + 0.3 * (0.5 + 0.5 * Math.sin(t * 1.1 + item.theta * 3 + item.phi * 4));
-          if (index === dome.gap) level = 0.05;
-          color.setRGB(0.21 * level * night, 0.88 * level * night, 0.91 * level * night);
+          if (index === dome.gap && !gapFilled) level = 0.05;
+          if (index === dome.gap && gapFilled) {
+            color.setRGB(1, 0.78, 0.35);
+          } else {
+            color.setRGB(0.21 * level * night, 0.88 * level * night, 0.91 * level * night);
+          }
           dome.plates.setColorAt(index, color);
         });
         if (dome.plates.instanceColor) dome.plates.instanceColor.needsUpdate = true;

@@ -46,7 +46,19 @@
         { "id": "holo-count-17", "role": "narrator", "text": "十七" },
         { "id": "holo-count-18", "role": "narrator", "text": "十八" },
         { "id": "holo-count-19", "role": "narrator", "text": "十九" },
-        { "id": "holo-count-20", "role": "narrator", "text": "二十" }
+        { "id": "holo-count-20", "role": "narrator", "text": "二十" },
+        { "id": "holo-shard", "role": "gugu", "text": "这一块星星，和家里的夜空是同一张。点大星星，补上穹顶。" },
+        { "id": "holo-shard-home", "role": "gugu", "text": "带着星之片回家。观星台就能看见星星。" },
+        { "id": "holo-shard-north", "role": "gugu", "text": "这块在家的北边。" },
+        { "id": "holo-shape", "role": "narrator", "text": "找和缺口一样的星星。" },
+        { "id": "holo-force", "role": "narrator", "text": "这里跳得更高。点最高的那一层。" },
+        { "id": "holo-chart", "role": "narrator", "text": "先认太阳，再认月亮。" },
+        { "id": "holo-code", "role": "narrator", "text": "按颜色排队。第一盏是青色。" },
+        { "id": "holo-arena", "role": "zero", "text": "三个人合在一起算。没有输赢。" },
+        { "id": "holo-arena-ok", "role": "zero", "text": "看台亮了。没有输赢，也没有排名。" },
+        { "id": "holo-festival", "role": "gugu", "text": "两颗月亮一起圆。这是幻想里的团圆夜。" },
+        { "id": "holo-ship", "role": "gugu", "text": "咕咕号停在旁边。星图可以看，这一版还不开船。" },
+        { "id": "holo-retry", "role": "zero", "text": "再点一次也没关系。" }
       ]
     },
     "ja": {

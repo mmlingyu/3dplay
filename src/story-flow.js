@@ -200,6 +200,14 @@ function paintDisk(look) {
 
 function dusk(world) {
   if (!world?.scene) return;
+  const restored = bound?.game?.state?.travel?.story?.restored || [];
+  const night = restored.includes('sky') && !restored.includes('all');
+  if (night) {
+    world.scene.background.set('#1a2744');
+    if (world.scene.fog?.color) world.scene.fog.color.set('#243044');
+    if (world.sun) world.sun.intensity = Math.min(world.sun.intensity || 1, 0.32);
+    return;
+  }
   world.scene.background.set('#c97b62');
   if (world.scene.fog?.color) world.scene.fog.color.set('#e0b196');
   if (world.sun) world.sun.intensity = Math.min(world.sun.intensity || 1, 1.05);

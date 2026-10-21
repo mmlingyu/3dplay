@@ -21,6 +21,7 @@ export const MEI3_BACKUP_KEY = `${STORAGE_KEY}-before-mei3`;
 export const XING_BACKUP_KEY = `${STORAGE_KEY}-before-xing`;
 export const VISTA_BACKUP_KEY = `${STORAGE_KEY}-before-vista`;
 export const HOLO_BACKUP_KEY = `${STORAGE_KEY}-before-holo`;
+export const XING_SHARD_BACKUP_KEY = `${STORAGE_KEY}-before-xing-shard`;
 export const STORY_BACKUP_KEY = `${STORAGE_KEY}-before-story`;
 export const RI3_BACKUP_KEY = `${STORAGE_KEY}-before-ri3`;
 export const CRAFT_RULES = Object.freeze({ dragThreshold: 7 });

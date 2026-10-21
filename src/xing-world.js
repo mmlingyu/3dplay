@@ -370,6 +370,11 @@ export class XingWorld {
     return obj;
   }
 
+  setDomeFilled(on) {
+    this.domeFilled = Boolean(on);
+    this.holoLayer?.setGapFilled?.(this.domeFilled);
+  }
+
   isNight() {
     if (this.nightOverride === true || this.nightOverride === false) return this.nightOverride;
     const period = realMoment().period;
@@ -450,6 +455,7 @@ export class XingWorld {
       this.holoLayer.setQuality(this.qualityMode);
       if (this.qualityMode === 'fine' && !this.bloom) this.bloom = this.holoMod.attachBloom(this.renderer, this.scene, this.camera);
     }
+    this.holoLayer?.setGapFilled?.(this.domeFilled || this.state?.travel?.realms?.xing?.storyShard === true);
     if (!this.savedLook) {
       this.savedLook = { background: this.scene.background.clone(), fog: this.scene.fog };
     }
