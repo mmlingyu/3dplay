@@ -1,4 +1,6 @@
-/** Realm registry. Home stays neutral. Only the day valley is playable in this version. */
+/** Realm registry. Home stays neutral. Day valley and beauty valley are playable. */
+
+import { MEI_REALM } from './mei-data.js';
 
 export const REALM_BLOCK_LIMIT = 600;
 export const TRAVEL_BACKUP_KEY_NAME = 'before-travel';
@@ -99,7 +101,7 @@ export const REALMS = Object.freeze({
       ponta: Object.freeze({ x: 9.2, z: -6.2 }),
     }),
   }),
-  mei: Object.freeze({ id: 'mei', name: '美谷', playable: false, theme: 'usa' }),
+  mei: MEI_REALM,
   xing: Object.freeze({ id: 'xing', name: '外星谷', playable: false, theme: 'fiction' }),
 });
 
@@ -156,8 +158,9 @@ export function isDockCell(x, z, blocks = []) {
 }
 
 export function arrivalFor(realmId, via) {
-  if (realmId !== 'ri') return { x: -5, y: 0, z: 5, ry: 0 };
-  return via === 'balloon' ? { ...RI_LAWN } : { ...RI_DOCK };
+  const realm = REALMS[realmId];
+  if (!realm?.dock) return { x: -5, y: 0, z: 5, ry: 0 };
+  return via === 'balloon' && realm.lawn ? { ...realm.lawn } : { ...realm.dock };
 }
 
 export function defaultTravel() {
@@ -176,11 +179,17 @@ export function defaultTravel() {
 }
 
 export function emptyRealm(realmId) {
-  return {
+  const realm = {
     player: arrivalFor(realmId, 'ferry'),
     blocks: [],
     chests: {},
     claimed: [],
     processes: [],
   };
+  if (realmId === 'mei') {
+    realm.projects = [];
+    realm.trades = [];
+    realm.decor = { face: 'smile' };
+  }
+  return realm;
 }

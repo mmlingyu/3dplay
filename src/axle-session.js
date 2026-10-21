@@ -32,6 +32,24 @@ export class AxleSession {
     return success(`${side === 'left' ? '左' : '右'}轮取下来啦。`);
   }
 
+  attachBlade(partId = 'windmill-blade') {
+    if (this.disposed) return failure('试装台已经关闭。');
+    if (this.blade?.attached) return failure('叶片已经装好啦。');
+    this.blade = { id: partId, attached: true, angle: 0 };
+    return success('叶片装到轮轴上了。');
+  }
+
+  driveAxle(radians) {
+    if (this.disposed) return failure('试装台已经关闭。');
+    if (!this.blade?.attached) return failure('先把叶片接到轮轴上。');
+    if (!Number.isFinite(radians) || Math.abs(radians) > Math.PI * 2) {
+      return failure('这次转动幅度太大了，再轻轻转一下。');
+    }
+    this.axle.angle += radians;
+    this.blade.angle += radians;
+    return success('轮轴和叶片一起转了。');
+  }
+
   turn(side, radians) {
     if (this.disposed) return failure('试装台已经关闭。');
     if (!SIDES.includes(side)) return failure('先选一个轮子。');
@@ -45,21 +63,35 @@ export class AxleSession {
   }
 
   snapshot() {
-    return {
+    const connections = SIDES.filter((side) => this.wheels[side].attached).map((side) => ({
+      id: `joint-${side}`,
+      kind: 'revolute',
+      partId: this.wheels[side].id,
+      portId: `socket-${side}`,
+      parentId: this.axle.id,
+    }));
+    const snap = {
       axle: { ...this.axle },
       wheels: {
         left: { ...this.wheels.left },
         right: { ...this.wheels.right },
       },
-      connections: SIDES.filter((side) => this.wheels[side].attached).map((side) => ({
-        id: `joint-${side}`,
-        kind: 'revolute',
-        partId: this.wheels[side].id,
-        portId: `socket-${side}`,
-        parentId: this.axle.id,
-      })),
+      connections,
       disposed: this.disposed,
     };
+    if (this.blade) {
+      snap.blades = [{ ...this.blade }];
+      if (this.blade.attached) {
+        snap.connections = [...connections, {
+          id: 'joint-blade',
+          kind: 'revolute',
+          partId: this.blade.id,
+          portId: 'socket-axle',
+          parentId: this.axle.id,
+        }];
+      }
+    }
+    return snap;
   }
 
   dispose() {

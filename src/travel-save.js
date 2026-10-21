@@ -2,21 +2,24 @@
 
 import { ITEMS } from './game-data.js';
 import { LIFE_RULES } from './life-data.js';
+import { MAPLE_TOTAL_SECONDS, mapleStage } from './mei-data.js';
+import { validateMeiFields } from './mei-save.js';
 import {
   PLAYABLE_REALMS,
   REALM_BLOCK_LIMIT,
   REALMS,
-  STAMPS,
   WASHI_TOTAL_SECONDS,
   arrivalFor,
   defaultTravel,
+  emptyRealm,
   inVisitorYard,
   realmContains,
   realmTerrainHeight,
   washiStage,
 } from './realm-data.js';
+import { STAMP_IDS as STAMP_BOOK_IDS } from './stamp-book.js';
 
-const STAMP_IDS = new Set(STAMPS.map((item) => item.id));
+const STAMP_IDS = STAMP_BOOK_IDS;
 const ID_TEXT = /^[a-z0-9-]{1,64}$/;
 const TRAVEL_KEYS = new Set(['schema', 'current', 'via', 'visited', 'stamps', 'stickers', 'story', 'gifts', 'supplyAt', 'realms']);
 
@@ -43,31 +46,32 @@ function idList(value, label, { known = null, limit = 64 } = {}) {
   return [...value];
 }
 
-function readBag(value, code = 'realm', realmId = null) {
+function readBag(value, code = 'realm', realmId = null, name = '日谷') {
   if (!isRecord(value) || Object.keys(value).some((item) => !Object.hasOwn(ITEMS, item))) {
-    throw new TravelError('日谷的材料记录不正确。', code, realmId);
+    throw new TravelError(`${name}的材料记录不正确。`, code, realmId);
   }
   const bag = {};
   for (const item of Object.keys(ITEMS)) {
     const count = value[item] ?? 0;
-    if (!isCount(count)) throw new TravelError('日谷的材料数量不正确。', code, realmId);
+    if (!isCount(count)) throw new TravelError(`${name}的材料数量不正确。`, code, realmId);
     bag[item] = count;
   }
   return bag;
 }
 
 function validateRealm(id, realm) {
+  const name = REALMS[id]?.name || '这一谷';
   if (!REALMS[id]?.playable || id === 'he' || !isRecord(realm)) {
-    throw new TravelError('日谷的记录不正确。', 'realm', id);
+    throw new TravelError(`${name}的记录不正确。`, 'realm', id);
   }
   const blocks = realm.blocks;
   if (!Array.isArray(blocks) || blocks.length > REALM_BLOCK_LIMIT) {
-    throw new TravelError('日谷的建筑数量不正确。', 'realm', id);
+    throw new TravelError(`${name}的建筑数量不正确。`, 'realm', id);
   }
   const ids = new Set();
   const positions = new Set();
   const nextBlocks = blocks.map((block) => {
-    if (!isRecord(block)) throw new TravelError('日谷的建筑不正确。', 'realm', id);
+    if (!isRecord(block)) throw new TravelError(`${name}的建筑不正确。`, 'realm', id);
     const spanW = block.w == null ? 1 : block.w;
     const spanD = block.d == null ? 1 : block.d;
     if (!/^block-[1-9]\d*$/.test(block.id) || ids.has(block.id) || !ITEMS[block.item]?.placeable
@@ -76,38 +80,49 @@ function validateRealm(id, realm) {
       || !Number.isInteger(spanW) || spanW < 1 || spanW > 12
       || !Number.isInteger(spanD) || spanD < 1 || spanD > 12
       || (block.item !== 'roof' && (spanW !== 1 || spanD !== 1))) {
-      throw new TravelError('日谷的建筑不正确。', 'realm', id);
+      throw new TravelError(`${name}的建筑不正确。`, 'realm', id);
     }
     for (let dx = 0; dx < spanW; dx += 1) {
       for (let dz = 0; dz < spanD; dz += 1) {
         const cx = block.x + dx;
         const cz = block.z + dz;
         if (!inVisitorYard(id, cx, cz) || block.y < realmTerrainHeight(id, cx) || block.y > 12) {
-          throw new TravelError('日谷的建筑放在了朋友的家里。', 'realm', id);
+          throw new TravelError(`${name}的建筑放在了朋友的家里。`, 'realm', id);
         }
         const key = `${cx},${block.y},${cz}`;
-        if (positions.has(key)) throw new TravelError('日谷的建筑重叠了。', 'realm', id);
+        if (positions.has(key)) throw new TravelError(`${name}的建筑重叠了。`, 'realm', id);
         positions.add(key);
       }
     }
     ids.add(block.id);
     return { id: block.id, item: block.item, x: block.x, y: block.y, z: block.z, rotation: block.rotation, w: spanW, d: spanD };
   });
-  if (!isRecord(realm.chests)) throw new TravelError('日谷的箱子不正确。', 'realm', id);
+  if (!isRecord(realm.chests)) throw new TravelError(`${name}的箱子不正确。`, 'realm', id);
   const chests = {};
-  for (const block of nextBlocks.filter((block) => block.item === 'chest')) chests[block.id] = readBag(realm.chests[block.id] ?? {}, 'realm', id);
+  for (const block of nextBlocks.filter((block) => block.item === 'chest')) chests[block.id] = readBag(realm.chests[block.id] ?? {}, 'realm', id, name);
   if (Object.keys(realm.chests).some((chestId) => !Object.hasOwn(chests, chestId))) {
-    throw new TravelError('日谷有找不到的箱子。', 'realm', id);
+    throw new TravelError(`${name}有找不到的箱子。`, 'realm', id);
   }
-  const claimed = idList(realm.claimed ?? [], '日谷的标记', { limit: 32 });
+  const claimed = idList(realm.claimed ?? [], `${name}的标记`, { limit: 32 });
   const processes = realm.processes ?? [];
-  if (!Array.isArray(processes) || processes.length > 4) throw new TravelError('日谷的加工不正确。', 'realm', id);
+  if (!Array.isArray(processes) || processes.length > 4) throw new TravelError(`${name}的加工不正确。`, 'realm', id);
   const nextProcesses = processes.map((proc) => {
+    if (id === 'mei') {
+      if (!isRecord(proc) || proc.kind !== 'maple' || typeof proc.id !== 'string' || !ID_TEXT.test(proc.id)) {
+        throw new TravelError('美谷的加工不正确。', 'realm', id);
+      }
+      if (!Number.isFinite(proc.elapsed) || proc.elapsed < 0 || proc.elapsed > MAPLE_TOTAL_SECONDS) {
+        throw new TravelError('美谷的加工时间不正确。', 'realm', id);
+      }
+      const stage = mapleStage(proc.elapsed);
+      if (proc.stage !== stage) throw new TravelError('枫糖的步骤不一致。', 'realm', id);
+      return { id: proc.id, kind: 'maple', elapsed: proc.elapsed, stage };
+    }
     if (!isRecord(proc) || proc.kind !== 'washi' || typeof proc.id !== 'string' || !ID_TEXT.test(proc.id)) {
-      throw new TravelError('日谷的加工不正确。', 'realm', id);
+      throw new TravelError(`${name}的加工不正确。`, 'realm', id);
     }
     if (!Number.isFinite(proc.elapsed) || proc.elapsed < 0 || proc.elapsed > WASHI_TOTAL_SECONDS) {
-      throw new TravelError('日谷的加工时间不正确。', 'realm', id);
+      throw new TravelError(`${name}的加工时间不正确。`, 'realm', id);
     }
     const stage = washiStage(proc.elapsed);
     if (proc.stage !== stage) throw new TravelError('和纸的步骤不一致。', 'realm', id);
@@ -115,23 +130,29 @@ function validateRealm(id, realm) {
   });
   const player = realm.player;
   if (!isRecord(player) || ![player.x, player.y, player.z].every(Number.isFinite)) {
-    throw new TravelError('日谷的位置不正确。', 'position', id);
+    throw new TravelError(`${name}的位置不正确。`, 'position', id);
   }
   const ry = player.ry ?? 0;
   if (!Number.isFinite(ry) || !realmContains(id, player.x, player.z) || player.y < -2 || player.y > 16) {
-    throw new TravelError('日谷的位置不正确。', 'position', id);
+    throw new TravelError(`${name}的位置不正确。`, 'position', id);
   }
-  return {
+  const next = {
     player: { x: player.x, y: player.y, z: player.z, ry },
     blocks: nextBlocks,
     chests,
     claimed,
     processes: nextProcesses,
   };
+  if (id === 'mei') return { ...next, ...validateMeiFields(realm) };
+  return next;
 }
 
 export function validateTravel(travel) {
-  if (travel == null) return defaultTravel();
+  if (travel == null) {
+    const fresh = defaultTravel();
+    if (REALMS.mei?.playable) fresh.realms.mei = emptyRealm('mei');
+    return fresh;
+  }
   if (!isRecord(travel) || Object.keys(travel).some((key) => !TRAVEL_KEYS.has(key))) {
     throw new TravelError('旅行记录不正确。');
   }
@@ -155,6 +176,7 @@ export function validateTravel(travel) {
   if (!isRecord(realmsIn)) throw new TravelError('外谷记录不正确。');
   const realms = {};
   for (const id of Object.keys(realmsIn)) realms[id] = validateRealm(id, realmsIn[id]);
+  if (!realms.mei && REALMS.mei?.playable) realms.mei = emptyRealm('mei');
   if (current !== 'he' && !realms[current]) throw new TravelError('这一谷的记录丢了。', 'realm', current);
   return {
     schema: 1,
@@ -178,6 +200,11 @@ export function validateTravel(travel) {
 
 const HOME_NOTICE = '旅行记录有问题，已经回到河谷。家里的建筑和背包还在。';
 const DOCK_NOTICE = '日谷的位置出了范围，已经回到码头。家里的建筑和背包还在。';
+const PORT_NOTICE = '美谷的位置出了范围，已经回到港口。家里的建筑和背包还在。';
+
+function dockNotice(realmId) {
+  return realmId === 'mei' ? PORT_NOTICE : DOCK_NOTICE;
+}
 
 function keepIds(value, known = null) {
   if (!Array.isArray(value)) return [];
@@ -206,7 +233,7 @@ export function repairTravelRaw(raw) {
       copy.travel.realms[error.realmId].player = arrivalFor(error.realmId, 'ferry');
       try {
         copy.travel = validateTravel(copy.travel);
-        return { raw: copy, notice: DOCK_NOTICE, code: 'position' };
+        return { raw: copy, notice: dockNotice(error.realmId), code: 'position' };
       } catch (again) {
         if (!again?.travel) throw again;
       }

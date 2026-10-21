@@ -6,11 +6,13 @@ import { Workshop3D } from './workshop-3d.js';
 import { BUILD_CASES, PACK_ITEMS, WORKSHOP_FOLDS, combinationTree, lackHint, lackItems, madeLine, mathPits, needLine, putHint, recipeNeeds, resultLine } from './workshop-data.js';
 import { Axle3D } from './axle-3d.js';
 import { createCreationStudio, CREATION_TITLES } from './creation-ui.js';
-import { AGE_BANDS, FOLD_NOTE, STAMPS, WASHI_NOTE } from './realm-data.js';
+import { AGE_BANDS, FOLD_NOTE, WASHI_NOTE } from './realm-data.js';
+import { STAMP_BOOK } from './stamp-book.js';
+import { MEI_PANEL_TITLES, handleMeiAction, meiPanelHtml } from './mei-panels.js';
 
 const escapeHTML = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 const BUILDABLE = new Set(['plank', 'stone', 'brick', 'ramp', 'post', 'chest', 'workbench', 'roof', 'window', 'door', 'bed', 'fence', 'pot', 'wreath', 'lantern', 'flag']);
-const TITLES = { ...CREATION_TITLES, workshop: '木作工作台', axle: '轮轴试装台', land:'开垦与探索', life:'河谷的时间与生命', inventory: '我的背包', craft: '格子工坊', kiln: '小小砖窑', garden: '我的小菜园', warehouse: '可选补给站', help: '怎么玩', pause: '暂停与存档', chest: '我的储物箱', inspiration: '建筑点子卡', washi: '做和纸', fold: '折一折', stamps: '印章本' };
+const TITLES = { ...CREATION_TITLES, ...MEI_PANEL_TITLES, workshop: '木作工作台', axle: '轮轴试装台', land:'开垦与探索', life:'河谷的时间与生命', inventory: '我的背包', craft: '格子工坊', kiln: '小小砖窑', garden: '我的小菜园', warehouse: '可选补给站', help: '怎么玩', pause: '暂停与存档', chest: '我的储物箱', inspiration: '建筑点子卡', washi: '做和纸', fold: '折一折', stamps: '印章本' };
 const KILN_NAMES = { idle: '还没开始', moistening: '加水与成形', shaping: '成形', drying: '干燥', firing: '烧制', cooling: '冷却', ready: '完成，可以领取', failed: '试样出现裂纹' };
 const itemEntries = Array.isArray(ITEMS) ? ITEMS.map((entry) => [entry.id, entry]) : Object.entries(ITEMS);
 const recipes = Array.isArray(RECIPES) ? RECIPES : Object.values(RECIPES);
@@ -439,14 +441,14 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
   }
   function stampsView() {
     const owned = new Set(game.state.travel?.stamps || []);
-    return `<div class="stamp-grid">${STAMPS.map((stamp) => `<article class="stamp-card ${owned.has(stamp.id) ? 'owned' : ''}">${svg(stamp.icon, 36)}<strong>${escapeHTML(stamp.name)}</strong><p>${owned.has(stamp.id) ? '已经盖上' : escapeHTML(stamp.how)}</p></article>`).join('')}</div>`;
+    return `<div class="stamp-grid">${STAMP_BOOK.map((stamp) => `<article class="stamp-card ${owned.has(stamp.id) ? 'owned' : ''}">${svg(stamp.icon, 36)}<strong>${escapeHTML(stamp.name)}</strong><p>${owned.has(stamp.id) ? '已经盖上' : escapeHTML(stamp.how)}</p></article>`).join('')}</div>`;
   }
   function pauseView() {
     const saveInfo = game.storageError || (!game.storage?.setItem ? '这个窗口暂时保留世界，请下载存档备份。' : (game.accountId ? '背包物品、放下的建筑和设置记在当前登录的账号上。换一个人登录，会进入那个人自己的河谷。' : '还没登录，世界只在这台浏览器里。登录后会记到账号上。'));
     const age = game.state.settings?.ageBand || '';
     const away = (game.state.travel?.current || 'he') !== 'he';
     const ageOptions = [['', '不设置'], ...AGE_BANDS.map((item) => [item.id, item.label])].map(([id, label]) => `<option value="${id}" ${age === id ? 'selected' : ''}>${label}</option>`).join('');
-    return `<div class="panel-note">${svg('save', 32)}<span>${escapeHTML(saveInfo)}</span></div>${readButton(`${saveInfo}大人可以导出备份，也可以导入以前的存档。`)}<div class="panel-row">${button('save', '保存一下', { className: 'primary-btn' })}${button('close', '继续玩', { className: 'primary-btn' })}${away ? button('travel-home', '回家', { className: 'primary-btn', label: '回家' }) : ''}</div>${game.travelNotice ? `<p class="panel-notice" role="status">${escapeHTML(game.travelNotice)}</p>` : ''}<details class="panel-details" ${importPending ? 'open' : ''}><summary>给大人：备份与导入存档</summary><p>${game.accountId ? '已登录时，河谷存在这个账号下，换一台电脑登录也能回来。仍可以导出一份文件备份。' : '还没登录时，存档只在当前浏览器里。登录后会记到账号上。'}</p><label>年龄档（不记录生日）<select id="age-band">${ageOptions}</select></label><p>这只是打开对话时的默认长短。孩子随时可以换，不会扣东西。</p><div class="panel-row">${button('export', '下载存档 JSON')}${button('import-choose', '选择存档文件')}${backupBeforeImport ? button('export-backup', '下载导入前的备份') : ''}${game.getLegacyBackup?.()?button('export-legacy','下载升级前的备份'):''}${game.getTravelBackup?.()?button('export-travel','下载升级前的备份',{label:'下载旅行升级前的备份'}):''}</div><input id="save-import-input" type="file" accept=".json,application/json" hidden>${importPending ? `<div class="panel-note warning">已选：${escapeHTML(importPending.name)}。导入会替换当前世界；系统会先保留备份并检查存档。${button('import-confirm', '确认导入', { className: 'primary-btn' })}${button('import-cancel', '取消')}</div>` : ''}</details>${studio.pauseSection()}<p class="panel-notice" role="status">${escapeHTML(pauseNotice)}</p>`;
+    return `<div class="panel-note">${svg('save', 32)}<span>${escapeHTML(saveInfo)}</span></div>${readButton(`${saveInfo}大人可以导出备份，也可以导入以前的存档。`)}<div class="panel-row">${button('save', '保存一下', { className: 'primary-btn' })}${button('close', '继续玩', { className: 'primary-btn' })}${away ? button('travel-home', '回家', { className: 'primary-btn', label: '回家' }) : ''}</div>${game.travelNotice ? `<p class="panel-notice" role="status">${escapeHTML(game.travelNotice)}</p>` : ''}<details class="panel-details" ${importPending ? 'open' : ''}><summary>给大人：备份与导入存档</summary><p>${game.accountId ? '已登录时，河谷存在这个账号下，换一台电脑登录也能回来。仍可以导出一份文件备份。' : '还没登录时，存档只在当前浏览器里。登录后会记到账号上。'}</p><label>年龄档（不记录生日）<select id="age-band">${ageOptions}</select></label><p>这只是打开对话时的默认长短。孩子随时可以换，不会扣东西。</p><div class="panel-row">${button('export', '下载存档 JSON')}${button('import-choose', '选择存档文件')}${backupBeforeImport ? button('export-backup', '下载导入前的备份') : ''}${game.getLegacyBackup?.()?button('export-legacy','下载升级前的备份'):''}${game.getTravelBackup?.()?button('export-travel','下载升级前的备份',{label:'下载旅行升级前的备份'}):''}${game.getMeiBackup?.()?button('export-mei','下载升级前的备份',{label:'下载美谷升级前的备份'}):''}</div><input id="save-import-input" type="file" accept=".json,application/json" hidden>${importPending ? `<div class="panel-note warning">已选：${escapeHTML(importPending.name)}。导入会替换当前世界；系统会先保留备份并检查存档。${button('import-confirm', '确认导入', { className: 'primary-btn' })}${button('import-cancel', '取消')}</div>` : ''}</details>${studio.pauseSection()}<p class="panel-notice" role="status">${escapeHTML(pauseNotice)}</p>`;
   }
   function helpView() {
     const cards = [
@@ -494,6 +496,8 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
     if (current === 'washi') return washiView();
     if (current === 'fold') return foldView();
     if (current === 'stamps') return stampsView();
+    const meiBody = meiPanelHtml(current, { game, button, escapeHTML });
+    if (meiBody) return meiBody;
     if (current === 'inspiration') return inspirationView();
     return helpView();
   }
@@ -666,6 +670,7 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
     if (action === 'backdrop') { if (event.target === target) close(); return; }
     if (action === 'close') { close(); return; }
     if (action === 'speak') { safeSpeak(target.dataset.text); return; }
+    if (handleMeiAction({ action, target, game, notifyResult, render })) return;
     if (studio.handle(action, target)) return;
     if (action === 'open-inspiration') { open('inspiration'); return; }
     if (action === 'workshop-flat') { open('craft', { ...context, flat: true }); return; }
@@ -823,6 +828,7 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
     }
     if(action==='export-legacy'){const text=game.getLegacyBackup?.();if(text)download(text,'我的河谷-生命升级前备份.json');else toast('暂时没有升级前备份。');return;}
     if(action==='export-travel'){const text=game.getTravelBackup?.();if(text)download(text,'我的河谷-旅行升级前备份.json');else toast('暂时没有旅行升级前的备份。');return;}
+    if(action==='export-mei'){const text=game.getMeiBackup?.();if(text)download(text,'我的河谷-美谷升级前备份.json');else toast('暂时没有美谷升级前的备份。');return;}
     if(action==='travel-home'){onTravelHome();return;}
     if(action==='washi-start'){const result=game.startWashi();notifyResult(result);render();return;}
     if(action==='washi-claim'){const result=game.claimWashi();notifyResult(result);render();return;}
