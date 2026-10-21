@@ -405,6 +405,7 @@ function worldHooks() {
       paintHoloChrome();
       if (info?.phase === 'in') {
         const welcome = game.noteHoloWelcome();
+        world?.setDomeFilled?.(game.state.travel?.realms?.xing?.storyShard === true);
         world?.applyAvatar?.(game.state.travel?.realms?.xing?.holo);
         world?.setFigureMode?.('zero', 'scan');
         if (welcome.fresh) { toast(WELCOME_LINE); speak(WELCOME_LINE); }
@@ -1364,6 +1365,7 @@ async function bootValley() {
   holoUi = mountHoloUi({
     game, speak, toast, world: () => world,
     band: () => game.state.settings?.ageBand || tutorBand || null,
+    tour: () => touring,
     onPaint: paintHoloChrome,
   });
   updateUI(); updateContext();

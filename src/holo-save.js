@@ -12,7 +12,7 @@ import {
 
 const ID_TEXT = /^[a-z0-9:-]{1,64}$/;
 const MARK_TEXT = /^[a-z0-9-]{1,32}$/;
-const STAGE_TEXT = /^num-[a-z0-9-]{1,24}$/;
+const STAGE_TEXT = /^(num|shape|force|chart|code)-[a-z0-9-]{1,24}$/;
 const GLOW_KEYS = new Set(Object.keys(GLOW_COLORS));
 const VISOR_KEYS = new Set(Object.keys(VISORS));
 const UNLOCK_IDS = new Set([
@@ -108,7 +108,7 @@ export function readHolo(realm) {
     if (zonesIn[key]) zones[key] = readZone(key);
   }
   const echoIn = holo.echo ?? {};
-  if (!isRecord(echoIn) || Object.keys(echoIn).length > 8) throw new Error('星网的回声不正确。');
+  if (!isRecord(echoIn) || Object.keys(echoIn).length > 16) throw new Error('星网的回声不正确。');
   const echo = {};
   for (const [key, value] of Object.entries(echoIn)) {
     if (!STAGE_TEXT.test(key) || !isRecord(value)) throw new Error('星网的回声不正确。');

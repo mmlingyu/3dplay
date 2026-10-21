@@ -65,7 +65,7 @@ export const FIELD_GRANTS = Object.freeze({
 export const STAGE_LIGHT = 4;
 export const PUZZLE_GRANT_CAP = 4;
 
-const STAGE_IDS = new Set(['num-1', 'num-2', 'num-3', 'num-echo']);
+const STAGE_IDS = new Set(['num-1', 'num-2', 'num-3', 'num-echo', 'shape-1', 'force-1', 'chart-1', 'code-1']);
 const UNLOCK_IDS = new Set([
   ...Object.values(GLOW_COLORS).map((item) => item.id),
   ...Object.values(VISORS).map((item) => item.id),
@@ -157,9 +157,69 @@ function pairStage(rand, target, values) {
   };
 }
 
+export function domePlan(ageBand, tour = false) {
+  if (holoAge(ageBand) === 'older' && !tour) {
+    return {
+      mode: 'dir',
+      speak: '这块在家的北边。',
+      prompt: '小咕说：这一块星星，我们只在你家的天空见过。按方向摆回北边。',
+    };
+  }
+  return {
+    mode: 'tap',
+    speak: '这一块星星，和家里的夜空是同一张。点大星星，补上穹顶。',
+    prompt: '穹顶缺了一块。点大星星，补上它。',
+  };
+}
+
+export function arenaPlan(ageBand) {
+  if (holoAge(ageBand) === 'older') {
+    return {
+      prompt: '你算 4，小咕算 5，零一算 6。合起来是多少？',
+      choices: ['14', '15', '16'],
+      answer: '15',
+      speak: '三个人合在一起算。没有输赢。',
+    };
+  }
+  return {
+    prompt: '你有 3，小咕有 4，零一有 3。合起来是多少？',
+    choices: ['7', '10', '12'],
+    answer: '10',
+    speak: '三个人合在一起算。没有输赢。',
+  };
+}
+
+function zoneStage(age, stageId, seed) {
+  const young = age !== 'older';
+  const base = { id: stageId, age, seed: String(seed), echo: false, kind: 'pick' };
+  if (stageId === 'shape-1') {
+    return young
+      ? { ...base, title: '形之阵', prompt: '找和缺口一样的形状。', speak: '找和缺口一样的星星。', choices: ['星星', '方块', '圆'], answer: '星星' }
+      : { ...base, title: '形之阵', prompt: '俯视是 3 乘 2。这座平台有几块？', speak: '数一数有几块。', choices: ['4 块', '6 块', '9 块'], answer: '6 块' };
+  }
+  if (stageId === 'force-1') {
+    return young
+      ? { ...base, title: '力之台', prompt: '这里拉东西的力小一点。点跳得最高的一层。', speak: '这里跳得更高。点最高的那一层。', choices: ['一层', '三层'], answer: '三层' }
+      : { ...base, title: '力之台', prompt: '地球上跳 0.5 米。这颗星的力大约是地球的 1/3，同样起跳大约跳多高？', speak: '先猜再看。这里跳得更高。', choices: ['0.5 米', '1.5 米', '3 米'], answer: '1.5 米' };
+  }
+  if (stageId === 'chart-1') {
+    return young
+      ? { ...base, title: '星图之路', prompt: '先认白天最亮的那个。', speak: '先认太阳，再认月亮。', choices: ['太阳', '月亮', '云'], answer: '太阳' }
+      : { ...base, title: '星图之路', prompt: '1 光年大约有多远？', speak: '光年比太阳系大很多。', choices: ['大约 9 千米', '大约 9.46 万亿千米', '和月球一样远'], answer: '大约 9.46 万亿千米' };
+  }
+  if (stageId === 'code-1') {
+    return young
+      ? { ...base, title: '码之门', prompt: '按颜色排队。第一盏是哪一种？', speak: '按颜色排队。第一盏是青色。', choices: ['青', '琥珀', '紫'], answer: '青' }
+      : { ...base, title: '码之门', prompt: '两盏灯，亮是 1，暗是 0。亮暗 是几？', speak: '亮暗，是二。', choices: ['1', '2', '3'], answer: '2' };
+  }
+  return null;
+}
+
 /** One seeded stage. The same seed always rebuilds the same question. */
 export function makeStage(ageBand, stageId, seed = '0') {
   if (!STAGE_IDS.has(stageId)) throw new Error('这一关还不开放。');
+  const zoned = zoneStage(holoAge(ageBand), stageId, seed);
+  if (zoned) return zoned;
   const age = holoAge(ageBand);
   const plan = stagePlan(ageBand);
   const index = stageId === 'num-echo' ? 3 : Number(stageId.slice(4)) - 1;
@@ -287,8 +347,9 @@ export function gradeStage(stage, attempt) {
     if (picked.length === 2 && samePair(picked, stage.answer)) return { ok: true, hint: '' };
     return { ok: false, hint: `找两块，加起来正好是 ${stage.target}。` };
   }
-  if (stage.kind === 'calc' || stage.kind === 'base4') {
+  if (stage.kind === 'pick' || stage.kind === 'calc' || stage.kind === 'base4') {
     if (String(attempt) === String(stage.answer)) return { ok: true, hint: '' };
+    if (stage.kind === 'pick') return { ok: false, hint: '再点一次也没关系。' };
     if (stage.kind === 'base4') return { ok: false, hint: '小咕有四根手指。外星的 10 等于我们的 4。' };
     return { ok: false, hint: '再算一次。错了也不扣东西。' };
   }

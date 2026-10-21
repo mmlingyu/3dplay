@@ -5,6 +5,8 @@ import {
   GLOW_COLORS,
   HOLO_PADS,
   VISORS,
+  arenaPlan,
+  domePlan,
   dotMarks,
   glowName,
   gradeStage,
@@ -14,6 +16,7 @@ import {
   tierCap,
   tierLabel,
 } from './holo-data.js';
+import { ARENA_SPEAK, DOME_HOME, DOME_SPEAK, FESTIVAL_LINE, SHIP_LINE } from './xing-data.js';
 
 const SEED = 'xing-1';
 
@@ -41,7 +44,7 @@ function echoPoints(pad, stage, attempt) {
   }));
 }
 
-export function mountHoloUi({ game, speak, toast, world, band, onPaint }) {
+export function mountHoloUi({ game, speak, toast, world, band, onPaint, tour }) {
   const panel = document.getElementById('holo-panel');
   const back = document.getElementById('holo-back');
   const skip = document.getElementById('holo-skip');
@@ -60,6 +63,10 @@ export function mountHoloUi({ game, speak, toast, world, band, onPaint }) {
 
   function ageBand() {
     return band?.() || game.state.settings?.ageBand || null;
+  }
+
+  function touring() {
+    return Boolean(tour?.());
   }
 
   function say(text) {
@@ -111,17 +118,17 @@ export function mountHoloUi({ game, speak, toast, world, band, onPaint }) {
     const age = ageBand();
     const cap = tierCap(age);
     const pair = growthPair(record);
+    const zones = record.zones || {};
+    const fromZone = (key) => Math.min(100, ((zones[key] || []).length || 0) * 34);
     const axes = [
-      ['数', record.growth.at(-1)?.count || Math.min(100, (record.starlight.challenge || 0) * 4), true],
-      ['形', 0, false],
-      ['力', record.growth.at(-1)?.force || Math.min(100, (record.starlight.field || 0) * 4), true],
-      ['星图', 0, false],
-      ['码', 0, false],
+      ['数', record.growth.at(-1)?.count || Math.min(100, (record.starlight.challenge || 0) * 4)],
+      ['形', fromZone('shape')],
+      ['力', record.growth.at(-1)?.force || Math.min(100, (record.starlight.field || 0) * 4)],
+      ['星图', fromZone('chart')],
+      ['码', fromZone('code')],
     ];
-    const rows = axes.map(([name, value, open]) => (
-      open
-        ? `<div class="holo-axis"><span>${name}</span><b style="width:${Math.max(8, value)}%"></b></div>`
-        : `<div class="holo-axis dim"><span>${name}</span><em>之后开放</em></div>`
+    const rows = axes.map(([name, value]) => (
+      `<div class="holo-axis"><span>${name}</span><b style="width:${Math.max(8, value)}%"></b></div>`
     )).join('');
     const past = pair.past;
     const now = pair.current;
@@ -173,8 +180,8 @@ export function mountHoloUi({ game, speak, toast, world, band, onPaint }) {
         const on = picked.includes(index);
         return `<button type="button" class="holo-block${on ? ' on' : ''}" data-holo="block" data-index="${index}" aria-pressed="${on}" aria-label="能量块 ${index + 1}，${value} 点">${dotMarks(value)}</button>`;
       }).join('')}</div>`;
-    } else if (stage.kind === 'calc' || stage.kind === 'base4') {
-      body = `<p>${stage.prompt}</p><div class="panel-row">${stage.choices.map((choice) => `<button type="button" class="secondary-btn" data-holo="choice" data-value="${choice}">${choice}</button>`).join('')}</div>`;
+    } else if (stage.kind === 'calc' || stage.kind === 'base4' || stage.kind === 'pick') {
+      body = `<p>${stage.prompt}</p><div class="panel-row">${stage.choices.map((choice) => `<button type="button" class="secondary-btn" data-holo="choice" data-value="${choice}" aria-label="${choice}">${choice}</button>`).join('')}</div>`;
     } else if (stage.kind === 'path') {
       const cells = [];
       for (let y = 1; y <= stage.grid; y += 1) {
@@ -187,7 +194,10 @@ export function mountHoloUi({ game, speak, toast, world, band, onPaint }) {
       body = `<p>${stage.prompt}</p><div class="holo-grid">${cells.join('')}</div>`;
     }
     const later = young ? '' : '';
-    paint(`<h2>${stage.title}</h2><p>${stage.kind === 'count' ? '数一数星棱身上的光点，点亮一样多的灯。' : (stage.kind === 'pair10' || stage.kind === 'pair12' ? stage.prompt : '')}</p>${body}<p class="holo-note" role="status">${note}</p>${later}<div class="panel-row"><button type="button" class="primary-btn" data-holo="done" aria-label="点好了">好</button><button type="button" class="secondary-btn" data-holo="speak" data-text="${stage.speak}">听一听</button><button type="button" class="secondary-btn" data-holo="close">先离开</button></div><p class="holo-quiet">错了可以再试。不扣东西，也可以先走。</p>`);
+    const lead = stage.kind === 'count'
+      ? '数一数星棱身上的光点，点亮一样多的灯。'
+      : (stage.kind === 'pair10' || stage.kind === 'pair12' || stage.kind === 'pick' ? stage.prompt : '');
+    paint(`<h2>${stage.title}</h2><p>${lead}</p>${body}<p class="holo-note" role="status">${note}</p>${later}<div class="panel-row"><button type="button" class="primary-btn" data-holo="done" aria-label="点好了">好</button><button type="button" class="secondary-btn" data-holo="speak" data-text="${stage.speak}">听一听</button><button type="button" class="secondary-btn" data-holo="close">先离开</button></div><p class="holo-quiet">错了可以再试。不扣东西，也可以先走。</p>`);
   }
 
   function attemptOf() {
@@ -225,6 +235,74 @@ export function mountHoloUi({ game, speak, toast, world, band, onPaint }) {
     say(note);
     world?.()?.applyAvatar?.(holo());
     renderStage();
+  }
+
+  function openDome() {
+    view = 'dome';
+    stage = null;
+    const got = game.state.travel?.realms?.xing?.storyShard === true;
+    if (got) {
+      world?.()?.setDomeFilled?.(true);
+      paint(`<h2>星之片</h2><p>${DOME_HOME}</p><div class="panel-row"><button type="button" class="primary-btn" data-holo="close">先离开</button><button type="button" class="secondary-btn" data-holo="speak" data-text="${DOME_HOME}">听一听</button></div>`);
+      say(DOME_HOME);
+      return;
+    }
+    const plan = domePlan(ageBand(), touring());
+    say(plan.speak);
+    if (plan.mode === 'dir') {
+      const dirs = [['north', '北'], ['east', '东'], ['south', '南'], ['west', '西']];
+      const buttons = dirs.map(([id, name]) => `<button type="button" class="primary-btn" data-holo="dome-dir" data-dir="${id}" aria-label="${name}">${name}</button>`).join('');
+      paint(`<h2>补星图</h2><p>${plan.prompt}</p><div class="panel-row">${buttons}</div><div class="panel-row"><button type="button" class="secondary-btn" data-holo="speak" data-text="${plan.speak}">听一听</button><button type="button" class="secondary-btn" data-holo="close">先离开</button></div>`);
+      return;
+    }
+    paint(`<h2>补星图</h2><p>${plan.prompt}</p><div class="panel-row"><button type="button" class="primary-btn holo-star" data-holo="dome-home" aria-label="补上这块">★ 补上这块</button></div><div class="panel-row"><button type="button" class="secondary-btn" data-holo="speak" data-text="${DOME_SPEAK}">听一听</button><button type="button" class="secondary-btn" data-holo="close">先离开</button></div>`);
+  }
+
+  function applyDome(choice) {
+    const result = game.claimXingShard?.(choice, { tour: touring(), ageBand: ageBand() });
+    if (!result?.ok) {
+      toast?.(result?.message || '再点一次也没关系。');
+      say(result?.message || '再点一次也没关系。');
+      return;
+    }
+    world?.()?.setDomeFilled?.(true);
+    toast?.(result.message);
+    say(result.line || DOME_HOME);
+    paint(`<h2>星之片</h2><p>${result.message || ''}</p><p>${result.line || DOME_HOME}</p><div class="panel-row"><button type="button" class="primary-btn" data-holo="close">先离开</button><button type="button" class="secondary-btn" data-holo="speak" data-text="${DOME_HOME}">听一听</button></div>`);
+  }
+
+  function openZones() {
+    view = 'zones';
+    stage = null;
+    const buttons = [
+      ['shape-1', '形之阵'],
+      ['force-1', '力之台'],
+      ['chart-1', '星图之路'],
+      ['code-1', '码之门'],
+    ].map(([id, name]) => `<button type="button" class="primary-btn" data-holo="zone" data-stage="${id}" aria-label="${name}">${name}</button>`).join('');
+    paint(`<h2>星区</h2><p>点一个星区。做错了可以再试，不扣东西。</p><div class="panel-row">${buttons}</div><div class="panel-row"><button type="button" class="secondary-btn" data-holo="ship" aria-label="咕咕号星图">咕咕号星图</button><button type="button" class="secondary-btn" data-holo="arena" aria-label="一起算">一起算</button><button type="button" class="secondary-btn" data-holo="festival" aria-label="双月">双月</button></div><div class="panel-row"><button type="button" class="secondary-btn" data-holo="close">先离开</button></div>`);
+  }
+
+  function openArena() {
+    view = 'arena';
+    stage = null;
+    const plan = arenaPlan(ageBand());
+    say(plan.speak);
+    const buttons = plan.choices.map((choice) => `<button type="button" class="primary-btn" data-holo="arena-choice" data-value="${choice}" aria-label="${choice}">${choice}</button>`).join('');
+    paint(`<h2>一起算</h2><p>${plan.prompt}</p><p>${ARENA_SPEAK}</p><div class="panel-row">${buttons}</div><div class="panel-row"><button type="button" class="secondary-btn" data-holo="speak" data-text="${ARENA_SPEAK}">听一听</button><button type="button" class="secondary-btn" data-holo="zones">回到星区</button></div>`);
+  }
+
+  function openFestival() {
+    view = 'festival';
+    stage = null;
+    say(FESTIVAL_LINE);
+    paint(`<h2>双月团圆夜</h2><div class="holo-moons" aria-hidden="true"><i></i><i></i></div><p>${FESTIVAL_LINE}</p><p class="holo-quiet">看一看就好。不评分，不限时。</p><div class="panel-row"><button type="button" class="primary-btn" data-holo="speak" data-text="${FESTIVAL_LINE}">听一听</button><button type="button" class="secondary-btn" data-holo="close">先离开</button></div>`);
+  }
+
+  function openShip() {
+    say(SHIP_LINE);
+    toast?.(SHIP_LINE);
+    openStage('chart-1');
   }
 
   function onClick(event) {
@@ -283,6 +361,25 @@ export function mountHoloUi({ game, speak, toast, world, band, onPaint }) {
       return;
     }
     if (act === 'done') finish(attemptOf());
+    if (act === 'dome-home') applyDome('home');
+    if (act === 'dome-dir') applyDome(button.dataset.dir);
+    if (act === 'zone') openStage(button.dataset.stage);
+    if (act === 'zones') openZones();
+    if (act === 'ship') openShip();
+    if (act === 'arena') openArena();
+    if (act === 'festival') openFestival();
+    if (act === 'arena-choice') {
+      const plan = arenaPlan(ageBand());
+      if (button.dataset.value !== plan.answer) {
+        toast?.('再点一次也没关系。');
+        say('再点一次也没关系。');
+        return;
+      }
+      const saved = game.noteHoloTogether?.();
+      toast?.(saved?.message || '看台亮了。');
+      say(saved?.message || ARENA_SPEAK);
+      paint(`<h2>一起算</h2><p>${saved?.message || '看台亮了。没有输赢，也没有排名。'}</p><div class="panel-row"><button type="button" class="primary-btn" data-holo="close">先离开</button></div>`);
+    }
   }
 
   panel?.addEventListener('click', onClick);
@@ -294,12 +391,16 @@ export function mountHoloUi({ game, speak, toast, world, band, onPaint }) {
   document.getElementById('holo-avatar-open')?.addEventListener('click', openAvatar);
   document.getElementById('holo-tier-open')?.addEventListener('click', openTier);
   document.getElementById('holo-stage-open')?.addEventListener('click', () => openStage('num-1'));
+  document.getElementById('holo-dome-open')?.addEventListener('click', openDome);
+  document.getElementById('holo-zones-open')?.addEventListener('click', openZones);
 
   return {
     close,
     openAvatar,
     openTier,
     openStage,
+    openDome,
+    openZones,
     peek() {
       return stage ? { id: stage.id, kind: stage.kind, answer: stage.answer, n: stage.n, blocks: stage.blocks, points: stage.points, note } : null;
     },

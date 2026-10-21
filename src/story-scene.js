@@ -380,6 +380,11 @@ function buildObservatory(world, api, boxes, rounds, glows, look, quality, story
     for (let i = 0; i < (quality === 'fine' ? 8 : 4); i += 1) {
       addBox(boxes, COLOR.star, ox + Math.cos(i) * 1.3, 2.4 + (i % 3) * 0.18, oz + Math.sin(i) * 1.1, 0.08, 0.08, 0.08);
     }
+    const skyStars = [[0.2, 4.6, 0.1], [1.1, 5.3, 0.45], [-0.7, 5.1, -0.35], [0.35, 6.1, -0.15]];
+    for (const [dx, y, dz] of skyStars) addBox(boxes, COLOR.star, ox + dx, y, oz + dz, 0.14, 0.14, 0.14);
+    addBox(boxes, COLOR.star, ox + 0.65, 4.95, oz + 0.28, 0.9, 0.05, 0.05);
+    addBox(boxes, COLOR.star, ox - 0.25, 4.85, oz - 0.12, 0.05, 0.55, 0.05);
+    addBox(boxes, COLOR.star, ox + 0.15, 5.7, oz - 0.25, 0.05, 0.05, 0.7);
     addBox(boxes, COLOR.terminal, ox, 1.15, oz - 1.2, 0.7, 0.45, 0.06);
   }
   const marker = new THREE.Object3D();
