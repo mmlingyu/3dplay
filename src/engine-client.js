@@ -1,11 +1,19 @@
 import { CATALOG_VERSION } from './creation-data.js';
 import { validateProposal } from './creation-rules.js';
+import { staticPreviewEnabled } from './static-preview.js';
 
 const BASE = (typeof window !== 'undefined' && window.CREATION_ENGINE_URL) || '/api/creation';
 const POLL_MS = 2500;
 const MAX_WAIT_MS = 6 * 60 * 1000;
 
+function localEngineError() {
+  const error = new Error('本地游玩，发明家小屋没有连上。');
+  error.local = true;
+  return error;
+}
+
 async function request(path, options = {}) {
+  if (staticPreviewEnabled()) throw localEngineError();
   const response = await fetch(`${BASE}${path}`, { headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', ...options });
   if (!response.ok) {
     const detail = await response.json().then(body => body?.detail).catch(() => '');
@@ -15,11 +23,13 @@ async function request(path, options = {}) {
 }
 
 export async function engineStatus() {
+  if (staticPreviewEnabled()) return { available: false, signedIn: false, reason: '本地游玩，发明家小屋没有连上。' };
   try { return await request('/capabilities'); }
   catch { return { available: false }; }
 }
 
 export async function accountSession() {
+  if (staticPreviewEnabled()) return { online: false, user: null };
   try {
     const response = await fetch('/api/auth/me', { credentials: 'same-origin' });
     if (response.ok) return { online: true, user: (await response.json()).user || null };
@@ -36,6 +46,7 @@ export async function currentUser() {
 
 // Shared library: assets other children already made and the server validated.
 export async function searchAssets(query) {
+  if (staticPreviewEnabled()) return [];
   try { return (await request(`/assets?q=${encodeURIComponent(query || '')}`)).assets || []; }
   catch { return []; }
 }

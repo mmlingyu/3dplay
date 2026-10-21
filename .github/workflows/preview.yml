@@ -30,6 +30,7 @@ jobs:
         run: npm ci && npm run build
         env:
           VITE_BASE: /3dplay/
+          VITE_STATIC_PREVIEW: "1"
 
       - name: Publish preview
         uses: peaceiris/actions-gh-pages@v4
