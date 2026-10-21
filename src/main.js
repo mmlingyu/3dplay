@@ -14,6 +14,7 @@ import { BOUNCE_ISLAND, PARK_NAME, PLAY_MODES, SKIP_STEPS, TIMES_TABLES, bounceI
 import { BALLOON_BASE, BALLOON_NAME, balloonBaseFor, onBalloonLawn } from './balloon-data.js';
 import { gradeQuestion, loadTutorPack, nextQuestion, primeTutorPack, tutorById, tutors, useTutorRealm } from './tutor-data.js';
 import { chooseDockSite, FERRY_NOTE, REALMS, VOYAGE_NOTE } from './realm-data.js';
+import { VISTAS } from './vista-data.js';
 import { MEI_AUDIO, SHIP_NOTE, VOYAGE_MEI_NOTE } from './mei-data.js';
 import { createCutscene } from './travel.js';
 import { sceneStats } from './scene-stats.js';
@@ -35,7 +36,7 @@ const joystick = { x: 0, z: 0 };
 const cooldowns = new Map();
 let world, panels, started = false, mode = 'gather', selectedItem = 'plank';
 let rotation = 0, buildCell = null, chosenTarget = null, modelMenu = null, panelType = null, savedTime = 0;
-let lastFrame = performance.now(), uiTime = 0, completedWish = false, speechTimer;
+let lastFrame = performance.now(), uiTime = 0, completedWish = false, speechTimer, vistaStampTimer;
 let tutorBand = game.state.settings.ageBand || 'little', tutorUsed = [], tutorCurrent = null, tutorPick = null, tutorStage = 'menu', tutorActivity = null, tutorPage = 0, tutorGreeted = new Set();
 let switching = false, cutscene = null, pendingHomeFlight = false, xingPuzzle = null, xingSheet = '', crystalMarkup = '';
 const missingAudio = new Set([...RI_AUDIO, ...MEI_AUDIO, ...XING_AUDIO]);
@@ -250,6 +251,67 @@ function paintTravel() {
   if (voyageMei) voyageMei.hidden = !touring || !REALMS.mei?.playable;
   paintStarButtons();
 }
+function hideVistaCard() {
+  const card = $('vista-card');
+  const arrow = $('vista-arrow');
+  if (card) card.hidden = true;
+  if (arrow) arrow.hidden = true;
+}
+function showVistaCard(id) {
+  const vista = VISTAS[id];
+  const card = $('vista-card');
+  if (!vista || !card) return;
+  card.hidden = false;
+  const line = $('vista-line');
+  if (line) line.textContent = vista.line;
+  const mark = $('vista-icon');
+  if (mark) mark.innerHTML = icon(vista.icon, 48);
+  const look = $('vista-look');
+  const skip = $('vista-skip');
+  const later = $('vista-later');
+  if (look) { look.hidden = false; look.setAttribute('aria-label', `看向${vista.name}`); }
+  if (skip) skip.hidden = true;
+  if (later) later.hidden = false;
+  speak(vista.line);
+}
+function showVistaZoom(id) {
+  const look = $('vista-look');
+  const skip = $('vista-skip');
+  const later = $('vista-later');
+  if (look) look.hidden = true;
+  if (later) later.hidden = true;
+  if (skip) skip.hidden = false;
+  const vista = VISTAS[id];
+  if (vista) speak(vista.line);
+}
+function showVistaStamp(id, result) {
+  hideVistaCard();
+  const vista = VISTAS[id];
+  const stamp = $('vista-stamp');
+  if (!vista || !stamp) return;
+  if (result?.already) { toast(result.message); return; }
+  stamp.hidden = false;
+  const name = $('vista-stamp-name');
+  if (name) name.textContent = `发现${vista.name}`;
+  const mark = $('vista-stamp-icon');
+  if (mark) mark.innerHTML = icon(vista.icon, 64);
+  speak(`发现${vista.name}`);
+  clearTimeout(vistaStampTimer);
+  vistaStampTimer = setTimeout(() => { stamp.hidden = true; }, 2600);
+}
+function paintVistaHud() {
+  const arrow = $('vista-arrow');
+  if (!arrow || !world?.vistaPointer) return;
+  const card = $('vista-card');
+  if (!card || card.hidden || !world.vistaGlance) { arrow.hidden = true; return; }
+  const spot = world.vistaPointer();
+  if (!spot?.visible) { arrow.hidden = true; return; }
+  arrow.hidden = false;
+  arrow.style.left = `${spot.x}px`;
+  arrow.style.top = `${spot.y}px`;
+  const vista = VISTAS[world.vistaGlance.id];
+  if (vista) arrow.setAttribute('aria-label', `看向${vista.name}`);
+}
 function showStar(title = '飞向星星') {
   const box = $('star-cutscene');
   const heading = $('star-title');
@@ -286,7 +348,11 @@ function worldHooks() {
         showStar('飞回河谷');
       }
     },
-    onBalloonStop: () => { hideBalloon(); toast('已经降落。想再看，再点乘坐。'); updateContext(); },
+    onBalloonStop: () => { hideBalloon(); hideVistaCard(); toast('已经降落。想再看，再点乘坐。'); updateContext(); },
+    onVistaSpot: (id) => { if (!started) return; showVistaCard(id); },
+    onVistaZoom: (id) => { if (!started) return; showVistaZoom(id); },
+    onVistaStamp: (id) => { if (!started) return; const result = game.discoverVista(id); showVistaStamp(id, result); },
+    onVistaHide: () => hideVistaCard(),
     onVoyageArrive: (realmId) => {
       hideStar();
       hideCutscene();
@@ -919,6 +985,17 @@ function interact(target = null) {
     const result = game.repairKoinobori();
     toast(result.message, result.ok);
     world.sync(game.state);
+  } else if (target.type === 'bottle') {
+    const result = game.collectKeepsake(target.keepsake);
+    toast(result.message, result.ok);
+    speak(result.message);
+    if (result.ok && !result.already) world.celebrate(target.position);
+    chosenTarget = null;
+    world.select(null);
+    return;
+  } else if (target.type === 'vista') {
+    if (world.balloon) world.zoomVista(target.vistaId);
+    return;
   } else if (target.type === 'balloon') {
     if (world.balloon) {
       if (world.requestBalloonLand()) { toast('好，热气球自己飞回草坪基地。'); speak('热气球飞回草坪基地。'); }
@@ -981,6 +1058,11 @@ function usesTap(target) {
 }
 function onTap(pick) {
   if (!started || panels?.isOpen()) return;
+  if (pick.target?.type === 'vista' && world?.balloon) {
+    world.zoomVista(pick.target.vistaId);
+    feel(12);
+    return;
+  }
   if (mode === 'remove') {
     hideModelMenu();
     if (pick.target?.type === 'block') { approach(pick.target, true); feel(12); return; }
@@ -1279,6 +1361,11 @@ $('balloon-land')?.addEventListener('click', () => {
   toast('好，热气球自己飞回草坪基地。');
   speak('热气球飞回草坪基地。');
 });
+$('vista-map-button')?.addEventListener('click', () => { if (started) openPanel('vista'); });
+$('vista-look')?.addEventListener('click', () => { if (started && world?.vistaGlance) world.zoomVista(world.vistaGlance.id); });
+$('vista-arrow')?.addEventListener('click', () => { if (started && world?.vistaGlance) world.zoomVista(world.vistaGlance.id); });
+$('vista-skip')?.addEventListener('click', () => { if (started) world?.skipVistaZoom(); });
+$('vista-later')?.addEventListener('click', () => { if (started) world?.dismissVista(); });
 $('balloon-hud')?.addEventListener('click', event => {
   const mode = event.target.closest('[data-balloon-mode]')?.dataset.balloonMode;
   if (!started || !world?.balloon || !mode) return;
@@ -1361,6 +1448,7 @@ function frame(now) {
       const done = cutscene.tick(dt, { paused: !started || panelType === 'pause' || panels.isOpen(), hidden: false });
       if (done) finishCutscene();
     }
+    paintVistaHud();
     if (started && panelType !== 'pause') game.tick(elapsed);
     uiTime += dt; savedTime += dt;
     placeModelMenu();
@@ -1382,7 +1470,8 @@ window.render_game_to_text = () => JSON.stringify({
   player: game.state.player, inventory: game.state.inventory, blocks: game.state.blocks.length,
   balls: world?.serializeBalls(),
   locomotion: world?.locomotion,
-  balloon: world?.balloon ? { phase: world.balloon.phase, angle: world.balloon.angle } : null,
+  balloon: world?.balloon ? { phase: world.balloon.phase, angle: world.balloon.angle, height: world.balloon.height } : null,
+  vista: { discovered: game.state.travel?.discovered || null, keepsakes: game.state.travel?.keepsakes || [], glance: world?.vistaGlance?.phase || null, id: world?.vistaGlance?.id || null, clarity: world?.vistaView?.clarity ?? null, opacity: world?.vistaView?.opacity ?? null, signals: world?.vistaView?.signals || null },
   clock:game.state.clock,season:realMoment(),
   flora:game.state.flora.map(p=>({...p,stage:floraStage(p,game.state.clock)})),
   land:game.state.land,

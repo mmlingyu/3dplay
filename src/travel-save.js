@@ -18,11 +18,12 @@ import {
   washiStage,
 } from './realm-data.js';
 import { STAMP_IDS as STAMP_BOOK_IDS } from './stamp-book.js';
+import { inferDiscovered, KEEPSAKE_IDS, VISTA_IDS } from './vista-data.js';
 import { readCrystal, readXingFields } from './xing-save.js';
 
 const STAMP_IDS = STAMP_BOOK_IDS;
 const ID_TEXT = /^[a-z0-9-]{1,64}$/;
-const TRAVEL_KEYS = new Set(['schema', 'current', 'via', 'visited', 'stamps', 'stickers', 'story', 'gifts', 'supplyAt', 'realms']);
+const TRAVEL_KEYS = new Set(['schema', 'current', 'via', 'visited', 'stamps', 'stickers', 'story', 'gifts', 'supplyAt', 'realms', 'discovered', 'keepsakes']);
 
 const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isCount = (value) => Number.isSafeInteger(value) && value >= 0 && value <= 1000000;
@@ -158,6 +159,33 @@ function validateRealm(id, realm) {
   return checked;
 }
 
+function readDiscovered(value, travel) {
+  const inferred = inferDiscovered(travel);
+  if (value == null) return inferred;
+  if (!isRecord(value)) throw new TravelError('发现记录不正确。');
+  for (const key of Object.keys(value)) {
+    if (!VISTA_IDS.includes(key)) throw new TravelError('发现记录不正确。');
+  }
+  const found = {};
+  for (const id of VISTA_IDS) {
+    if (!Object.hasOwn(value, id)) found[id] = inferred[id];
+    else if (typeof value[id] !== 'boolean') throw new TravelError('发现记录不正确。');
+    else found[id] = value[id];
+  }
+  return found;
+}
+
+function readKeepsakes(value) {
+  if (value == null) return [];
+  if (!Array.isArray(value) || value.length > KEEPSAKE_IDS.length) throw new TravelError('纪念物记录不正确。');
+  const kept = [];
+  for (const id of value) {
+    if (typeof id !== 'string' || !KEEPSAKE_IDS.includes(id) || kept.includes(id)) throw new TravelError('纪念物记录不正确。');
+    kept.push(id);
+  }
+  return kept;
+}
+
 export function validateTravel(travel) {
   if (travel == null) {
     const fresh = defaultTravel();
@@ -208,6 +236,8 @@ export function validateTravel(travel) {
     },
     supplyAt,
     realms,
+    discovered: readDiscovered(travel.discovered, { current, visited, realms: realmsIn }),
+    keepsakes: readKeepsakes(travel.keepsakes),
   };
 }
 
@@ -273,6 +303,8 @@ export function repairTravelRaw(raw) {
         } catch { /* drop this valley */ }
       }
     }
+    try { fresh.keepsakes = readKeepsakes(src.keepsakes); } catch { fresh.keepsakes = []; }
+    fresh.discovered = inferDiscovered(fresh);
     copy.travel = fresh;
     return { raw: copy, notice: HOME_NOTICE, code: 'travel' };
   }
