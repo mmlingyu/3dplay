@@ -35,3 +35,11 @@
 接手时应保护当前使用者已有的网络出口。网络故障先做只读诊断；需要变更时说明具体操作和影响，等待该机器使用者的明确批准。“继续检查”“自主推进”等普通任务授权不等于网络变更授权。此规则适用于子代理和脚本。不得把“修改 VPN 必然封号”当成事实。
 
 原会话面向楠时需先称呼楠；同事接手后使用接手人的实际称呼，不把同事称为楠。
+
+## Cursor Cloud specific instructions
+
+- 需要 Node.js 22.12 或更新版本。默认镜像已满足。安装只用 `npm ci`，不要在环境准备时升级 npm 或改锁文件。
+- 开发服务是 `npm run dev`，监听 `0.0.0.0:5173`。河谷本身在浏览器里可玩。`vite.config.js` 把 `/api`、`/account`、`/static` 代理到可选的创作引擎 `http://localhost:6010`；没有这台引擎时，登录、账号同步和发明家小屋会离线，采集、合成和搭建仍然可用。不要为了打开河谷去启动 6010。
+- 规则检查是 `npm test`。2026-10-21 这次环境准备里，117 项通过，3 项失败，失败不是缺依赖：`test/game-state.test.js` 里两则花序测试按当天季节生长，10 月是秋季，花序不增加；`test/tutor-data.test.js` 读取 `../../knowledge/valley-tutors.json`，从 `test/` 解析到仓库外的 `/knowledge/valley-tutors.json`，仓库里没有这个文件。
+- 交付构建是 `npm run build`。浏览器流程检查先 `npx playwright install chromium`，再在另一个终端跑 `npm run preview -- --port 5174`，然后 `npm run test:browser`。检查使用独立浏览器上下文，不要清掉真实游玩存档。
+- 未经该次操作的明确批准，不要改 VPN、代理、DNS 或路由。
