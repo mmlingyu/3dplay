@@ -112,6 +112,31 @@ test('6到8岁雾更淡更暖，升到12格以上就在雾上面，家长可以�
   assert.equal(storyFog({ travel, ageBand: 'senior', height: 0 }).visible, false);
 });
 
+test('三片齐了还留淡雾，刻完家之片才散', () => {
+  const travel = {
+    story: { fogIntro: true, restored: ['water', 'light', 'sky'], fogOff: false, homePlaces: [] },
+    realms: { ri: { storyShard: true }, mei: { storyShard: true }, xing: { storyShard: true } },
+  };
+  const mist = storyFog({ travel, ageBand: 'junior', height: 0 });
+  const oneLeft = storyFog({
+    travel: { story: { ...travel.story, restored: ['water', 'light'] }, realms: travel.realms },
+    ageBand: 'junior',
+    height: 0,
+  });
+  assert.equal(storyChapter(travel), 'finale');
+  assert.equal(mist.visible, true);
+  assert.equal(mist.zones.all, false);
+  assert.ok(mist.density > 0 && mist.density < oneLeft.density);
+  travel.story.restored = ['water', 'light', 'sky', 'all'];
+  const clear = storyFog({ travel, ageBand: 'junior', height: 0 });
+  assert.equal(clear.visible, false);
+  assert.equal(clear.density, 0);
+  assert.equal(clear.zones.all, true);
+  const during = storyFog({ travel, ageBand: 'junior', height: 0, reveal: { zone: 'all' } });
+  assert.equal(during.visible, false);
+  assert.equal(during.density, 0);
+});
+
 test('终章刻完三个地方后雾全部散开', () => {
   const state = createInitialState();
   state.travel.story.fogIntro = true;

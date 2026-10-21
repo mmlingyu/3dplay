@@ -126,7 +126,10 @@ export function storyFog({ travel, ageBand = null, height = 0, reveal = null } =
     return { visible: false, density: 0, above, warm: profile.warm, color: profile.color, icon: false, lamp: 1, zones, shards };
   }
   const covered = ['water', 'light', 'sky'].filter((zone) => !zones[zone]).length;
-  const base = covered === 0 ? 0 : profile.density * (0.55 + covered * 0.2);
+  // Three shards leave a light mist. Carving the home piece (restored "all") clears it,
+  // including during the short reveal that temporarily hides the all flag.
+  const scale = covered === 0 ? (restored.has('all') ? 0 : 0.35) : 0.55 + covered * 0.2;
+  const base = profile.density * scale;
   const density = above ? 0 : base;
   return {
     visible: density > 0,

@@ -1022,10 +1022,17 @@ button.creation-chip { cursor: pointer; }
   #travel-go-mei { top: 168px; }
   #mei-actions { top: 292px; }
 }
-#tour-next, #story-banner, #story-disk, #tour-guide, #story-talk, #story-home, #story-festival { pointer-events: auto; }
+#tour-next, #story-disk, #story-talk, #story-home, #story-festival, #story-skip { pointer-events: auto; }
+#story-banner, #tour-guide { pointer-events: none; }
 #tour-next[hidden], #story-banner[hidden], #story-disk[hidden], #tour-guide[hidden], #story-talk[hidden], #story-home[hidden], #story-festival[hidden], #story-talk-extra[hidden] { display: none !important; }
 #tour-next { min-height: 44px; padding: 6px 12px; font-size: 14px; }
-#story-banner { position: absolute; z-index: 22; left: 16px; top: 78px; display: flex; align-items: center; gap: 10px; width: min(360px, calc(100vw - 180px)); padding: 10px 12px; border-radius: 18px; background: rgba(255, 248, 236, .94); color: #3a4038; border: 2px solid #e7d3b0; box-shadow: var(--shadow); }
+#story-banner { position: absolute; z-index: 12; left: 300px; top: 78px; display: flex; align-items: center; gap: 10px; width: min(420px, calc(100vw - 480px)); padding: 10px 12px; border-radius: 18px; background: rgba(255, 248, 236, .94); color: #3a4038; border: 2px solid #e7d3b0; box-shadow: var(--shadow); }
+@media (max-width: 1100px) {
+  #story-banner { left: 268px; width: min(400px, calc(100vw - 420px)); }
+}
+@media (max-width: 700px) {
+  #story-banner { left: 16px; top: 268px; width: min(420px, calc(100vw - 32px)); }
+}
 #story-banner p { margin: 0; font-size: 15px; line-height: 1.4; }
 #story-skip { min-height: 44px; min-width: 64px; }
 #story-disk { position: absolute; z-index: 18; left: 16px; top: 46%; width: 56px; height: 56px; border-radius: 50%; border: 3px solid #f4e4d2; background: radial-gradient(circle at 40% 35%, #fff6d8, #8ea4c8 70%); color: #243044; font-weight: 800; box-shadow: 0 0 16px rgba(255, 236, 180, .85); }
@@ -1036,4 +1043,4 @@ button.creation-chip { cursor: pointer; }
 #story-talk p, #story-home p { margin: 8px 0 12px; font-size: 16px; line-height: 1.5; }
 #story-home-picks { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 12px 0; }
 #story-home-picks button, #story-talk button, #story-home > button, #story-festival { min-height: 44px; }
-#story-festival { position: absolute; z-index: 27; left: 50%; bottom: 168px; transform: translateX(-50%); }
+#story-festival { position: absolute; z-index: 27; left: 50%; bottom: 292px; transform: translateX(-50%); }

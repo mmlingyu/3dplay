@@ -389,13 +389,11 @@ async function run(kind, contextOptions, { phone = false, shots = false } = {}) 
       touch: navigator.maxTouchPoints,
       short: Math.min(innerWidth, innerHeight),
     }));
-    const expectFast = quality.coarse || quality.touch > 1;
-    check(`${kind} 画质默认符合这台设备`, quality.mode === (expectFast ? 'fast' : 'fine'));
+    check(`${kind} 画质默认是流畅`, quality.mode === 'fast');
     await press(page, '保存与暂停');
-    await press(page, expectFast ? '精美画质' : '流畅画质');
+    await press(page, '精美画质');
     await page.evaluate(() => __valley.panels.close());
-    const chosen = expectFast ? 'fine' : 'fast';
-    check(`${kind} 手动画质会记住`, await page.evaluate((value) => __valley.game.state.settings.quality === value, chosen));
+    check(`${kind} 手动画质会记住`, await page.evaluate(() => __valley.game.state.settings.quality === 'fine'));
 
     await page.evaluate(() => document.getElementById('holo-panel')?.querySelector('[data-holo="close"]')?.click());
     const before = await page.evaluate(() => ({ ...__valley.sceneStats }));

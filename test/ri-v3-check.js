@@ -70,7 +70,8 @@ async function boot(page) {
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (msg) => { if (msg.type() === 'error') errors.push(`console:${msg.text()}`); });
   await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__valley?.world);
+  await page.waitForFunction(() => window.__valley?.world && window.__valley.story);
+  await page.evaluate(() => __valley.story.setMoment({ period: '中午', hour: 12, minute: 0, season: '春' }));
   await page.click('#start-button');
   await page.evaluate(() => { __valley.game.state.settings.sound = false; });
   if (await page.locator('#wish-dismiss').isVisible().catch(() => false)) await page.click('#wish-dismiss');

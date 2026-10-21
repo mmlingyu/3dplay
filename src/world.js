@@ -701,7 +701,17 @@ export class RiverWorld {
     else if (!drawSouvenir(this, g, block, ghost)) this.cube(g,m,[0,.5,0],[.97,.98,.97],true);
     return g;
   }
+  applyPictureQuality(mode) {
+    // Fast preset skips the shadow map. Block data, build placement, and the camera stay as they are.
+    const fine = mode === 'fine';
+    const next = fine ? 'fine' : 'fast';
+    if (this.pictureQuality === next) return;
+    this.pictureQuality = next;
+    this.renderer.shadowMap.enabled = fine;
+    this.sun.castShadow = fine;
+  }
   sync(state) {
+    this.applyPictureQuality(state?.settings?.quality);
     const swapping = this.state !== state;
     if (swapping) {
       this.setupPool(state);

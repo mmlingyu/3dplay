@@ -475,7 +475,7 @@ export function glowName(key) {
   return GLOW_COLORS[key]?.name || '';
 }
 
-/** Tablet and phone start on fast. A saved choice wins. */
+/** Device hint kept for tests. The valley default is fast unless a save says fine. */
 export function inferQuality({ pointerCoarse = false, maxTouchPoints = 0, shortSide = 0 } = {}) {
   const touch = pointerCoarse === true || Number(maxTouchPoints) > 1;
   const side = Number(shortSide);
@@ -483,9 +483,9 @@ export function inferQuality({ pointerCoarse = false, maxTouchPoints = 0, shortS
   return 'fine';
 }
 
-export function resolveQuality(chosen, env) {
-  if (chosen === 'fast' || chosen === 'fine') return chosen;
-  return inferQuality(env);
+export function resolveQuality(chosen) {
+  if (chosen === 'fine') return 'fine';
+  return 'fast';
 }
 
 export function dotMarks(count) {

@@ -41,7 +41,7 @@ export function createInitialState() {
     flora: createFlora(),
     land:createLand(),
     player: { x: -5, z: 5, y: 0 },
-    settings: { sound: true, ageBand: null },
+    settings: { sound: true, ageBand: null, quality: 'fast' },
     travel,
     stats: { gathered: 0, crafted: 0, built: 0, orders: 0 },
     garden: GARDEN_PLOTS.map(plot => ({ ...plot, planted: false, age: 0, moisture: 1, harvested: false, moistureElapsed: 0, drainElapsed: 0 })),
@@ -118,8 +118,7 @@ export function validateSave(value) {
   if (rawAge !== null && ageBand === null) throw new Error('存档中的年龄档不正确。');
   const quality = value.settings.quality;
   if (quality !== undefined && quality !== 'fast' && quality !== 'fine') throw new Error('存档中的画质不正确。');
-  next.settings = { sound: value.settings.sound, ageBand };
-  if (quality === 'fast' || quality === 'fine') next.settings.quality = quality;
+  next.settings = { sound: value.settings.sound, ageBand, quality: quality === 'fine' ? 'fine' : 'fast' };
   if (!isRecord(value.stats)) throw new Error('存档中的记录不正确。');
   for (const stat of Object.keys(next.stats)) {
     if (!isCount(value.stats[stat])) throw new Error('存档中的记录数量不正确。');
