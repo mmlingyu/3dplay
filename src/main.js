@@ -9,6 +9,7 @@ import { floraStage, realMoment } from './life-data.js';
 import { realAnalogClock } from './clock-ui.js';
 import { nearbyFrontiers, LAND_RULES } from './land-data.js';
 import { accountSession } from './engine-client.js';
+import { markLocalPlayAccount, staticPreviewEnabled } from './static-preview.js';
 import { startValleySync } from './valley-sync.js';
 import { BOUNCE_ISLAND, PARK_NAME, PLAY_MODES, SKIP_STEPS, TIMES_TABLES, bounceInfo, inNumberPark, onBounceIsland, playMode } from './bounce-data.js';
 import { BALLOON_BASE, BALLOON_NAME, balloonBaseFor, onBalloonLawn } from './balloon-data.js';
@@ -33,6 +34,8 @@ import { npcTalkMessages, talkActivities } from './npc-surface.js';
 const $ = (id) => document.getElementById(id);
 document.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = icon(el.dataset.icon, 24); });
 const game = new GameState();
+game.localPlay = staticPreviewEnabled();
+if (game.localPlay) markLocalPlayAccount(document);
 const hotItems = ['plank', 'brick', 'door', 'window', 'roof', 'ramp'];
 const keys = new Set();
 const joystick = { x: 0, z: 0 };
@@ -515,6 +518,12 @@ function figureNames() {
 async function refreshAccount() {
   const chip = $('account-chip'), label = $('account-label'), dot = $('account-dot');
   if (!chip || !label) return;
+  if (staticPreviewEnabled()) {
+    markLocalPlayAccount(document);
+    updateSaveStatus();
+    refreshWelcome();
+    return;
+  }
   const session = await accountSession();
   const user = session.user;
   setPlayerName(user);
@@ -565,7 +574,9 @@ function updateSaveStatus() {
     ? '当前窗口无法持久保存，请在暂停菜单导出备份。'
     : (game.accountId
       ? '背包物品、放下的建筑和设置保存在当前登录账号上。换一个人登录，会进入那个人自己的河谷。'
-      : '还没登录，只保存在这台浏览器。登录后会记到账号上。'));
+      : (staticPreviewEnabled()
+        ? '本地游玩，只保存在这台浏览器。'
+        : '还没登录，只保存在这台浏览器。登录后会记到账号上。')));
 }
 function resetInput() {
   keys.clear(); joystick.x = joystick.z = 0;
