@@ -70,6 +70,13 @@ async function skipIfShown(selector) {
   if (await button.isVisible().catch(() => false)) await button.click();
 }
 
+async function dismissVista() {
+  const later = page.locator('#vista-later');
+  if (await later.isVisible().catch(() => false)) await later.click();
+  const skip = page.locator('#vista-skip');
+  if (await skip.isVisible().catch(() => false)) await skip.click();
+}
+
 async function finishScenic(realm, skip = '#travel-skip') {
   for (let i = 0; i < 50; i += 1) {
     const there = await page.evaluate((id) => __valley.game.state.travel.current === id && __valley.world?.realmId === id, realm);
@@ -179,6 +186,7 @@ try {
     check('升高以后看得更远', higher > before + 2);
     await page.screenshot({ path: `${shotDir}/static-preview-higher.png` });
 
+    await dismissVista();
     await page.locator('#balloon-land').click();
     for (let i = 0; i < 40; i += 1) {
       const riding = await page.evaluate(() => Boolean(__valley.world.balloon));
@@ -188,6 +196,7 @@ try {
     check('远眺后可以降落', await page.evaluate(() => !__valley.world.balloon && (__valley.game.state.travel?.current || 'he') === 'he'));
 
     await rideBalloon();
+    await dismissVista();
     await page.locator('#balloon-voyage').click();
     await finishScenic('ri');
     check('看风景可以到日谷', true);
@@ -195,6 +204,7 @@ try {
     await waitRealm('he');
 
     await rideBalloon();
+    await dismissVista();
     await page.locator('#balloon-voyage-mei').click();
     await finishScenic('mei');
     check('看风景可以到美谷', true);
@@ -202,6 +212,7 @@ try {
     await waitRealm('he');
 
     await rideBalloon();
+    await dismissVista();
     await page.locator('#balloon-stars').click();
     await finishScenic('xing', '#star-skip');
     check('飞向星星可以到外星谷', true);
@@ -211,6 +222,7 @@ try {
       if (!riding) break;
       await pump(0.2);
     }
+    await dismissVista();
     await page.locator('#balloon-return').click();
     await finishScenic('he', '#star-skip');
     check('从外星谷坐热气球回家', true);
