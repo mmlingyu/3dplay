@@ -64,4 +64,4 @@
 
 本轮 `npm run build` 的主脚本 974 KB（gzip 289 KB），日谷场景另有 16.5 KB 的动态分包。仍超过 500 KB 警告。没有在孩子或真实平板上验证。10 月运行时，两条按暖季推进花序的单元测试和生命浏览器检查里的开花断言会失败，这是季节规则，不是旅行改动。
 
-GitHub Pages 预览工作流只在构建步骤设置 `VITE_BASE=/3dplay/` 和 `VITE_STATIC_PREVIEW=1`。开关打开时不请求 `/api` 或 `/account`，登录入口显示为「本地游玩」，游戏用本机存档和仓库里的角色。不设置时仍会请求后端。地址是 https://mmlingyu.github.io/3dplay/ 。本机冒烟是 `PREVIEW_URL=http://127.0.0.1:4173/3dplay/ node test/preview-smoke.js`。
+GitHub Pages 预览工作流只在构建步骤设置 `VITE_BASE=/3dplay/` 和 `VITE_STATIC_PREVIEW=1`。开关打开时不请求 `/api` 或 `/account`，登录入口显示为「本地游玩」，游戏用本机存档和仓库里的角色。不设置时仍会请求后端。新的后端调用要先看 `staticPreviewEnabled()`（`src/static-preview.js`），为 true 时不要 `fetch`。地址是 https://mmlingyu.github.io/3dplay/ 。本机冒烟是 `PREVIEW_URL=http://127.0.0.1:4173/3dplay/ node test/preview-smoke.js`。

@@ -222,6 +222,8 @@ export function defaultTravel() {
     gifts: { given: [], received: [] },
     supplyAt: 0,
     realms: {},
+    discovered: { ri: false, mei: false, xing: false },
+    keepsakes: [],
   };
 }
 

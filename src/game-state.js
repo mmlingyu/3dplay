@@ -1,4 +1,4 @@
-import { ITEMS, RECIPES, COLLECTABLE_ITEMS, GARDEN_PLOTS, MAX_BUILD_HEIGHT, STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, XING_BACKUP_KEY, terrainHeight, isProtectedCell, roofSpan, roofWallAt } from './game-data.js';
+import { ITEMS, RECIPES, COLLECTABLE_ITEMS, GARDEN_PLOTS, MAX_BUILD_HEIGHT, STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY, terrainHeight, isProtectedCell, roofSpan, roofWallAt } from './game-data.js';
 import { REALM_BLOCK_LIMIT, REALMS, SUPPLY_COOLDOWN, SUPPLY_COUNT, WASHI_STAGES, WASHI_TOTAL_SECONDS, arrivalFor, defaultTravel, emptyRealm, inVisitorYard, isDockCell, realmContains, realmTerrainHeight, washiStage } from './realm-data.js';
 import { TravelError, repairTravelRaw, validateTravel } from './travel-save.js';
 import { advanceMaple, attachMei } from './mei-state.js';
@@ -9,6 +9,7 @@ import { createCreation, validateCreation } from './creation-rules.js';
 import { creationMethods } from './creation-state.js';
 import { homeHasFantasyLiving, isFantasyLiving } from './xing-save.js';
 import { QUARANTINE_NOTE } from './xing-data.js';
+import { KEEPSAKES, VISTAS } from './vista-data.js';
 import { claimCrystal as takeCrystal, crystalStatus as crystalNow, grantPlaque as givePlaque, learnGlyphs as rememberGlyphs, recordExperiment as noteExperiment, releaseCheck, reuniteGugu as bringGugu, rewardXingSupply as payXingSupply, seeHopper as markHopper, seeMoss as markMoss, solvePuzzle as gradeXingPuzzle, sowCheck, startCrystal as beginCrystal, tickCrystals } from './xing-actions.js';
 
 const ITEM_KEYS = Object.keys(ITEMS);
@@ -157,7 +158,7 @@ export function validateSave(value) {
   return next;
 }
 
-const FIGURE_BACKUP_KEYS = [STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, XING_BACKUP_KEY];
+const FIGURE_BACKUP_KEYS = [STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY];
 
 function writeOriginalBackup(storage, baseKey, text) {
   for (let i = 0; i < 100; i++) {
@@ -284,6 +285,7 @@ export class GameState {
     this.travelSaveText=null;this.travelBackupKey=null;this.travelNotice=null;
     this.xingSaveText=null;this.xingBackupKey=null;
     this.meiSaveText=null;this.meiBackupKey=null;
+    this.vistaSaveText=null;this.vistaBackupKey=null;
     this.load();
   }
 
@@ -358,6 +360,12 @@ export class GameState {
         this.meiSaveText=null;
       }catch{this.storageError='美谷升级前的世界未能备份。请先导出存档。';return fail(this.storageError);}
     }
+    if(this.vistaSaveText!==null){
+      try{
+        this.vistaBackupKey=writeOriginalBackup(this.storage,VISTA_BACKUP_KEY,this.vistaSaveText);
+        this.vistaSaveText=null;
+      }catch{this.storageError='远眺升级前的世界未能备份。请先导出存档。';return fail(this.storageError);}
+    }
     if(this.legacySaveText!==null){
       try{
         this.legacyBackupKey=writeOriginalBackup(this.storage,this.legacyBackupBase,this.legacySaveText);
@@ -417,6 +425,8 @@ export class GameState {
       const hasMei = Boolean(realmBag && Object.hasOwn(realmBag, 'mei'));
       if(!hasXing) this.xingSaveText=text;
       if(!hasMei) this.meiSaveText=text;
+      const hasVista = isRecord(raw.travel) && Object.hasOwn(raw.travel, 'discovered') && Object.hasOwn(raw.travel, 'keepsakes');
+      if(!hasVista) this.vistaSaveText=text;
       this.legacySaveText=raw.clock===undefined||raw.flora===undefined||raw.land?.claimed===undefined?text:null;
       this.legacyBackupBase=raw.land?.claimed===undefined?LAND_BACKUP_KEY:LIFE_BACKUP_KEY;
       this.state = next;
@@ -462,6 +472,10 @@ export class GameState {
     if(this.meiSaveText!==null)return this.meiSaveText;
     try{return this.storage?.getItem(this.meiBackupKey||MEI_BACKUP_KEY)??null;}catch{return null;}
   }
+  getVistaBackup(){
+    if(this.vistaSaveText!==null)return this.vistaSaveText;
+    try{return this.storage?.getItem(this.vistaBackupKey||VISTA_BACKUP_KEY)??null;}catch{return null;}
+  }
 
   importSave(text) {
     try {
@@ -479,6 +493,8 @@ export class GameState {
         if (this.meiSaveText === null) this.meiSaveText = text;
         if (!next.travel.realms.mei) next.travel.realms.mei = emptyRealm('mei');
       }
+      const hasVista = isRecord(raw.travel) && Object.hasOwn(raw.travel, 'discovered') && Object.hasOwn(raw.travel, 'keepsakes');
+      if (!hasVista && this.vistaSaveText === null) this.vistaSaveText = text;
       this.state = next;
       this.history = [];
       this.tickRemainder = 0;
@@ -799,6 +815,23 @@ export class GameState {
     if (realmId === 'xing') return ok('热气球落到外星谷的草坪上。这是游戏里的幻想航线，真实的热气球飞不出大气层。');
     if (realmId === 'mei') return ok(way === 'balloon' ? '热气球落到美谷的草坪上。' : '大船到美谷的港口了。');
     return ok(way === 'balloon' ? '热气球落到日谷的草坪上。' : '小船到日谷的码头了。');
+  }
+  discoverVista(id) {
+    const vista = VISTAS[id];
+    if (!vista) return fail('那边还看不清。');
+    if (this.state.travel.discovered?.[id]) return ok(`已经看见${vista.name}。`, { already: true, id });
+    this.mutate((state) => {
+      state.travel.discovered[id] = true;
+      grantStamp(state, `vista-${id}`);
+    });
+    return ok(`发现${vista.name}。`, { id });
+  }
+  collectKeepsake(id) {
+    const item = KEEPSAKES[id];
+    if (!item) return fail('这个瓶子里没有东西。');
+    if (this.state.travel.keepsakes?.includes(id)) return ok(`${item.name}已经在背包里。`, { already: true, id });
+    this.mutate((state) => { state.travel.keepsakes.push(id); });
+    return ok(`收下${item.name}。它会留在背包里。`, { id });
   }
   returnHome() {
     if (this.currentRealm() === 'he') return ok('已经在河谷。');

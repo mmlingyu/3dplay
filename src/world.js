@@ -10,12 +10,20 @@ import { BOUNCE_ISLAND, PARK_NAME, PLAY_MODES, bounceSurface, onBounceIsland, pa
 import { BALLOON_BASE, BALLOON_CONTROL, BALLOON_NAME, balloonAngleFrom, balloonHomeAngle, balloonHomeDuration, balloonLook, balloonNearBase, balloonReturnPose, balloonScaleFrom, balloonSteer, balloonTourPoint, onBalloonLawn } from './balloon-data.js';
 import { dockShip, drawSouvenir, spinSouvenirs } from './mei-models.js';
 import { chooseDockSite } from './realm-data.js';
+import { DISCOVER_HEIGHT, VISTAS, activeBottle, nearestVista, vistaClarity } from './vista-data.js';
 import { ballGravity, playerFall } from './motion-gravity.js';
 import { trackListeners, trackWorldCreated, trackWorldReleased } from './scene-stats.js';
 
 const C = { grass: '#a8bf7a', leaf: '#789957', leafLight: '#b6c785', soil: '#b48d64', wood: '#b97944', stone: '#8b9c9b', cream: '#fff5db', roof: '#c98063', water: '#8ebdc0', green: '#426b58' };
 const NAME_SHOW_DISTANCE = 3;
 const clamp = THREE.MathUtils.clamp;
+function lerpAngle(a, b, t) {
+  const delta = Math.atan2(Math.sin(b - a), Math.cos(b - a));
+  return a + delta * t;
+}
+function vistaYaw(from, vista) {
+  return Math.atan2(vista.x - from.x, vista.z - from.z) + Math.PI;
+}
 const seeded = (x, z, n = 0) => { const s = Math.sin(x * 127.1 + z * 311.7 + n * 74.7) * 43758.5453; return s - Math.floor(s); };
 function texture(kind, color) {
   const canvas = document.createElement('canvas'); canvas.width = canvas.height = 128;
@@ -111,6 +119,16 @@ export class RiverWorld {
     this.preview = new THREE.Group(); this.previewMaterial = new THREE.MeshStandardMaterial({ color: '#fff0ae', transparent: true, opacity: .46, roughness: .9, depthWrite: false, side: THREE.DoubleSide }); this.scene.add(this.preview); this.preview.visible = false;
     this.roofMat = this.mats.roof.clone(); this.roofMat.side = THREE.DoubleSide;
     this.particles = []; this.balls = []; this.ballMaterial = new THREE.MeshStandardMaterial({ color: '#d9ac70', map: this.mats.wood.map, roughness: .83 }); this.minimap = document.getElementById('minimap');
+    this.vistaPick = [];
+    this.vistaGlance = null;
+    this.vistaView = null;
+    this.vistaMomentOverride = null;
+    this.makeBottle();
+    this.vistaReady = import('./vista-view.js').then((mod) => {
+      if (this.released) return;
+      this.vistaView = mod.mountVistas(this.scene);
+      this.vistaPick = this.vistaView.pick;
+    }).catch((error) => { console.warn('远景还没装上', error); });
     this.bindPointer(); this.resizeObserver = new ResizeObserver(() => this.resize()); this.resizeObserver.observe(canvas); this.resize();
     this.updateCamera(1, true); this.renderer.render(this.scene, this.camera);
     trackWorldCreated();
@@ -716,6 +734,7 @@ export class RiverWorld {
     this.syncLife(state);
     this.syncLand(state);
     this.creation.sync(state);
+    this.placeBottle(state);
     if (!this.dockReady) this.ensureDock(state.blocks);
     const plants=state.garden||[]; const plantSignature=plants.map(p=>`${p.id}:${p.planted}:${Math.floor((p.age||0)/18)}:${p.moisture}`).join('|');
     if(plantSignature!==this.plantSignature) {this.plantSignature=plantSignature;for(const g of this.plantGroups.values())this.scene.remove(g);this.plantGroups.clear();plants.forEach((p,i)=>{if(!p.planted)return;const x=Number.isFinite(p.x)?p.x:9.5+(i%3-1)*1.3,z=Number.isFinite(p.z)?p.z:5+Math.floor(i/3)*1.3;const g=new THREE.Group();g.position.set(x,.2,z);const stage=Math.min(5,Math.floor((p.age||0)/18));const h=.12+stage*.12;this.cube(g,'leaf',[0,h/2,0],[.045,h,.045]);for(let j=0;j<Math.min(stage+1,5);j++){const sign=j%2?1:-1;const leaf=this.mesh(g,new THREE.SphereGeometry(.16,8,6),'leaf',[sign*.15,.11+j*.085,0],[1,.38,.62]);leaf.rotation.z=sign*.3;}if(stage>=3)this.mesh(g,new THREE.SphereGeometry(.07,6,6),'cream',[.15,h,.01]);if(stage>=4)for(const sign of[-1,1])this.mesh(g,new THREE.CapsuleGeometry(.035,.18,2,6),'leafLight',[sign*.2,h*.7,.04],[1,1,1]);if(p.moisture>=3){const wet=new THREE.Mesh(new THREE.PlaneGeometry(.85,.85),this.water.material);wet.rotation.x=-Math.PI/2;wet.position.y=.008;g.add(wet);}this.scene.add(g);this.plantGroups.set(p.id,g);});}
@@ -869,7 +888,14 @@ export class RiverWorld {
   }
   pick(clientX,clientY) {
     const rect=this.canvas.getBoundingClientRect();const pointer=new THREE.Vector2((clientX-rect.left)/rect.width*2-1,-(clientY-rect.top)/rect.height*2+1);const ray=new THREE.Raycaster();ray.setFromCamera(pointer,this.camera);
-    const hits=ray.intersectObjects([...this.pickMeshes,...this.groundMeshes],false);if(!hits.length)return null;const h=hits[0],target=this.targets.find(t=>t.id===h.object.userData.targetId);
+    const vistaMeshes = (this.balloon || this.vistaGlance) ? (this.vistaPick || []) : [];
+    const hits=ray.intersectObjects([...this.pickMeshes,...this.groundMeshes,...vistaMeshes],false);if(!hits.length)return null;const h=hits[0];
+    const vistaId = h.object.userData.vistaId;
+    if (vistaId && VISTAS[vistaId]) {
+      const vista = VISTAS[vistaId];
+      return { target: { id: `vista-${vistaId}`, type: 'vista', vistaId, name: vista.name, position: new THREE.Vector3(vista.x, vista.y || 0, vista.z) }, point: h.point, cell: null };
+    }
+    const target=this.targets.find(t=>t.id===h.object.userData.targetId);
     let cell={x:Math.round(h.point.x),y:terrainHeight(Math.round(h.point.x),Math.round(h.point.z)),z:Math.round(h.point.z)};
     if(target?.type==='block'){const b=target.block;const normal=h.face.normal.clone().transformDirection(h.object.matrixWorld);cell={x:b.x,y:b.y,z:b.z};if(normal.y>.55)cell.y++;else if(Math.abs(normal.x)>Math.abs(normal.z))cell.x+=Math.sign(normal.x);else cell.z+=Math.sign(normal.z);}
     return {target,point:h.point,cell};
@@ -1166,6 +1192,7 @@ export class RiverWorld {
     this.balloon.realmId = realmId;
     this.balloon.arrived = false;
     this.balloon.scripted = realmId === 'xing';
+    this.dismissVista();
     this.callbacks.onBalloonLook?.(this.balloonLook());
     return true;
   }
@@ -1188,6 +1215,7 @@ export class RiverWorld {
     return true;
   }
   finishBalloon(silent = false) {
+    this.dismissVista();
     this.balloon = null;
     this.locomotion = 'walk';
     this.velocityY = 0;
@@ -1309,8 +1337,24 @@ export class RiverWorld {
     this.playerPosition.set(c.x, c.y + home.basketHeight, c.z);
     const craftTarget = this.targets.find(t => t.id === 'balloon-craft');
     if (craftTarget) craftTarget.position.copy(c);
+    this.maybeSpotVista();
   }
   updateCamera(dt,instant=false){
+    const glance = this.vistaGlance;
+    // 压低俯仰只发生在远眺引导的转身和靠近。平时地面 .76、飞行 .48，不因朝向远景改变。
+    if (glance?.phase === 'zoom') {
+      const vista = VISTAS[glance.id];
+      const u = Math.min(1, glance.t / 3.2);
+      const ease = u * u * (3 - 2 * u);
+      const focus = new THREE.Vector3(vista.x, (vista.y || 0) + 8, vista.z);
+      this.lookAt.lerp(focus, instant ? 1 : 1 - Math.exp(-2.4 * dt));
+      const dist = 16 - ease * 6;
+      const v = new THREE.Vector3(Math.sin(this.yaw) * dist, dist * 0.16, Math.cos(this.yaw) * dist);
+      const desired = this.lookAt.clone().add(v);
+      this.camera.position.lerp(desired, instant ? 1 : 1 - Math.exp(-3 * dt));
+      this.camera.lookAt(this.lookAt);
+      return;
+    }
     if (this.modelFocus && !this.targets.some(t => t.id === this.modelFocus.id)) this.modelFocus = null;
     const focus = this.modelFocus;
     const live = focus && this.targets.find(t => t.id === focus.id);
@@ -1318,15 +1362,25 @@ export class RiverWorld {
     const flying = !!this.balloon;
     const center = focus ? focus.point.clone() : this.playerPosition.clone();
     center.y += focus ? focus.lift : flying ? 1.8 : .45;
-    if (flying && this.balloon.mode !== 'steer' && this.state?.land) {
+    const turning = glance?.phase === 'turn' ? VISTAS[glance.id] : null;
+    if (flying && this.balloon.mode !== 'steer' && this.state?.land && !turning) {
       const tour = balloonTourPoint(this.state.land, this.balloon.angle, this.balloon.scale);
       center.x += (tour.cx - center.x) * 0.35;
       center.z += (tour.cz - center.z) * 0.35;
       center.y = Math.max(2.4, center.y - 4);
     }
+    let glanceEase = 0;
+    if (turning) {
+      const aim = new THREE.Vector3(turning.x, (turning.y || 0) + 8, turning.z);
+      const u = Math.min(1, glance.t / 1.25);
+      glanceEase = u * u * (3 - 2 * u);
+      center.lerp(aim, 0.92 * glanceEase);
+    }
     this.lookAt.lerp(center, instant ? 1 : 1 - Math.exp(-3 * dt));
-    const dist = focus ? focus.distance : flying ? Math.max(this.distance, 24) : this.distance;
-    const v = new THREE.Vector3(Math.sin(this.yaw) * dist, dist * (focus ? .42 : flying ? .48 : .76), Math.cos(this.yaw) * dist);
+    let dist = focus ? focus.distance : flying ? Math.max(this.distance, 24) : this.distance;
+    if (turning && !focus) dist = 26 - glanceEase * 14;
+    const pitch = focus ? .42 : turning ? .16 : flying ? .48 : .76;
+    const v = new THREE.Vector3(Math.sin(this.yaw) * dist, dist * pitch, Math.cos(this.yaw) * dist);
     const desired = this.lookAt.clone().add(v);
     this.camera.position.lerp(desired, instant ? 1 : 1 - Math.exp(-5 * dt));
     this.camera.lookAt(this.lookAt);
@@ -1400,6 +1454,13 @@ export class RiverWorld {
       this.swimRipple.visible=swimming;
       if(swimming){this.swimRipple.position.set(this.playerPosition.x,this.waterState().level+.025,this.playerPosition.z);this.swimRipple.scale.setScalar(1+Math.sin(this.motionTime*5)*.15);}
     }
+    this.stepVista(dt, paused);
+    if (this.vistaView) {
+      const flying = !!this.balloon;
+      const clarity = vistaClarity(flying ? this.balloon.height : 0, { flying });
+      this.vistaView.update(dt, this.vistaMomentOverride || realMoment(), clarity);
+    }
+    if (this.bottle?.visible) this.bottle.rotation.y += dt * 0.6;
     this.updateCamera(dt);this.followSky(dt);this.ripples.children.forEach((m,i)=>{m.position.z=-15+i*2+(this.time*.1)%2;});
     this.selectionRing.rotation.z=this.time*.15;
     if (this.selectionPulse > 0) { this.selectionPulse = Math.max(0, this.selectionPulse - dt * 2.4); const s = 1 + Math.sin((1 - this.selectionPulse) * Math.PI) * 0.35; this.selectionRing.scale.setScalar(s); }
@@ -1549,9 +1610,109 @@ export class RiverWorld {
     this.dockGroup = g;
     this.target(g, { id: 'ferry-dock', type: 'ferry', name: '渡口', label: '去日谷', ariaLabel: '去日谷', action: '去日谷' });
   }
+  makeBottle() {
+    const bottle = new THREE.Group();
+    const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.55, 8), new THREE.MeshStandardMaterial({ color: '#d5f3f6', transparent: true, opacity: 0.72, roughness: 0.2 }));
+    glass.position.y = 0.28;
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 0.18, 8), glass.material);
+    neck.position.y = 0.62;
+    const cork = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.1, 8), this.mats.wood);
+    cork.position.y = 0.74;
+    bottle.add(glass, neck, cork);
+    bottle.visible = false;
+    this.scene.add(bottle);
+    this.bottle = bottle;
+    this.bottleTarget = this.target(bottle, { id: 'drift-bottle', type: 'bottle', name: '漂流瓶', label: '漂流瓶', action: '捡起来', hint: '海里漂来的瓶子。捡起来留个纪念，不限时。', keepsake: null });
+  }
+  placeBottle(state) {
+    if (!this.bottle || !this.bottleTarget) return;
+    const bottle = activeBottle(state?.clock, state?.travel?.keepsakes);
+    if (!bottle) {
+      this.bottle.visible = false;
+      this.bottleTarget.keepsake = null;
+      return;
+    }
+    this.bottle.visible = true;
+    this.bottle.position.set(bottle.x, 0.05, bottle.z);
+    this.bottleTarget.position.set(bottle.x, 0.4, bottle.z);
+    this.bottleTarget.keepsake = bottle.id;
+    this.bottleTarget.name = bottle.name;
+  }
+  maybeSpotVista() {
+    const ride = this.balloon;
+    if (!ride || !this.balloonCraft) return;
+    if (ride.phase === 'voyage' || ride.phase === 'home' || ride.phase === 'descend') return;
+    const height = ride.height || 0;
+    if (height < DISCOVER_HEIGHT - 1.5) {
+      if (!this.vistaGlance) ride.vistaChecked = false;
+      return;
+    }
+    if (ride.vistaChecked || this.vistaGlance || height < DISCOVER_HEIGHT) return;
+    const from = this.balloonCraft.position;
+    const id = nearestVista(from, this.state?.travel?.discovered);
+    ride.vistaChecked = true;
+    if (!id) return;
+    const vista = VISTAS[id];
+    this.vistaGlance = { id, phase: 'turn', t: 0, fromYaw: this.yaw, toYaw: vistaYaw(from, vista) };
+    this.callbacks.onVistaSpot?.(id);
+  }
+  stepVista(dt, paused) {
+    const glance = this.vistaGlance;
+    if (!glance || paused) return;
+    glance.t += dt;
+    if (glance.phase === 'turn') {
+      const u = Math.min(1, glance.t / 1.25);
+      this.yaw = lerpAngle(glance.fromYaw, glance.toYaw, u * u * (3 - 2 * u));
+      if (u >= 1) {
+        glance.phase = 'hold';
+        glance.t = 0;
+        this.callbacks.onVistaReady?.(glance.id);
+      }
+    } else if (glance.phase === 'zoom' && glance.t >= 3.2) this.completeVistaZoom();
+  }
+  zoomVista(id) {
+    if (!this.balloon || !VISTAS[id]) return false;
+    const from = this.balloonCraft?.position || this.playerPosition;
+    const yaw = vistaYaw(from, VISTAS[id]);
+    if (!this.vistaGlance || this.vistaGlance.id !== id) this.vistaGlance = { id, phase: 'zoom', t: 0, fromYaw: this.yaw, toYaw: yaw };
+    else {
+      this.vistaGlance.phase = 'zoom';
+      this.vistaGlance.t = 0;
+      this.vistaGlance.toYaw = yaw;
+    }
+    this.yaw = this.vistaGlance.toYaw;
+    this.callbacks.onVistaZoom?.(id);
+    return true;
+  }
+  completeVistaZoom() {
+    const id = this.vistaGlance?.id || null;
+    this.vistaGlance = null;
+    if (id) this.callbacks.onVistaStamp?.(id);
+  }
+  dismissVista() {
+    const had = !!this.vistaGlance;
+    this.vistaGlance = null;
+    if (this.balloon) this.balloon.vistaChecked = true;
+    if (had) this.callbacks.onVistaHide?.();
+  }
+  skipVistaZoom() {
+    if (this.vistaGlance?.phase === 'zoom') this.completeVistaZoom();
+    else this.dismissVista();
+  }
+  vistaPointer() {
+    if (!this.vistaGlance || !this.camera || !this.canvas) return null;
+    const vista = VISTAS[this.vistaGlance.id];
+    const point = new THREE.Vector3(vista.x, (vista.y || 0) + 8, vista.z);
+    point.project(this.camera);
+    const w = this.canvas.clientWidth;
+    const h = this.canvas.clientHeight;
+    return { x: (point.x + 1) * w / 2, y: (-point.y + 1) * h / 2, visible: point.z < 1 };
+  }
   release() {
     if (this.released) return;
     this.released = true;
+    this.vistaView?.dispose();
+    this.vistaView = null;
     this.pointerAbort?.abort();
     this.resizeObserver?.disconnect();
     document.getElementById('world-labels')?.replaceChildren();
