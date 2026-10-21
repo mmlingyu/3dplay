@@ -1,6 +1,8 @@
-/** Realm registry. Home stays neutral. Day valley and beauty valley are playable. */
+/** Realm registry. Home stays neutral. Day, beauty and alien valleys are playable. */
 
 import { MEI_REALM } from './mei-data.js';
+
+export const EARTH_GRAVITY = 9.8;
 
 export const REALM_BLOCK_LIMIT = 600;
 export const TRAVEL_BACKUP_KEY_NAME = 'before-travel';
@@ -51,6 +53,20 @@ const HOME_DOCK_SCAN = Object.freeze([14, -14, 12, -12, 10, -10, 8, -8]);
 
 export const RI_DOCK = Object.freeze({ x: 0, y: 0, z: -12, ry: 0 });
 export const RI_LAWN = Object.freeze({ x: -10, y: 0, z: 12, ry: 0 });
+export const XING_LAWN = Object.freeze({ x: -10, y: 0, z: 12, ry: 0 });
+
+const XING_BALLOON = Object.freeze({
+  x: -10,
+  z: 12,
+  radius: 2.8,
+  padHeight: 0.14,
+  basketHeight: 0.72,
+  cruiseHeight: 16.5,
+  liftSeconds: 4.2,
+  descendSeconds: 3.4,
+  homeSpeed: 4.2,
+  tourSeconds: 48,
+});
 
 const RI_BALLOON = Object.freeze({
   x: -10,
@@ -72,12 +88,15 @@ export const REALMS = Object.freeze({
     home: true,
     playable: true,
     theme: 'home',
+    gravity: EARTH_GRAVITY,
+    ballBoundary: 15.55,
   }),
   ri: Object.freeze({
     id: 'ri',
     name: '日谷',
     playable: true,
     theme: 'japan',
+    gravity: EARTH_GRAVITY,
     entry: 'dock',
     altEntry: 'balloon',
     // Festivals stay empty until a later season. The field is here so the shape can grow.
@@ -101,8 +120,35 @@ export const REALMS = Object.freeze({
       ponta: Object.freeze({ x: 9.2, z: -6.2 }),
     }),
   }),
-  mei: MEI_REALM,
-  xing: Object.freeze({ id: 'xing', name: '外星谷', playable: false, theme: 'fiction' }),
+  mei: Object.freeze({ ...MEI_REALM, gravity: EARTH_GRAVITY }),
+  xing: Object.freeze({
+    id: 'xing',
+    name: '外星谷',
+    playable: true,
+    theme: 'fiction',
+    entry: 'balloon',
+    festivals: Object.freeze([]),
+    gravity: EARTH_GRAVITY / 3,
+    ballBoundary: 14.4,
+    bounds: Object.freeze({ minX: -16, maxX: 15, minZ: -16, maxZ: 15 }),
+    flight: Object.freeze({ minX: -14, maxX: 14, minZ: -14, maxZ: 14 }),
+    visitor: Object.freeze({ minX: 2, maxX: 10, minZ: 2, maxZ: 9 }),
+    balloon: XING_BALLOON,
+    lawn: XING_LAWN,
+    sites: Object.freeze({
+      dome: Object.freeze({ x: -4, z: 1, name: '穹顶屋' }),
+      tower: Object.freeze({ x: -8, z: -6, name: '晶体塔' }),
+      lab: Object.freeze({ x: -8, z: -2, name: '试验站' }),
+      salt: Object.freeze({ x: 8, z: -11, name: '盐湖' }),
+      moss: Object.freeze({ x: 5, z: -8, name: '光苔' }),
+      hopper: Object.freeze({ x: 11, z: 1, name: '跳跳球兽' }),
+      meteor: Object.freeze({ x: -12, z: 6, name: '陨石' }),
+      glass: Object.freeze({ x: -2, z: -11, name: '玻璃罩' }),
+      gugu: Object.freeze({ x: -6, z: 6 }),
+      doctor: Object.freeze({ x: -9, z: -2 }),
+      robot: Object.freeze({ x: 0, z: -6 }),
+    }),
+  }),
 });
 
 export const REALM_IDS = Object.freeze(Object.keys(REALMS));
@@ -158,6 +204,7 @@ export function isDockCell(x, z, blocks = []) {
 }
 
 export function arrivalFor(realmId, via) {
+  if (realmId === 'xing') return { ...XING_LAWN };
   const realm = REALMS[realmId];
   if (!realm?.dock) return { x: -5, y: 0, z: 5, ry: 0 };
   return via === 'balloon' && realm.lawn ? { ...realm.lawn } : { ...realm.dock };
@@ -186,6 +233,11 @@ export function emptyRealm(realmId) {
     claimed: [],
     processes: [],
   };
+  if (realmId === 'xing') {
+    realm.glyphs = [];
+    realm.puzzles = [];
+    realm.experiments = [];
+  }
   if (realmId === 'mei') {
     realm.projects = [];
     realm.trades = [];

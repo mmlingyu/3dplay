@@ -143,17 +143,18 @@ export function wrapHeading(angle) {
   return Math.round(turn / Math.PI * 180);
 }
 
-export function balloonLook(phase, angle = 0, mode = 'orbit', realmId = 'ri') {
+export function balloonLook(phase, angle = 0, mode = 'orbit', destination = null) {
   if (phase === 'voyage') {
-    const mei = realmId === 'mei';
-    return {
-      phase,
-      title: mei ? '看风景去美谷' : '看风景去日谷',
-      note: mei ? VOYAGE_MEI_NOTE : VOYAGE_NOTE,
-      hint: '坐稳。想快一点可以跳过。',
-      landing: true,
-      mode,
-    };
+    if (destination === 'xing') {
+      return { phase, title: '飞向星星', note: '这是游戏里的幻想航线，真实的热气球飞不出大气层。', hint: '坐稳。想快一点可以跳过。', landing: true, mode, fantasy: true, destination: 'xing' };
+    }
+    if (destination === 'he') {
+      return { phase, title: '飞回河谷', note: '热气球穿过云，回到家的草坪。', hint: '坐稳。想快一点可以跳过。', landing: true, mode, destination: 'he' };
+    }
+    if (destination === 'mei') {
+      return { phase, title: '看风景去美谷', note: VOYAGE_MEI_NOTE, hint: '坐稳。想快一点可以跳过。', landing: true, mode, destination: 'mei' };
+    }
+    return { phase, title: '看风景去日谷', note: VOYAGE_NOTE, hint: '坐稳。想快一点可以跳过。', landing: true, mode, destination: 'ri' };
   }
   if (phase === 'lift') {
     return { phase, title: '起飞', note: '慢慢升起来，看整个河谷。', hint: '坐稳，热气球正在升起。想下来就点降落。', landing: false, mode };

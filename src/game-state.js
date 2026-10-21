@@ -1,4 +1,4 @@
-import { ITEMS, RECIPES, COLLECTABLE_ITEMS, GARDEN_PLOTS, MAX_BUILD_HEIGHT, STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, terrainHeight, isProtectedCell, roofSpan, roofWallAt } from './game-data.js';
+import { ITEMS, RECIPES, COLLECTABLE_ITEMS, GARDEN_PLOTS, MAX_BUILD_HEIGHT, STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, XING_BACKUP_KEY, terrainHeight, isProtectedCell, roofSpan, roofWallAt } from './game-data.js';
 import { REALM_BLOCK_LIMIT, REALMS, SUPPLY_COOLDOWN, SUPPLY_COUNT, WASHI_STAGES, WASHI_TOTAL_SECONDS, arrivalFor, defaultTravel, emptyRealm, inVisitorYard, isDockCell, realmContains, realmTerrainHeight, washiStage } from './realm-data.js';
 import { TravelError, repairTravelRaw, validateTravel } from './travel-save.js';
 import { advanceMaple, attachMei } from './mei-state.js';
@@ -7,6 +7,9 @@ import { LIFE_RULES, FLORA_SITES, FLORA_BY_ID, floraBlocked, createFlora, realMo
 import { createLand, validateLand, isGridOpen, isPointOpen, frontierChunks, nearbyFrontiers, landEncounters } from './land-data.js';
 import { createCreation, validateCreation } from './creation-rules.js';
 import { creationMethods } from './creation-state.js';
+import { homeHasFantasyLiving, isFantasyLiving } from './xing-save.js';
+import { QUARANTINE_NOTE } from './xing-data.js';
+import { claimCrystal as takeCrystal, crystalStatus as crystalNow, grantPlaque as givePlaque, learnGlyphs as rememberGlyphs, recordExperiment as noteExperiment, releaseCheck, reuniteGugu as bringGugu, rewardXingSupply as payXingSupply, seeHopper as markHopper, seeMoss as markMoss, solvePuzzle as gradeXingPuzzle, sowCheck, startCrystal as beginCrystal, tickCrystals } from './xing-actions.js';
 
 const ITEM_KEYS = Object.keys(ITEMS);
 const KILN_STAGES = ['idle', 'moistening', 'drying', 'firing', 'cooling', 'ready', 'failed'];
@@ -83,6 +86,7 @@ export function validateSave(value) {
     toyIds.add(t.id);
     return Object.fromEntries(['id','x','y','z','vx','vy','vz'].map(k => [k, t[k]]));
   });
+  if (homeHasFantasyLiving(value)) throw new Error('这份存档里有外星的活植物，没有导入。外星的植物要留在它自己的家，我们可以把它放进展柜看。');
   if (!Array.isArray(value.blocks) || value.blocks.length > 12000) throw new Error('存档的建筑数据不正确。');
   const ids = new Set();
   const positions = new Set();
@@ -141,6 +145,7 @@ export function validateSave(value) {
   }
   const seenIds = new Set(next.blocks.map(block => block.id));
   for (const realm of Object.values(next.travel.realms)) {
+    if (!Array.isArray(realm.blocks)) continue;
     for (const block of realm.blocks) {
       if (seenIds.has(block.id)) throw new TravelError('日谷的建筑编号和家里重复。', 'realm');
       seenIds.add(block.id);
@@ -152,7 +157,7 @@ export function validateSave(value) {
   return next;
 }
 
-const FIGURE_BACKUP_KEYS = [STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY];
+const FIGURE_BACKUP_KEYS = [STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, XING_BACKUP_KEY];
 
 function writeOriginalBackup(storage, baseKey, text) {
   for (let i = 0; i < 100; i++) {
@@ -277,6 +282,7 @@ export class GameState {
     this.figuresHealed = false;
     this.legacySaveText=null;this.legacyBackupKey=null;this.legacyBackupBase=LIFE_BACKUP_KEY;
     this.travelSaveText=null;this.travelBackupKey=null;this.travelNotice=null;
+    this.xingSaveText=null;this.xingBackupKey=null;
     this.meiSaveText=null;this.meiBackupKey=null;
     this.load();
   }
@@ -340,6 +346,12 @@ export class GameState {
         this.travelSaveText=null;
       }catch{this.storageError='旅行升级前的世界未能备份。请先导出存档。';return fail(this.storageError);}
     }
+    if(this.xingSaveText!==null){
+      try{
+        this.xingBackupKey=writeOriginalBackup(this.storage,XING_BACKUP_KEY,this.xingSaveText);
+        this.xingSaveText=null;
+      }catch{this.storageError='外星谷升级前的世界未能备份。请先导出存档。';return fail(this.storageError);}
+    }
     if(this.meiSaveText!==null){
       try{
         this.meiBackupKey=writeOriginalBackup(this.storage,MEI_BACKUP_KEY,this.meiSaveText);
@@ -365,6 +377,8 @@ export class GameState {
     }
     this.healFigures();
     this.rememberFigures();
+    if(this.xingSaveText===null && this.state.travel && !this.state.travel.realms.xing) this.state.travel.realms.xing = emptyRealm('xing');
+    if(this.meiSaveText===null && this.state.travel && !this.state.travel.realms.mei) this.state.travel.realms.mei = emptyRealm('mei');
     try {
       this.storage.setItem(STORAGE_KEY, this.exportSave());
       this.storageError = null;
@@ -398,10 +412,16 @@ export class GameState {
         this.travelNotice=repaired.notice;
       }
       if(raw.travel===undefined) this.travelSaveText=text;
-      if(!raw.travel?.realms?.mei) this.meiSaveText=text;
+      const realmBag = raw.travel?.realms;
+      const hasXing = Boolean(realmBag && Object.hasOwn(realmBag, 'xing'));
+      const hasMei = Boolean(realmBag && Object.hasOwn(realmBag, 'mei'));
+      if(!hasXing) this.xingSaveText=text;
+      if(!hasMei) this.meiSaveText=text;
       this.legacySaveText=raw.clock===undefined||raw.flora===undefined||raw.land?.claimed===undefined?text:null;
       this.legacyBackupBase=raw.land?.claimed===undefined?LAND_BACKUP_KEY:LIFE_BACKUP_KEY;
       this.state = next;
+      if(!hasXing && !this.state.travel.realms.xing) this.state.travel.realms.xing = emptyRealm('xing');
+      if(!hasMei && !this.state.travel.realms.mei) this.state.travel.realms.mei = emptyRealm('mei');
       this.history = [];
       this.tickRemainder = 0;
       this.storageError = null;
@@ -434,6 +454,10 @@ export class GameState {
     if(this.travelSaveText!==null)return this.travelSaveText;
     try{return this.storage?.getItem(this.travelBackupKey||TRAVEL_BACKUP_KEY)??null;}catch{return null;}
   }
+  getXingBackup(){
+    if(this.xingSaveText!==null)return this.xingSaveText;
+    try{return this.storage?.getItem(this.xingBackupKey||XING_BACKUP_KEY)??null;}catch{return null;}
+  }
   getMeiBackup(){
     if(this.meiSaveText!==null)return this.meiSaveText;
     try{return this.storage?.getItem(this.meiBackupKey||MEI_BACKUP_KEY)??null;}catch{return null;}
@@ -442,7 +466,19 @@ export class GameState {
   importSave(text) {
     try {
       if (typeof text !== 'string' || text.length > 5000000) return fail('存档文件太大或格式不正确。');
-      const next = validateSave(JSON.parse(text));
+      const raw = JSON.parse(text);
+      const next = validateSave(raw);
+      const realmBag = raw.travel?.realms;
+      const hasXing = Boolean(realmBag && Object.hasOwn(realmBag, 'xing'));
+      const hasMei = Boolean(realmBag && Object.hasOwn(realmBag, 'mei'));
+      if (!hasXing) {
+        if (this.xingSaveText === null) this.xingSaveText = text;
+        if (!next.travel.realms.xing) next.travel.realms.xing = emptyRealm('xing');
+      }
+      if (!hasMei) {
+        if (this.meiSaveText === null) this.meiSaveText = text;
+        if (!next.travel.realms.mei) next.travel.realms.mei = emptyRealm('mei');
+      }
       this.state = next;
       this.history = [];
       this.tickRemainder = 0;
@@ -469,6 +505,7 @@ export class GameState {
     if (!COLLECTABLE_ITEMS.includes(item)) return fail('这种材料需要加工或种植得到。');
     if (ITEMS[item]?.origin === 'ri' && (this.state.travel?.current || 'he') !== 'ri') return fail('这种材料在日谷采集。楮树林和竹林一直都在，不用答题。');
     if (ITEMS[item]?.origin === 'mei' && this.currentRealm() !== 'mei') return fail('这种材料在美谷采集。枫树林、原木堆、南瓜地和旧衣回收箱一直都在，不用答题。');
+    if (ITEMS[item]?.origin === 'xing' && (this.state.travel?.current || 'he') !== 'xing') return fail('这种材料在外星谷采集。盐湖一直可以取，不用答题。');
     if (!isCount(this.state.inventory[item] + 2)) return fail('背包里的这种材料已经很多了。');
     this.mutate(state => { state.inventory[item] += 2; state.stats.gathered += 2; });
     return ok(`采到2份${ITEMS[item].name}。`, { item, count: 2 });
@@ -494,6 +531,7 @@ export class GameState {
   }
 
   placementProblem(item, position) {
+    if (isFantasyLiving(item)) return QUARANTINE_NOTE;
     if (!ITEMS[item]?.placeable) return '这种物品暂时不能作为建筑放置。';
     if (!isRecord(position)) return '先选择一个空格。';
     const realm = this.currentRealm();
@@ -738,11 +776,12 @@ export class GameState {
     return { ...kiln, label: KILN_LABELS[kiln.stage], progress: kiln.elapsed / 24 };
   }
 
-  beginTravel(realmId, via = 'ferry') {
+  beginTravel(realmId, via = 'ferry', extra = {}) {
     if (this.currentRealm() !== 'he') return fail('先回到河谷，再出发。');
+    if (realmId === 'xing' && via !== 'balloon') return fail('外星谷只能坐热气球去。');
     const realm = REALMS[realmId];
     if (!realm?.playable || realm.home) return fail('这一谷还没开放。');
-    const way = via === 'balloon' ? 'balloon' : 'ferry';
+    const way = realmId === 'xing' || via === 'balloon' ? 'balloon' : 'ferry';
     this.history = [];
     this.mutate(state => {
       if (!state.travel.realms[realmId]) state.travel.realms[realmId] = emptyRealm(realmId);
@@ -752,7 +791,12 @@ export class GameState {
       if (!state.travel.visited.includes(realmId)) state.travel.visited.push(realmId);
       if (realmId === 'ri') grantStamp(state, 'ri-arrive');
       if (realmId === 'mei') grantStamp(state, 'mei-arrive');
+      if (realmId === 'xing') {
+        grantStamp(state, 'xing-arrive');
+        if (extra?.withGugu && !state.travel.story.seen.includes('gugu-riding')) state.travel.story.seen.push('gugu-riding');
+      }
     });
+    if (realmId === 'xing') return ok('热气球落到外星谷的草坪上。这是游戏里的幻想航线，真实的热气球飞不出大气层。');
     if (realmId === 'mei') return ok(way === 'balloon' ? '热气球落到美谷的草坪上。' : '大船到美谷的港口了。');
     return ok(way === 'balloon' ? '热气球落到日谷的草坪上。' : '小船到日谷的码头了。');
   }
@@ -841,6 +885,8 @@ export class GameState {
   }
 
   plant(plotId) {
+    const blocked = sowCheck('seed');
+    if (blocked) return blocked;
     const plot = this.state.garden.find(plot => plot.id === plotId);
     if (!plot) return fail('先选一个园地。');
     if (plot.planted) return fail('这里已经有植物，可以选另一格。');
@@ -908,6 +954,7 @@ export class GameState {
             } else if (proc.kind === 'maple') advanceMaple(proc);
           }
         }
+        tickCrystals(state, 1);
         for (const plot of state.garden) {
           if (!plot.planted || plot.age >= 90) continue;
           if (plot.moisture === 3) {
@@ -924,6 +971,24 @@ export class GameState {
   }
 
   update(seconds) { return this.tick(seconds); }
+
+  startCrystal(much = true) { return beginCrystal(this, much); }
+  claimCrystal() { return takeCrystal(this); }
+  crystalStatus() { return crystalNow(this); }
+  seeMoss() { return markMoss(this); }
+  seeHopper() { return markHopper(this); }
+  reuniteGugu() { return bringGugu(this); }
+  grantPlaque() { return givePlaque(this); }
+  recordExperiment(kind, band) { return noteExperiment(this, kind, band); }
+  learnGlyphs(ids) { return rememberGlyphs(this, ids); }
+  solvePuzzle(puzzle, choiceId) { return gradeXingPuzzle(this, puzzle, choiceId); }
+  rewardXingSupply(tutorId) { return payXingSupply(this, tutorId); }
+  sow(plotId, itemId = 'seed') {
+    const blocked = sowCheck(itemId);
+    if (blocked) return blocked;
+    return this.plant(plotId);
+  }
+  releaseCreature(itemId) { return releaseCheck(itemId); }
 }
 
 Object.assign(GameState.prototype, creationMethods);

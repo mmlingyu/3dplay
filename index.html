@@ -79,19 +79,34 @@
         <p id="travel-cutscene-text"></p>
         <button type="button" id="travel-skip" class="primary-btn" aria-label="跳过">跳过</button>
       </div>
+      <div id="xing-actions" hidden>
+        <button type="button" id="xing-lab" class="primary-btn" aria-label="看球跳得高">看球跳得高</button>
+        <button type="button" id="xing-crystal" class="primary-btn" aria-label="培养盐晶">培养盐晶</button>
+        <button type="button" id="xing-gugu" class="primary-btn" aria-label="送小咕回家">送小咕回家</button>
+        <button type="button" id="xing-case" class="primary-btn" aria-label="装进展柜">装进展柜</button>
+        <button type="button" id="xing-stamps" class="secondary-btn" aria-label="印章本">印章</button>
+        <button type="button" id="balloon-return" class="primary-btn" aria-label="坐热气球回家">坐热气球回家</button>
+      </div>
       <div id="letter-card" hidden role="dialog" aria-label="一封画">
-        <p>纸船上画着一面缺了角的鲤鱼旗。</p>
+        <p id="letter-text">纸船上画着一面缺了角的鲤鱼旗。</p>
         <button type="button" id="letter-close" class="primary-btn" aria-label="先放着">先放着</button>
       </div>
       <div id="mei-letter" hidden role="dialog" aria-label="纸飞机来信">
         <p>纸飞机上画着一座没搭完的小木屋。</p>
         <button type="button" id="mei-letter-close" class="primary-btn" aria-label="先放着">先放着</button>
       </div>
+      <div id="star-cutscene" hidden role="dialog" aria-label="飞向星星">
+        <strong id="star-title">飞向星星</strong>
+        <p id="star-note">这是游戏里的幻想航线，真实的热气球飞不出大气层。</p>
+        <button type="button" id="star-skip" class="primary-btn" aria-label="跳过">跳过</button>
+      </div>
+      <div id="xing-sheet" hidden role="dialog" aria-label="外星谷"></div>
       <div id="balloon-hud" hidden>
         <strong id="balloon-title">热气球游览</strong>
         <span id="balloon-note">转一圈看河谷</span>
-        <button type="button" id="balloon-voyage" class="primary-btn" hidden>看风景去日谷</button>
-        <button type="button" id="balloon-voyage-mei" class="primary-btn" hidden>看风景去美谷</button>
+        <button type="button" id="balloon-voyage" class="primary-btn" hidden aria-label="看风景去日谷">看风景去日谷</button>
+        <button type="button" id="balloon-voyage-mei" class="primary-btn" hidden aria-label="看风景去美谷">看风景去美谷</button>
+        <button type="button" id="balloon-stars" class="primary-btn" hidden aria-label="飞向星星（外星谷）">飞向星星（外星谷）</button>
         <div id="balloon-modes">
           <button type="button" id="balloon-orbit" data-balloon-mode="orbit" aria-pressed="true">转一圈</button>
           <button type="button" id="balloon-steer" data-balloon-mode="steer" aria-pressed="false">自己开</button>

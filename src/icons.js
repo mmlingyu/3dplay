@@ -85,6 +85,19 @@ const ui = {
   stamp: '<rect x="7" y="6" width="18" height="14" rx="2"/><path d="M11 24h10M16 20v4"/>',
   paper: '<path d="M8 5h12l5 5v17H8Z"/><path d="M20 5v5h5"/>',
   sparkle: '<path d="m17 4 3 8 8 3-8 3-3 9-3-9-8-3 8-3Zm-12-1v6M2 6h6m18 17v6m-3-3h6"/>',
+  salt: '<path d="M8 12h16l-2 14H10Z"/><path d="M12 12c0-4 8-4 8 0M11 18h10M12 23h8"/>',
+  crystal: '<path d="M16 4 26 14 16 28 6 14Z"/><path d="M16 4v24M6 14h20"/>',
+  meteor: '<path d="M8 20c2-8 10-12 16-10-4 2-6 6-6 10 4 0 8-2 10-6-2 8-10 12-20 6Z"/><path d="M6 8l4 3M4 14l5 1"/>',
+  moss: '<path d="M8 22c2-6 6-8 8-14 2 6 6 8 8 14-4 4-12 4-16 0Z"/><path d="M12 20c1-2 3-3 4-6 1 3 3 4 4 6"/>',
+  case: '<rect x="6" y="8" width="20" height="16" rx="2"/><path d="M6 14h20M16 8v16"/>',
+  plaque: '<rect x="7" y="6" width="18" height="16" rx="2"/><path d="M12 26h8M16 22v4M11 12h10M11 16h6"/>',
+  star: '<path d="M16 4l3 8h8l-6 5 2 8-7-4-7 4 2-8-6-5h8Z"/>',
+  alien: '<circle cx="16" cy="14" r="8"/><path d="M8 13c-3 0-4 3-4 3M24 13c3 0 4 3 4 3M12 15h.01M20 15h.01M14 19c1 1 3 1 4 0M11 24c1 4 9 4 10 0"/>',
+  lab: '<path d="M10 4h12M13 4v8L7 26a4 4 0 0 0 4 4h10a4 4 0 0 0 4-4l-6-14V4"/><path d="M11 18h10"/>',
+  'salt-crystal': '<path d="M16 4 26 14 16 28 6 14Z"/>',
+  'glowmoss-case': '<rect x="6" y="8" width="20" height="16" rx="2"/><path d="M16 12c2 3 2 6 0 8-2-2-2-5 0-8Z"/>',
+  'glyph-plaque': '<rect x="7" y="6" width="18" height="16" rx="2"/><path d="M12 26h8M11 13h4l2 4 2-4h4"/>',
+  'glass-dome': '<path d="M8 20a8 8 0 0 1 16 0Z"/><path d="M6 20h20"/>',
 };
 
 /** Return an original inline SVG. Buttons provide their own accessible labels. */

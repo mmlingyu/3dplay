@@ -1,0 +1,422 @@
+{
+  "audience": "4-12",
+  "valley": "xing",
+  "subjects": [
+    {
+      "id": "logic",
+      "name": "逻辑"
+    },
+    {
+      "id": "science",
+      "name": "科学"
+    },
+    {
+      "id": "math",
+      "name": "数学"
+    }
+  ],
+  "characters": [
+    {
+      "id": "gugu",
+      "name": "小咕",
+      "valley": "xing",
+      "role": "peer",
+      "style": "alien",
+      "prop": "none",
+      "hello": "小咕是圆圆的，有四根手指，正指向热气球。",
+      "place": "热气球旁边",
+      "x": -6,
+      "z": 6,
+      "guard": 0,
+      "review": {
+        "status": "draft",
+        "published": true
+      },
+      "care": [
+        {
+          "id": "look-gugu",
+          "label": "看一看",
+          "play": "text",
+          "say": "小咕挥挥四根手指，又指向热气球。一起飞，就能到家。不用认字。"
+        },
+        {
+          "id": "look-dark",
+          "label": "点一盏灯",
+          "play": "text",
+          "say": "小咕有点怕黑。我们一起点灯，路上就是暖的。"
+        }
+      ],
+      "quiz": {
+        "little": [
+          {
+            "id": "g-l1",
+            "ask": "点蓝色的水",
+            "choices": [
+              {
+                "id": "water",
+                "text": "水",
+                "icon": "water",
+                "ok": true
+              },
+              {
+                "id": "leaf",
+                "text": "叶子",
+                "icon": "plant",
+                "ok": false
+              }
+            ],
+            "yes": "蓝色是水。",
+            "no": "再看颜色。材料不会少。",
+            "reading": "",
+            "audio": "xing-gugu-hello",
+            "subject": "logic",
+            "ref": "",
+            "icon": "water",
+            "review": {
+              "status": "draft",
+              "published": true
+            }
+          }
+        ],
+        "bigger": [
+          {
+            "id": "g-b1",
+            "ask": "绿色的符号多半和什么有关？",
+            "choices": [
+              {
+                "id": "plant",
+                "text": "植物",
+                "icon": "plant",
+                "ok": true
+              },
+              {
+                "id": "tool",
+                "text": "工具",
+                "icon": "craft",
+                "ok": false
+              }
+            ],
+            "yes": "绿色是植物。",
+            "no": "工具是灰色。再看一次。",
+            "reading": "",
+            "audio": "",
+            "subject": "logic",
+            "ref": "",
+            "icon": "",
+            "review": {
+              "status": "draft",
+              "published": true
+            }
+          }
+        ],
+        "older": [
+          {
+            "id": "g-o1",
+            "ask": "对照着看，才能读懂陌生的文字。罗塞塔石碑用了几种文字刻同一份诏令？",
+            "choices": [
+              {
+                "id": "three",
+                "text": "三种",
+                "ok": true
+              },
+              {
+                "id": "one",
+                "text": "一种",
+                "ok": false
+              }
+            ],
+            "yes": "三种文字里有希腊文。商博良在 1822 年宣布了突破。",
+            "no": "再看那张线索卡。",
+            "reading": "",
+            "audio": "",
+            "subject": "logic",
+            "ref": "https://www.britishmuseum.org/blog/everything-you-ever-wanted-know-about-rosetta-stone",
+            "icon": "",
+            "review": {
+              "status": "draft",
+              "published": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "jingjing",
+      "name": "晶晶博士",
+      "valley": "xing",
+      "role": "guide",
+      "style": "alien",
+      "prop": "lens",
+      "hello": "晶晶博士戴着圆眼镜，喜欢问：你怎么知道的？",
+      "place": "试验站",
+      "x": -9,
+      "z": -2,
+      "guard": 0,
+      "review": {
+        "status": "draft",
+        "published": true
+      },
+      "care": [
+        {
+          "id": "look-lab",
+          "label": "看一看",
+          "play": "text",
+          "say": "一次只改一个条件。猜一猜，改一改，做一做，看结果，再说结论。"
+        },
+        {
+          "id": "look-crystal",
+          "label": "看晶体",
+          "play": "text",
+          "say": "盐放得够多，静置后会析出晶体。放得少，就很少，或者没有。时间缩短了。",
+          "audio": "xing-crystal"
+        }
+      ],
+      "quiz": {
+        "little": [
+          {
+            "id": "j-l1",
+            "ask": "同一个球，哪里跳得更高？",
+            "choices": [
+              {
+                "id": "xing",
+                "text": "力小的地方",
+                "icon": "jump",
+                "ok": true
+              },
+              {
+                "id": "same",
+                "text": "完全一样高",
+                "icon": "ball",
+                "ok": false
+              }
+            ],
+            "yes": "力小一点，跳得高一点。规律还是同一个。",
+            "no": "再看两次。材料不会少。",
+            "reading": "",
+            "audio": "",
+            "subject": "science",
+            "ref": "https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/weight-equation-2/",
+            "icon": "",
+            "review": {
+              "status": "draft",
+              "published": true
+            }
+          }
+        ],
+        "bigger": [
+          {
+            "id": "j-b1",
+            "ask": "对照实验要改几个条件？",
+            "choices": [
+              {
+                "id": "one",
+                "text": "一个",
+                "icon": "check",
+                "ok": true
+              },
+              {
+                "id": "many",
+                "text": "一起改很多个",
+                "icon": "craft",
+                "ok": false
+              }
+            ],
+            "yes": "一次只改一个，才知道是哪一个造成了不同。",
+            "no": "改很多个就分不清了。",
+            "reading": "",
+            "audio": "",
+            "subject": "science",
+            "ref": "https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/weight-equation-2/",
+            "icon": "",
+            "review": {
+              "status": "draft",
+              "published": true
+            }
+          }
+        ],
+        "older": [
+          {
+            "id": "j-o1",
+            "ask": "黄石公园的介绍里，列出了多少种入侵植物？",
+            "choices": [
+              {
+                "id": "225",
+                "text": "225 种",
+                "ok": true
+              },
+              {
+                "id": "zero",
+                "text": "一种也没有",
+                "ok": false
+              }
+            ],
+            "yes": "所以活的生物不能随便带回家。展柜可以看。",
+            "no": "再看那张知识卡。",
+            "reading": "",
+            "audio": "",
+            "subject": "science",
+            "ref": "https://nps.gov/yell/planyourvisit/parkfacts.htm",
+            "icon": "",
+            "review": {
+              "status": "draft",
+              "published": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "lingyi",
+      "name": "零一",
+      "valley": "xing",
+      "role": "guide",
+      "style": "robot",
+      "prop": "none",
+      "hello": "零一是圆角的小机器人，说话很整齐。",
+      "place": "符号塔旁边",
+      "x": 0,
+      "z": -6,
+      "guard": 0,
+      "review": {
+        "status": "draft",
+        "published": true
+      },
+      "care": [
+        {
+          "id": "look-four",
+          "label": "看一看",
+          "play": "text",
+          "say": "小咕有四根手指。外星的 10 等于我们的 4。"
+        },
+        {
+          "id": "look-bits",
+          "label": "再看一位",
+          "play": "text",
+          "say": "零和一也可以排成一串。这里先认识四进制，二进制只是旁边的一种排法。"
+        }
+      ],
+      "quiz": {
+        "little": [
+          {
+            "id": "z-l1",
+            "ask": "点 1 个点",
+            "choices": [
+              {
+                "id": "one",
+                "text": "1",
+                "icon": "check",
+                "ok": true
+              },
+              {
+                "id": "three",
+                "text": "3",
+                "icon": "craft",
+                "ok": false
+              }
+            ],
+            "yes": "一个点就是 1。",
+            "no": "再数一次。材料不会少。",
+            "reading": "",
+            "audio": "",
+            "subject": "math",
+            "ref": "",
+            "icon": "",
+            "review": {
+              "status": "draft",
+              "published": true
+            }
+          }
+        ],
+        "bigger": [
+          {
+            "id": "z-b1",
+            "ask": "2 个点加 2 个点是多少？",
+            "choices": [
+              {
+                "id": "four",
+                "text": "4",
+                "ok": true
+              },
+              {
+                "id": "two",
+                "text": "2",
+                "ok": false
+              }
+            ],
+            "yes": "2 加 2 是 4。",
+            "no": "把点都数上。",
+            "reading": "",
+            "audio": "",
+            "subject": "math",
+            "ref": "",
+            "icon": "",
+            "review": {
+              "status": "draft",
+              "published": true
+            }
+          }
+        ],
+        "older": [
+          {
+            "id": "z-o1",
+            "ask": "外星的 10 等于我们的几？",
+            "choices": [
+              {
+                "id": "four",
+                "text": "4",
+                "ok": true
+              },
+              {
+                "id": "ten",
+                "text": "10",
+                "ok": false
+              }
+            ],
+            "yes": "每一位是四倍，所以 10 等于 4。33 等于 15。",
+            "no": "再看四根手指。",
+            "reading": "",
+            "audio": "",
+            "subject": "math",
+            "ref": "",
+            "icon": "",
+            "review": {
+              "status": "draft",
+              "published": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "draft-xing",
+      "name": "未发布访客",
+      "valley": "xing",
+      "role": "guide",
+      "style": "alien",
+      "prop": "none",
+      "hello": "这篇还不能出现。",
+      "place": "不出现",
+      "x": 1,
+      "z": 1,
+      "guard": 0,
+      "review": {
+        "status": "draft",
+        "published": false
+      },
+      "published": false,
+      "care": [
+        {
+          "id": "hidden",
+          "label": "看一看",
+          "play": "text",
+          "say": "不发布。"
+        }
+      ],
+      "quiz": {
+        "little": [],
+        "bigger": [],
+        "older": []
+      }
+    }
+  ]
+}

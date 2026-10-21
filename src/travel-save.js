@@ -18,6 +18,7 @@ import {
   washiStage,
 } from './realm-data.js';
 import { STAMP_IDS as STAMP_BOOK_IDS } from './stamp-book.js';
+import { readCrystal, readXingFields } from './xing-save.js';
 
 const STAMP_IDS = STAMP_BOOK_IDS;
 const ID_TEXT = /^[a-z0-9-]{1,64}$/;
@@ -107,6 +108,11 @@ function validateRealm(id, realm) {
   const processes = realm.processes ?? [];
   if (!Array.isArray(processes) || processes.length > 4) throw new TravelError(`${name}的加工不正确。`, 'realm', id);
   const nextProcesses = processes.map((proc) => {
+    if (id === 'xing') {
+      const crystal = readCrystal(proc);
+      if (typeof crystal === 'string') throw new TravelError(crystal, 'realm', id);
+      return crystal;
+    }
     if (id === 'mei') {
       if (!isRecord(proc) || proc.kind !== 'maple' || typeof proc.id !== 'string' || !ID_TEXT.test(proc.id)) {
         throw new TravelError('美谷的加工不正确。', 'realm', id);
@@ -133,24 +139,30 @@ function validateRealm(id, realm) {
     throw new TravelError(`${name}的位置不正确。`, 'position', id);
   }
   const ry = player.ry ?? 0;
-  if (!Number.isFinite(ry) || !realmContains(id, player.x, player.z) || player.y < -2 || player.y > 16) {
+  const maxY = id === 'xing' ? 24 : 16;
+  if (!Number.isFinite(ry) || !realmContains(id, player.x, player.z) || player.y < -2 || player.y > maxY) {
     throw new TravelError(`${name}的位置不正确。`, 'position', id);
   }
-  const next = {
+  const checked = {
     player: { x: player.x, y: player.y, z: player.z, ry },
     blocks: nextBlocks,
     chests,
     claimed,
     processes: nextProcesses,
   };
-  if (id === 'mei') return { ...next, ...validateMeiFields(realm) };
-  return next;
+  if (id === 'xing') {
+    try { Object.assign(checked, readXingFields(realm)); }
+    catch (error) { throw new TravelError(error.message || '外星谷的记录不正确。', 'realm', id); }
+  }
+  if (id === 'mei') return { ...checked, ...validateMeiFields(realm) };
+  return checked;
 }
 
 export function validateTravel(travel) {
   if (travel == null) {
     const fresh = defaultTravel();
     if (REALMS.mei?.playable) fresh.realms.mei = emptyRealm('mei');
+    if (REALMS.xing?.playable) fresh.realms.xing = emptyRealm('xing');
     return fresh;
   }
   if (!isRecord(travel) || Object.keys(travel).some((key) => !TRAVEL_KEYS.has(key))) {
@@ -177,6 +189,7 @@ export function validateTravel(travel) {
   const realms = {};
   for (const id of Object.keys(realmsIn)) realms[id] = validateRealm(id, realmsIn[id]);
   if (!realms.mei && REALMS.mei?.playable) realms.mei = emptyRealm('mei');
+  if (!realms.xing && REALMS.xing?.playable) realms.xing = emptyRealm('xing');
   if (current !== 'he' && !realms[current]) throw new TravelError('这一谷的记录丢了。', 'realm', current);
   return {
     schema: 1,
@@ -202,7 +215,10 @@ const HOME_NOTICE = '旅行记录有问题，已经回到河谷。家里的建�
 const DOCK_NOTICE = '日谷的位置出了范围，已经回到码头。家里的建筑和背包还在。';
 const PORT_NOTICE = '美谷的位置出了范围，已经回到港口。家里的建筑和背包还在。';
 
-function dockNotice(realmId) {
+const LAWN_NOTICE = '外星谷的位置出了范围，已经回到热气球草坪。家里的建筑和背包还在。';
+
+function placeNotice(realmId) {
+  if (realmId === 'xing') return LAWN_NOTICE;
   return realmId === 'mei' ? PORT_NOTICE : DOCK_NOTICE;
 }
 
@@ -233,7 +249,7 @@ export function repairTravelRaw(raw) {
       copy.travel.realms[error.realmId].player = arrivalFor(error.realmId, 'ferry');
       try {
         copy.travel = validateTravel(copy.travel);
-        return { raw: copy, notice: dockNotice(error.realmId), code: 'position' };
+        return { raw: copy, notice: placeNotice(error.realmId), code: 'position' };
       } catch (again) {
         if (!again?.travel) throw again;
       }

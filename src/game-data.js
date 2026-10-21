@@ -17,6 +17,7 @@ export const LIFE_BACKUP_KEY = `${STORAGE_KEY}-before-life`;
 export const LAND_BACKUP_KEY = `${STORAGE_KEY}-before-expansion`;
 export const TRAVEL_BACKUP_KEY = `${STORAGE_KEY}-before-travel`;
 export const MEI_BACKUP_KEY = `${STORAGE_KEY}-before-mei`;
+export const XING_BACKUP_KEY = `${STORAGE_KEY}-before-xing`;
 export const CRAFT_RULES = Object.freeze({ dragThreshold: 7 });
 
 // Integer y coordinates describe the bottom of a placed block.
@@ -100,10 +101,17 @@ export const ITEMS = {
   'paper-boat': { name: '纸船', color: '#f7f1e4', emoji: '⛵', placeable: true, origin: 'ri', description: '两张和纸并排折成纸船。真实折纸船通常一张纸、很多步；分成两种格子是游戏约定。可以带回河谷摆放。' },
   'paper-koinobori': { name: '纸鲤鱼旗', color: '#e07a4a', emoji: '🎏', placeable: true, origin: 'ri', description: '用和纸和竹篾做的鲤鱼旗装饰，挂在杆上随风飘。它不是国旗。' },
   'paper-door': { name: '纸拉门', color: '#f3ecdf', emoji: '🚪', placeable: true, origin: 'ri', description: '木格上糊和纸的门。格子配方是游戏约定，真实拉门还有木框和纸的糊法。' },
+  salt: { name: '盐', color: '#f4f1ea', emoji: '🧂', placeable: false, origin: 'xing', description: '盐湖边取到的盐。盐湖是真实存在的地貌。这里的取盐被简化了。' },
+  'salt-crystal': { name: '盐晶', color: '#f7fbff', emoji: '💎', placeable: true, origin: 'xing', description: '盐加清水后静置。溶液饱和时析出晶体。时间缩短了。这是简化模型，不是完整的结晶过程。' },
+  meteorite: { name: '陨石碎块', color: '#6d625c', emoji: '🌑', placeable: false, origin: 'xing', description: '可以看一看。不能加工成金属。' },
+  glowmoss: { name: '光苔', color: '#7ddea8', emoji: '🌿', placeable: false, origin: 'xing', fantasy: true, living: true, description: '这是游戏里的幻想生物。只在外星谷生长，不能种回河谷，可以装进展柜。' },
+  'glowmoss-case': { name: '光苔展柜', color: '#b7f3d0', emoji: '🪟', placeable: true, origin: 'xing', fantasy: true, living: false, case: true, description: '光苔放在游戏里直接提供的玻璃罩里。这是装饰，不是种植。光苔是幻想生物。' },
+  'glass-dome': { name: '玻璃罩', color: '#d5f3f6', emoji: '🔮', placeable: false, origin: 'xing', description: '游戏里直接提供的玻璃罩。不是沙子变成的玻璃。' },
+  'glyph-plaque': { name: '小咕的符号牌', color: '#f2c14e', emoji: '🔤', placeable: true, origin: 'xing', description: '点一下会听到小咕的问候。这是纪念品，不用解谜也能收下。' },
   ...MEI_ITEMS,
 };
 
-export const COLLECTABLE_ITEMS = ['wood', 'stone', 'clay', 'branch', 'soil', 'water', 'seed', 'kozo', 'bamboo', ...MEI_COLLECTABLES.filter((item) => item !== 'branch')];
+export const COLLECTABLE_ITEMS = ['wood', 'stone', 'clay', 'branch', 'soil', 'water', 'seed', 'kozo', 'bamboo', 'salt', 'meteorite', 'glowmoss', 'glass-dome', ...MEI_COLLECTABLES.filter((item) => item !== 'branch')];
 export const ROOF_WALLS = ['plank', 'fence', 'post', 'brick', 'door', 'window', 'stone', 'log-wall'];
 export const ROOF_LIMIT = 8;
 
@@ -189,6 +197,7 @@ export const RECIPES = [
   { id: 'paper-boat', name: '纸船', pattern: [['washi', 'washi']], output: { item: 'paper-boat', count: 1 }, hint: '两张和纸并排折成纸船。真实折纸船通常只用一张纸。这里和纸鹤分成两种格子，是游戏约定。', group: '日谷', kind: '对折', empty: '两张并排' },
   { id: 'paper-koinobori', name: '纸鲤鱼旗', pattern: [['washi', 'bamboo-strip']], output: { item: 'paper-koinobori', count: 1 }, hint: '和纸加竹篾做成纸鲤鱼旗。这是装饰，不是国旗。格子是游戏约定。', group: '日谷', kind: '两种材料', empty: '纸做鱼，篾做骨' },
   { id: 'paper-door', name: '纸拉门', pattern: [['washi', 'stick']], output: { item: 'paper-door', count: 1 }, hint: '和纸加木棍做成纸拉门。格子是游戏约定。', group: '日谷', kind: '两种材料', empty: '纸做面，棍做框' },
+  { id: 'glowmoss-case', name: '光苔展柜', pattern: [['glowmoss', 'glass-dome']], output: { item: 'glowmoss-case', count: 1 }, hint: '光苔放进玻璃罩。不能种在菜园。玻璃罩是游戏里直接提供的。', group: '外星谷', kind: '装起来', empty: '苔加罩' },
   ...MEI_RECIPES,
 ];
 

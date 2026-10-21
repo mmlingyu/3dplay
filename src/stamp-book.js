@@ -1,7 +1,8 @@
-/** Stamp pages. Day-valley stamps stay in realm-data. Beauty-valley stamps are added here. */
+/** Stamp pages. Day, beauty and alien stamps stay in their own modules. */
 
 import { MEI_STAMPS } from './mei-data.js';
 import { STAMPS } from './realm-data.js';
+import { XING_STAMPS } from './xing-data.js';
 
-export const STAMP_BOOK = Object.freeze([...STAMPS, ...MEI_STAMPS]);
+export const STAMP_BOOK = Object.freeze([...STAMPS, ...MEI_STAMPS, ...XING_STAMPS]);
 export const STAMP_IDS = new Set(STAMP_BOOK.map((item) => item.id));
