@@ -19,6 +19,7 @@ import {
 } from './realm-data.js';
 import { STAMP_IDS as STAMP_BOOK_IDS } from './stamp-book.js';
 import { inferDiscovered, KEEPSAKE_IDS, VISTA_IDS } from './vista-data.js';
+import { readRiSave } from './ri-story.js';
 import { readCrystal, readXingFields } from './xing-save.js';
 
 const STAMP_IDS = STAMP_BOOK_IDS;
@@ -156,6 +157,10 @@ function validateRealm(id, realm) {
     catch (error) { throw new TravelError(error.message || '外星谷的记录不正确。', 'realm', id); }
   }
   if (id === 'mei') return { ...checked, ...validateMeiFields(realm) };
+  if (id === 'ri') {
+    try { return { ...checked, ...readRiSave(realm) }; }
+    catch (error) { throw new TravelError(error.message || '日谷的记录不正确。', 'realm', id); }
+  }
   return checked;
 }
 
