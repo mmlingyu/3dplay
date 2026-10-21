@@ -65,6 +65,10 @@ export const STAMPS = Object.freeze([
   { id: 'ri-help-koharu', name: '帮小春修鲤鱼旗', icon: 'carp', how: '做好纸鲤鱼旗，到旗杆补上。不用答题。' },
 ]);
 
+export const RI_STORY_STAMPS = Object.freeze([
+  { id: 'ri-tide-shard', name: '潮之片', icon: 'water', how: '在日谷车站的失物柜，三件事里完成两件就能打开。不用先做完别的章节。' },
+]);
+
 export const HOME_DOCKS = Object.freeze([
   { id: 'downstream', x: 4, z: 14, radius: 2.15 },
   { id: 'upstream', x: 4, z: -14, radius: 2.15 },
@@ -120,8 +124,9 @@ export const REALMS = Object.freeze({
     gravity: EARTH_GRAVITY,
     entry: 'dock',
     altEntry: 'balloon',
-    // Festivals stay empty until a later season. The field is here so the shape can grow.
-    festivals: Object.freeze([]),
+    festivals: Object.freeze([
+      Object.freeze({ id: 'sakura-lantern', name: '樱花灯笼祭', note: '街上挂着纸灯笼，寺社石阶有樱花。鲤鱼旗全年都能补。没有限时奖励。' }),
+    ]),
     bounds: Object.freeze({ minX: -16, maxX: 15, minZ: -16, maxZ: 15 }),
     flight: Object.freeze({ minX: -14, maxX: 14, minZ: -14, maxZ: 14 }),
     visitor: Object.freeze({ minX: 2, maxX: 10, minZ: 5, maxZ: 12 }),
@@ -139,6 +144,10 @@ export const REALMS = Object.freeze({
       koharu: Object.freeze({ x: -6.2, z: -4.2 }),
       elder: Object.freeze({ x: -9.2, z: -4.5 }),
       ponta: Object.freeze({ x: 9.2, z: -6.2 }),
+      gate: Object.freeze({ x: 0, z: -8, name: '大灯笼门' }),
+      tower: Object.freeze({ x: 13, z: 7, name: '红白铁塔' }),
+      shrine: Object.freeze({ x: -13.2, z: 7.2, name: '山坡寺社' }),
+      cabinet: Object.freeze({ x: 3.55, z: -10.35, name: '失物招领柜' }),
     }),
   }),
   mei: Object.freeze({ ...MEI_REALM, gravity: EARTH_GRAVITY }),
