@@ -20,6 +20,9 @@ import { MEI_AUDIO, SHIP_NOTE, VOYAGE_MEI_NOTE } from './mei-data.js';
 import { createCutscene } from './travel.js';
 import { sceneStats } from './scene-stats.js';
 import { RI_AUDIO } from './ri-tutors.js';
+import { riBand } from './ri-story.js';
+import { setRiSound, warmRiAudio } from './ri-audio.js';
+import { handleRiTap, playQuestionAudio, resetQuestionAudio, riSheetOpen } from './ri-ui.js';
 import { FANTASY_ROUTE, STAR_SECONDS, XING_AUDIO, XING_OPEN, starRouteVisible } from './xing-data.js';
 import { attachHomeVisitor, METEOR_LETTER } from './xing-home.js';
 import { closeXingSheet, crystalView, guguView, labView, mossView, paintXingSheet, puzzleView } from './xing-ui.js';
@@ -43,6 +46,8 @@ let lastFrame = performance.now(), uiTime = 0, completedWish = false, speechTime
 let tutorBand = game.state.settings.ageBand || 'little', tutorUsed = [], tutorCurrent = null, tutorPick = null, tutorStage = 'menu', tutorActivity = null, tutorPage = 0, tutorGreeted = new Set();
 let switching = false, cutscene = null, pendingHomeFlight = false, xingPuzzle = null, xingSheet = '', crystalMarkup = '';
 const missingAudio = new Set([...RI_AUDIO, ...MEI_AUDIO, ...XING_AUDIO]);
+warmRiAudio(missingAudio);
+setRiSound(game.state.settings.sound);
 const riReady = import('./ri-world.js');
 const meiReady = import('./mei-world.js');
 const xingReady = import('./xing-world.js');
@@ -811,6 +816,7 @@ function paintTutor() {
     speak(graded.ok ? '对了' : '再选一次');
     paintTutor();
   });
+  if (tutor?.valley === 'ri' && tutorActivity?.play === 'quiz') playQuestionAudio(tutorCurrent, riBand(tutorBand), speak);
 }
 function openTutor(tutorId) {
   const tutor = tutorById(tutorId);
@@ -823,12 +829,16 @@ function openTutor(tutorId) {
   tutorCurrent = nextQuestion(tutor.id, tutorBand, tutorUsed);
   $('tutor-card').hidden = false;
   $('tutor-card').dataset.tutor = tutor.id;
+  resetQuestionAudio();
+  world?.setFigureMode?.(tutor.id, 'talk');
   paintTutor();
   world?.stopWalking();
 }
 function closeTutor() {
   if ($('tutor-card')) $('tutor-card').hidden = true;
   tutorCurrent = null;
+  resetQuestionAudio();
+  world?.setFigureMode?.(null, null);
 }
 function bandName() {
   const age = game.state.settings?.ageBand || tutorBand || 'little';
@@ -924,7 +934,7 @@ function handleXingSheet(event) {
   }
 }
 function interact(target = null) {
-  if (!started || panels.isOpen() || tutorOpen()) return;
+  if (!started || panels.isOpen() || tutorOpen() || riSheetOpen()) return;
   if (!target && mode === 'build') return build();
   target ||= chosenTarget || world.nearestTarget(2.8);
   if(mode!=='remove'&&world.locomotion==='swim'&&world.pool&&(!target||target.type==='pool')){
@@ -939,6 +949,11 @@ function interact(target = null) {
     if (target.type !== 'block') { toast('这些是大家的设施，自己放的方块可以取回。'); return; }
     const result = game.removeBlock(target.id); toast(result.message, result.ok);
     if (result.ok) { chosenTarget = null; world.select(null); world.celebrate(target.position); updateUI(); }
+    return;
+  }
+  if (target.riKind) {
+    handleRiTap(target, { game, world, toast, speak, band: riBand(game.state.settings?.ageBand || tutorBand) });
+    updateContext();
     return;
   }
   if (target.type === 'resource') {
@@ -1282,7 +1297,7 @@ $('land-question-skip').addEventListener('click',()=>{
 $('pause-button').addEventListener('click', () => openPanel('pause'));
 $('craft-button').addEventListener('click', () => openPanel('craft'));
 $('inventory-button').addEventListener('click', () => openPanel('inventory'));
-$('sound-button').addEventListener('click', () => { game.mutate(s => { s.settings.sound = !s.settings.sound; }); if (!game.state.settings.sound) { clearTimeout(speechTimer); window.speechSynthesis?.cancel(); } else speak('声音打开了。点喇叭可以听说明。'); });
+$('sound-button').addEventListener('click', () => { game.mutate(s => { s.settings.sound = !s.settings.sound; }); setRiSound(game.state.settings.sound); if (!game.state.settings.sound) { clearTimeout(speechTimer); window.speechSynthesis?.cancel(); } else speak('声音打开了。点喇叭可以听说明。'); });
 $('wish-dismiss').addEventListener('click', () => { $('wish-card').hidden = true; });
 $('wish-read').addEventListener('click', () => speak(`${$('wish-title').textContent}。${$('wish-description').textContent}`));
 $('action-button').addEventListener('click', () => interact());
@@ -1454,7 +1469,9 @@ function frame(now) {
   if (world && !document.hidden && !switching) {
     const input = { x: joystick.x + (keys.has('d') || keys.has('arrowright') ? 1 : 0) - (keys.has('a') || keys.has('arrowleft') ? 1 : 0), z: joystick.z + (keys.has('s') || keys.has('arrowdown') ? 1 : 0) - (keys.has('w') || keys.has('arrowup') ? 1 : 0) };
     const holding = !!cutscene && cutscene.kind === 'ferry';
-    world.update(dt, input, !started || panels.isOpen() || holding); storePlayer();
+    const sheet = riSheetOpen();
+    setRiSound(game.state.settings.sound);
+    world.update(dt, sheet ? { x: 0, z: 0 } : input, !started || panels.isOpen() || holding); storePlayer();
     if (cutscene?.kind === 'ferry' || cutscene?.kind === 'stars') {
       const done = cutscene.tick(dt, { paused: !started || panelType === 'pause' || panels.isOpen(), hidden: false });
       if (done) finishCutscene();

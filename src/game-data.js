@@ -19,6 +19,7 @@ export const TRAVEL_BACKUP_KEY = `${STORAGE_KEY}-before-travel`;
 export const MEI_BACKUP_KEY = `${STORAGE_KEY}-before-mei`;
 export const XING_BACKUP_KEY = `${STORAGE_KEY}-before-xing`;
 export const VISTA_BACKUP_KEY = `${STORAGE_KEY}-before-vista`;
+export const RI3_BACKUP_KEY = `${STORAGE_KEY}-before-ri3`;
 export const CRAFT_RULES = Object.freeze({ dragThreshold: 7 });
 
 // Integer y coordinates describe the bottom of a placed block.
