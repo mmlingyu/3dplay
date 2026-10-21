@@ -480,6 +480,7 @@ async function mountWorld(realm, mod, options = {}) {
 }
 async function goXing() {
   if (switching) return;
+  pendingHomeFlight = false;
   hideCutscene();
   hideStar();
   const fromHome = (game.state.travel?.current || 'he') === 'he';
@@ -698,8 +699,12 @@ function placeModelMenu() {
   if (x + menuW > w - 12) x = px - menuW - 28;
   x = Math.min(Math.max(12, x), Math.max(12, w - menuW));
   const y = Math.min(Math.max(76, py - 36), Math.max(76, h - 210));
-  menu.style.left = `${x}px`;
-  menu.style.top = `${y}px`;
+  const left = Math.round(x);
+  const top = Math.round(y);
+  if (menu.dataset.pin === `${left},${top}`) return;
+  menu.dataset.pin = `${left},${top}`;
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
 }
 function recallFromMenu() {
   if (!modelMenu) return;
