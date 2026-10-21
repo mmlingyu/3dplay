@@ -3,6 +3,7 @@
 import { meiTutorPack } from './mei-tutors.js';
 import { riTutorPack } from './ri-tutors.js';
 import { xingTutorPack } from './xing-tutors.js';
+import { staticPreviewEnabled } from './static-preview.js';
 
 const packs = {
   he: { audience: '4-12', subjects: [], characters: [] },
@@ -56,6 +57,7 @@ function applyLocalPack(key) {
 }
 
 async function refreshRemotePack(key) {
+  if (staticPreviewEnabled()) return key === 'he' ? packs[key] : applyLocalPack(key);
   const url = key === 'he' ? '/api/knowledge/tutors' : `/api/knowledge/tutors?valley=${encodeURIComponent(key)}`;
   try {
     const response = await fetchPack(url);

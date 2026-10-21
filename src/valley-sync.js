@@ -1,5 +1,6 @@
 import { DAMAGED_BACKUP_KEY, LAND_BACKUP_KEY, LIFE_BACKUP_KEY, TRAVEL_BACKUP_KEY } from './game-data.js';
 import { createInitialState, salvageSave } from './game-state.js';
+import { staticPreviewEnabled } from './static-preview.js';
 
 export const OWNER_KEY = 'yuanyuan-river-valley-owner';
 const BACKUP_KEYS = [DAMAGED_BACKUP_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY];
@@ -72,6 +73,7 @@ export function readSaveText(text) {
 }
 
 async function fetchValley() {
+  if (staticPreviewEnabled()) return { signedOut: true };
   const response = await fetch('/api/valley', { credentials: 'same-origin' });
   if (response.status === 401) return { signedOut: true };
   if (!response.ok) throw new Error('valley');
@@ -79,6 +81,7 @@ async function fetchValley() {
 }
 
 async function putValley(save) {
+  if (staticPreviewEnabled()) return;
   const response = await fetch('/api/valley', {
     method: 'PUT',
     credentials: 'same-origin',
@@ -107,7 +110,7 @@ export function startValleySync(game) {
   }
 
   async function flush() {
-    if (!userId) return false;
+    if (staticPreviewEnabled() || !userId) return false;
     clearTimeout(timer);
     writing = true;
     try {
@@ -135,6 +138,7 @@ export function startValleySync(game) {
   };
 
   async function bind(user) {
+    if (staticPreviewEnabled()) return { changed: false, source: 'local' };
     const next = user?.id || null;
     if (next === userId && (ready || !next)) return { changed: false };
     if (userId) await flush();
