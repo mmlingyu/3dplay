@@ -27,7 +27,8 @@ import { handleRiTap, playQuestionAudio, resetQuestionAudio, riSheetOpen } from 
 import { FANTASY_ROUTE, STAR_SECONDS, XING_AUDIO, XING_OPEN, starRouteVisible } from './xing-data.js';
 import { HOLO_AUDIO, WELCOME_LINE } from './holo-data.js';
 import { recordedIds } from './voice-lines.js';
-import { bindVoiceUnlock, clipIdFor, playVoice, stopVoice, voiceReady } from './voice.js';
+import { bindVoiceUnlock, speakPair, speakText, stopVoice, voiceReady } from './voice.js';
+import { bindOverlayLayout, layoutOverlays } from './overlay-layout.js';
 import { mountHoloUi } from './holo-ui.js';
 import { attachHomeVisitor, METEOR_LETTER } from './xing-home.js';
 import { closeXingSheet, crystalView, guguView, labView, mossView, paintXingSheet, puzzleView } from './xing-ui.js';
@@ -83,53 +84,15 @@ function toast(message, gain = false) {
   while ($('toast-root').children.length > 3) $('toast-root').firstChild.remove();
   setTimeout(() => el.remove(), 3400);
 }
-function synth(text) {
-  if (!game.state.settings.sound || !('speechSynthesis' in window) || !text) return;
-  const voices = speechSynthesis.getVoices();
-  const voice = voices.find(v => v.lang.startsWith('zh') && /Ting|婷婷|中文|Mandarin/.test(v.name)) || voices.find(v => v.lang.startsWith('zh'));
-  const utterance = new SpeechSynthesisUtterance(text); utterance.lang = 'zh-CN'; utterance.rate = .9; utterance.volume = .65;
-  if (voice) utterance.voice = voice;
-  speechSynthesis.cancel(); speechSynthesis.speak(utterance);
-}
 function speak(text) {
   if (!game.state.settings.sound || !text) return;
   clearTimeout(speechTimer);
-  const id = clipIdFor(text);
-  if (!id) {
-    stopVoice();
-    speechTimer = setTimeout(() => synth(text), 80);
-    return;
-  }
-  window.speechSynthesis?.cancel();
-  playVoice(id, { enabled: () => game.state.settings.sound !== false }).then((ok) => {
-    if (!ok && game.state.settings.sound) synth(text);
-  });
+  speakText(text, { enabled: () => game.state.settings.sound !== false });
 }
 function speakBounce(info) {
-  if (!game.state.settings.sound || !('speechSynthesis' in window) || !info) return;
+  if (!game.state.settings.sound || !info) return;
   clearTimeout(speechTimer);
-  speechTimer = setTimeout(() => {
-    const voices = speechSynthesis.getVoices();
-    const en = voices.find(v => /^en/.test(v.lang));
-    const zh = voices.find(v => v.lang.startsWith('zh') && /Ting|婷婷|中文|Mandarin/.test(v.name)) || voices.find(v => v.lang.startsWith('zh'));
-    const englishText = info.speechEn || '';
-    const chineseText = info.speechZh || info.note || '';
-    const speakZh = () => {
-      if (!chineseText) return;
-      const chinese = new SpeechSynthesisUtterance(chineseText);
-      chinese.lang = 'zh-CN'; chinese.rate = 0.95; chinese.volume = 0.65;
-      if (zh) chinese.voice = zh;
-      speechSynthesis.speak(chinese);
-    };
-    speechSynthesis.cancel();
-    if (englishText) {
-      const english = new SpeechSynthesisUtterance(englishText);
-      english.lang = 'en-US'; english.rate = 0.85; english.volume = 0.72;
-      if (en) english.voice = en;
-      english.onend = speakZh;
-      speechSynthesis.speak(english);
-    } else speakZh();
-  }, 30);
+  speakPair(info.speechEn || '', info.speechZh || info.note || '', { enabled: () => game.state.settings.sound !== false });
 }
 function paintParkHud(info) {
   const modes = $('bounce-modes');
@@ -1303,7 +1266,11 @@ function updateContext() {
     }
   }
   const tutorNear = world.targets.find((item) => item.type === 'tutor' && world.distanceTo(item) <= (item.reach || 2.7));
-  if (tutorNear && !tutorGreeted.has(tutorNear.id) && !tutorOpen() && !panels?.isOpen()) {
+  const storyOpen = ['story-talk', 'story-home', 'letter-card', 'mei-letter'].some((id) => {
+    const card = $(id);
+    return card && !card.hidden;
+  });
+  if (tutorNear && !tutorGreeted.has(tutorNear.id) && !tutorOpen() && !panels?.isOpen() && !storyOpen) {
     tutorGreeted.add(tutorNear.id);
     toast(tutorNear.hello || `${tutorNear.name}在等你。`);
     speak(tutorNear.hello || `${tutorNear.name}在等你。`);
@@ -1328,6 +1295,7 @@ function updateContext() {
   $('clock-drawing').innerHTML=realAnalogClock(54);
   $('life-button').setAttribute('aria-label',`现在${clock.dateLabel}${clock.season}，${clock.weather.label}，${clock.period}，看季节与植物`);
   updateLandGuidance();
+  layoutOverlays();
 }
 function start() {
   if (!world) return;
@@ -1581,6 +1549,7 @@ function frame(now) {
   }
   requestAnimationFrame(frame);
 }
+bindOverlayLayout();
 requestAnimationFrame(frame);
 
 // The browser checks inspect state and exercise the same actions used by the UI.

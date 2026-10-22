@@ -233,7 +233,7 @@ button.world-label { min-width: 44px; min-height: 44px; }
 #balloon-title { font-size: 15px; font-weight: 800; letter-spacing: 0.06em; color: #c45d45; }
 #balloon-note { font-size: 14px; font-weight: 700; color: #5d6b52; }
 #balloon-modes, #balloon-height { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
-#balloon-modes button, #balloon-height button { min-height: 40px; min-width: 72px; padding: 6px 12px; border-radius: 16px; border: 2px solid #e4c4b4; background: #fff; color: #2e5343; font-size: 13px; font-weight: 800; }
+#balloon-modes button, #balloon-height button { min-height: 48px; min-width: 72px; padding: 6px 12px; border-radius: 16px; border: 2px solid #e4c4b4; background: #fff; color: #2e5343; font-size: 13px; font-weight: 800; }
 #balloon-modes button[aria-pressed="true"] { border-color: #e27a5f; background: #fde8df; }
 #balloon-height[hidden], #balloon-modes[hidden] { display: none !important; }
 #balloon-land { min-width: 168px; min-height: 48px; margin-top: 4px; }
@@ -244,7 +244,7 @@ button.world-label { min-width: 44px; min-height: 44px; }
 #context-hint .game-icon { width: 19px; height: 19px; }
 #context-hint:empty { display: none; }
 
-#toast-root { position: absolute; left: 50%; top: 25%; transform: translateX(-50%); z-index: 35; display: flex; align-items: center; flex-direction: column; gap: 8px; max-width: calc(100% - 40px); pointer-events: none; }
+#toast-root { position: absolute; left: auto; right: 12px; top: 76px; transform: none; z-index: 28; display: flex; align-items: flex-end; flex-direction: column; gap: 8px; max-width: min(280px, 42vw); pointer-events: none; }
 .toast { display: flex; align-items: center; justify-content: center; gap: 9px; padding: 11px 17px; border: 1px solid rgba(255, 255, 255, .8); border-radius: 17px; background: var(--paper); color: var(--green); box-shadow: var(--shadow); font-size: 13px; font-weight: 650; text-align: center; animation: toast-in .22s ease-out; }
 .gain-toast { color: #796139; background: #fff6db; }
 
@@ -1039,6 +1039,13 @@ button.creation-chip { cursor: pointer; }
 #tour-guide { position: absolute; z-index: 23; left: 50%; bottom: 132px; transform: translateX(-50%); width: min(560px, calc(100vw - 32px)); padding: 10px 14px; border-radius: 18px; background: rgba(255, 250, 240, .96); color: #2e5343; border: 2px solid #c4a574; box-shadow: var(--shadow); }
 #tour-guide strong { display: block; font-size: 13px; letter-spacing: .04em; }
 #tour-guide p { margin: 4px 0 0; font-size: 16px; line-height: 1.45; }
+#tour-guide.overlay-collapsed { padding: 8px 14px; }
+#tour-guide.overlay-collapsed p { margin: 0; white-space: nowrap; text-overflow: ellipsis; }
+.overlay-parked { position: absolute !important; left: 0 !important; right: auto !important; top: -4000px !important; bottom: auto !important; width: auto !important; height: auto !important; max-height: none !important; transform: none !important; visibility: hidden !important; pointer-events: none !important; }
+#balloon-hud.overlay-scroll, #bounce-hud.overlay-scroll { overflow: auto; }
+#balloon-hud.overlay-scroll #balloon-land { position: sticky; bottom: 0; z-index: 1; background: #fffaf0; }
+#overlay-more { position: absolute; z-index: 24; min-height: 48px; }
+#overlay-more[hidden] { display: none !important; }
 #story-talk, #story-home { position: absolute; z-index: 27; left: 50%; top: 28%; transform: translateX(-50%); width: min(420px, 92vw); padding: 16px; border-radius: 24px; background: #fffaf0; color: #2e5343; border: 3px solid #c4a574; text-align: center; }
 #story-talk p, #story-home p { margin: 8px 0 12px; font-size: 16px; line-height: 1.5; }
 #story-home-picks { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 12px 0; }
