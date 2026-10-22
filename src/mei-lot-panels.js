@@ -62,13 +62,11 @@ export function handleLotAction({ action, target, game, notifyResult, render }) 
   if (!known.includes(action)) return false;
   useSound(game);
   if (action === 'lot-action') {
-    say('en-action', 'Action!', 'en-US');
-    say('zh-action', '点绿色按钮，一起喊 Action。', 'zh-CN');
     notifyResult({ ok: true, message: 'Action！开拍。' });
+    say('en-action', 'Action!', 'en-US');
   } else if (action === 'lot-cut') {
-    say('en-cut', 'Cut!', 'en-US');
-    say('zh-cut', '点红色按钮，喊 Cut。', 'zh-CN');
     notifyResult({ ok: true, message: 'Cut！停下。' });
+    say('en-cut', 'Cut!', 'en-US');
   } else if (action === 'lot-card') {
     board = [...board, target.dataset.card].slice(-3);
     say('zh-board', '选三张图，排好开头、中间和结尾。', 'zh-CN');
@@ -79,13 +77,11 @@ export function handleLotAction({ action, target, game, notifyResult, render }) 
     notifyResult(result);
   } else if (action === 'lot-shot') {
     const shot = target.dataset.shot;
-    say(target.dataset.audio, target.dataset.en || shot, 'en-US');
-    say('zh-shot', '远景、中景、特写，选一张。', 'zh-CN');
     notifyResult(game.saveMeiPhoto(target.dataset.card || 'star', shot));
+    say(target.dataset.audio, target.dataset.en || shot, 'en-US');
   } else if (action === 'lot-fps') {
-    say('en-frames', 'twenty-four frames', 'en-US');
-    say('zh-frames', '每秒二十四张，比六张更连贯。', 'zh-CN');
     notifyResult({ ok: true, message: '每秒 24 张更连贯。6 张会一顿一顿。这是游戏里的对比。' });
+    say('en-frames', 'twenty-four frames', 'en-US');
   } else if (action === 'lot-light') {
     const id = target.dataset.light;
     if (lights[id] != null) lights = { ...lights, [id]: !lights[id] };

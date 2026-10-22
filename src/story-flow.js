@@ -23,6 +23,7 @@ import {
 } from './story-data.js';
 import { createStoryScene } from './story-scene.js';
 import { FINALE_LINE, LIBAI_FOG_LINE, RESTORE_LINES, restoreLine, valleyLine } from './valley-tutors.js';
+import { playUrl, voiceToken } from './voice.js';
 
 let bound = null;
 let momentOverride = null;
@@ -39,37 +40,20 @@ function clipUrl(id) {
   return `${baseUrl()}voice/story/${id}.mp3`;
 }
 
-function playClip(id, text, speak) {
-  const audio = new Audio(clipUrl(id));
-  audio.volume = 0.8;
-  let fell = false;
-  const fallback = () => {
-    if (fell) return;
-    fell = true;
-    if (speak && text) speak(text);
-  };
-  audio.addEventListener('error', fallback, { once: true });
-  const played = audio.play();
-  if (played?.catch) played.catch(fallback);
-}
-
-function playLine(id, text, speak, ageBand = null) {
+function playLine(id, text, fallback = true, ageBand = null) {
   const senior = normalizeAgeBand(ageBand) === 'senior';
+  const allow = Boolean(fallback && text);
+  const base = () => playUrl(clipUrl(id), { text, lang: 'zh-CN', fallback: allow });
   if (!senior) {
-    playClip(id, text, speak);
+    base();
     return;
   }
-  const audio = new Audio(clipUrl(`${id}-senior`));
-  audio.volume = 0.8;
-  let used = false;
-  const useBase = () => {
-    if (used) return;
-    used = true;
-    playClip(id, text, speak);
-  };
-  audio.addEventListener('error', useBase, { once: true });
-  const played = audio.play();
-  if (played?.catch) played.catch(useBase);
+  const mark = voiceToken();
+  playUrl(clipUrl(`${id}-senior`), { fallback: false }).then((result) => {
+    if (result === 'started' || result === 'aborted') return;
+    if (voiceToken() !== mark + 1) return;
+    base();
+  });
 }
 
 function ageOf(game) {
@@ -300,6 +284,8 @@ function considerNudge(height) {
     period: momentNow().period,
   });
   if (!plan) return;
+  const talking = $('story-talk') && !$('story-talk').hidden;
+  if (talking) return;
   if (plan.reset) {
     bound.game.mutate((state) => {
       state.travel.story.nudges = {
@@ -404,8 +390,7 @@ function openHomePicker() {
   }
   card.hidden = false;
   const line = FINALE_LINE;
-  bound.ui.speak?.(line);
-  playLine('finale-libai', line, bound.ui.speak, ageOf(bound.game));
+  playLine('finale-libai', line, true, ageOf(bound.game));
 }
 
 function confirmHome() {
