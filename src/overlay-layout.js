@@ -231,12 +231,12 @@ const CATALOG = [
   ['focus-exit', 'notice', 70],
   ['land-question', 'prompt', 70],
   ['vista-card', 'prompt', 62],
-  ['tour-guide', 'prompt', 50, 64],
-  ['story-festival', 'prompt', 40, 52],
+  ['tour-guide', 'prompt', 50],
+  ['story-festival', 'prompt', 40],
   ['context-hint', 'hint', 10],
 ];
 
-const RAILS = ['#ri-actions', '#mei-actions', '#xing-actions', '#holo-bar', '#travel-home', '#travel-go', '#travel-go-mei', '#holo-back', '#story-disk', '#vista-arrow', '#model-menu'];
+const RAILS = ['#ri-actions', '#mei-actions', '#xing-actions', '#holo-bar', '#travel-home', '#travel-go', '#travel-go-mei', '#holo-back', '#story-disk', '#model-menu'];
 const SIDES = ['#wish-card', '.minimap-card'];
 
 function shown(el) {
@@ -386,11 +386,13 @@ function nudge(el, reserved) {
   const original = el.getAttribute('data-overlay-top');
   if (original == null) el.setAttribute('data-overlay-top', el.style.top || '');
   el.style.top = el.getAttribute('data-overlay-top') || '';
+  if (el.id === 'tour-guide') el.style.bottom = '';
   let guard = 0;
   let rect = el.getBoundingClientRect();
   while (guard < 24 && reserved.some((box) => rect.left < box.right && rect.right > box.left && rect.top < box.bottom && rect.bottom > box.top)) {
     const hit = reserved.find((box) => rect.left < box.right && rect.right > box.left && rect.top < box.bottom && rect.bottom > box.top);
     el.style.top = `${Math.round(hit.bottom + 8)}px`;
+    if (el.id === 'tour-guide') el.style.bottom = 'auto';
     el.style.transform = el.id === 'model-menu' ? 'none' : el.style.transform;
     rect = el.getBoundingClientRect();
     guard += 1;
@@ -407,6 +409,7 @@ export function layoutOverlays(root = document) {
     for (const [id, role, priority, collapseTo] of CATALOG) {
       const el = root.getElementById(id);
       if (!shown(el)) continue;
+      if (id === 'tour-guide' && el.classList.contains('is-icon')) continue;
       items.push(measureItem(el, role, priority, collapseTo));
     }
     const plan = planStack({
@@ -459,7 +462,8 @@ export function layoutOverlays(root = document) {
     if (parkedPrompts.length) {
       chip.hidden = false;
       chip.dataset.wait = parkedPrompts[0].id;
-      chip.textContent = `还有提示 ${parkedPrompts.length}`;
+      chip.textContent = '提示';
+      chip.setAttribute('aria-label', `还有提示 ${parkedPrompts.length}`);
       const spot = chipSpot(safeTop, safeBottom, reserved);
       applyPlacement(chip, { parked: false, collapsed: false, scroll: false, ...spot });
       reserved.push({ left: spot.x, top: spot.y, right: spot.x + spot.width, bottom: spot.y + spot.height });
@@ -512,9 +516,64 @@ export function layoutOverlays(root = document) {
     const toast = root.getElementById('toast-root');
     if (toast) placeToast(toast, safeTop, safeBottom, reserved);
     keepButtonsClear(root);
+    settleVistaArrow(root.getElementById('vista-arrow'));
   } finally {
     laying = false;
   }
+}
+
+const ARROW_BLOCKS = '#balloon-hud, #tour-guide, #vista-card, #land-question, #vista-stamp, .minimap-card, .bottom-dock, .topbar, .wish-card, #toast-root, .action-controls, #story-banner, #bounce-hud, #overlay-more';
+
+function arrowBlockers() {
+  const blocks = [];
+  for (const el of document.querySelectorAll(ARROW_BLOCKS)) {
+    if (!shown(el) || el.classList.contains('overlay-parked')) continue;
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 8 || rect.height < 8) continue;
+    blocks.push(rect);
+  }
+  return blocks;
+}
+
+function arrowFits(x, y, blocks) {
+  const box = { left: x - 24, top: y - 24, right: x + 24, bottom: y + 24 };
+  if (box.left < 4 || box.top < 4 || box.right > window.innerWidth - 4 || box.bottom > window.innerHeight - 4) return false;
+  return !blocks.some((item) => box.left < item.right && box.right > item.left && box.top < item.bottom && box.bottom > item.top);
+}
+
+export function settleVistaArrow(arrow = document.getElementById('vista-arrow')) {
+  if (!arrow || arrow.hidden || typeof arrow.getBoundingClientRect !== 'function') return;
+  const aimX = Number(arrow.dataset.aimX);
+  const aimY = Number(arrow.dataset.aimY);
+  if (!Number.isFinite(aimX) || !Number.isFinite(aimY)) return;
+  const blocks = arrowBlockers();
+  const place = (x, y) => {
+    arrow.style.left = `${Math.round(x)}px`;
+    arrow.style.top = `${Math.round(y)}px`;
+  };
+  if (arrowFits(aimX, aimY, blocks)) {
+    place(aimX, aimY);
+    return;
+  }
+  for (let radius = 56; radius <= 280; radius += 28) {
+    for (let i = 0; i < 12; i += 1) {
+      const angle = (Math.PI * 2 * i) / 12;
+      const x = aimX + Math.cos(angle) * radius;
+      const y = aimY + Math.sin(angle) * radius;
+      if (arrowFits(x, y, blocks)) {
+        place(x, y);
+        return;
+      }
+    }
+  }
+  const corners = [
+    [36, window.innerHeight * 0.42],
+    [window.innerWidth - 36, window.innerHeight * 0.42],
+    [36, 96],
+  ];
+  const spare = corners.find(([x, y]) => arrowFits(x, y, blocks));
+  if (spare) place(spare[0], spare[1]);
+  else arrow.hidden = true;
 }
 
 export function bindOverlayLayout() {

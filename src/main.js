@@ -28,7 +28,7 @@ import { FANTASY_ROUTE, STAR_SECONDS, XING_AUDIO, XING_OPEN, starRouteVisible } 
 import { HOLO_AUDIO, WELCOME_LINE } from './holo-data.js';
 import { recordedIds } from './voice-lines.js';
 import { bindVoiceUnlock, speakPair, speakText, stopVoice, voiceReady } from './voice.js';
-import { bindOverlayLayout, layoutOverlays } from './overlay-layout.js';
+import { bindOverlayLayout, layoutOverlays, settleVistaArrow } from './overlay-layout.js';
 import { mountHoloUi } from './holo-ui.js';
 import { attachHomeVisitor, METEOR_LETTER } from './xing-home.js';
 import { closeXingSheet, crystalView, guguView, labView, mossView, paintXingSheet, puzzleView } from './xing-ui.js';
@@ -64,6 +64,8 @@ const riReady = import('./ri-world.js');
 const meiReady = import('./mei-world.js');
 const xingReady = import('./xing-world.js');
 let landHint=null;
+let balloonDriveOpen = false;
+const statusTimers = new WeakMap();
 const dismissedFrontiers=new Set();
 let playerName = GUEST_PLAYER_NAME;
 
@@ -80,9 +82,8 @@ function toast(message, gain = false) {
   const el = document.createElement('div'); el.className = `toast${gain ? ' gain-toast' : ''}`;
   el.innerHTML = icon(gain ? 'sparkle' : 'leaf', 22);
   const text = document.createElement('span'); text.textContent = message; el.append(text);
-  $('toast-root').append(el);
-  while ($('toast-root').children.length > 3) $('toast-root').firstChild.remove();
-  setTimeout(() => el.remove(), 3400);
+  $('toast-root').replaceChildren(el);
+  setTimeout(() => { if (el.isConnected) el.remove(); }, 3400);
 }
 function speak(text) {
   if (!game.state.settings.sound || !text) return;
@@ -139,6 +140,14 @@ function hideBounce() {
   const hud = $('bounce-hud');
   if (hud) hud.hidden = true;
 }
+function paintBalloonDrive(info) {
+  const drive = $('balloon-drive');
+  const steer = $('balloon-steer');
+  const landing = !!info?.landing;
+  if (landing) balloonDriveOpen = false;
+  if (drive) drive.hidden = landing || !balloonDriveOpen;
+  if (steer) steer.hidden = landing || balloonDriveOpen;
+}
 function showBalloon(info) {
   const hud = $('balloon-hud');
   if (!hud || !info) return;
@@ -148,12 +157,10 @@ function showBalloon(info) {
   const land = $('balloon-land');
   if (land) {
     land.disabled = !!info.landing;
-    land.textContent = info.landing ? '正在降落…' : '降落到草坪基地';
+    land.textContent = info.landing ? '正在降落' : '降落';
+    land.setAttribute('aria-label', info.landing ? '正在降落' : '降落到草坪基地');
   }
-  const modes = $('balloon-modes');
-  const height = $('balloon-height');
-  if (modes) modes.hidden = !!info.landing;
-  if (height) height.hidden = !!info.landing;
+  paintBalloonDrive(info);
   const voyage = $('balloon-voyage');
   const voyageMei = $('balloon-voyage-mei');
   const touring = info.phase === 'tour' && (game.state.travel?.current || 'he') === 'he';
@@ -165,13 +172,16 @@ function showBalloon(info) {
   }
 }
 function hideBalloon() {
+  balloonDriveOpen = false;
   const hud = $('balloon-hud');
   if (hud) hud.hidden = true;
   const land = $('balloon-land');
   if (land) {
     land.disabled = false;
-    land.textContent = '降落到草坪基地';
+    land.textContent = '降落';
+    land.setAttribute('aria-label', '降落到草坪基地');
   }
+  paintBalloonDrive(null);
 }
 function storePlayer() {
   if (!world || world.released || switching) return;
@@ -306,10 +316,11 @@ function paintVistaHud() {
   const spot = world.vistaPointer();
   if (!spot?.visible) { arrow.hidden = true; return; }
   arrow.hidden = false;
-  arrow.style.left = `${spot.x}px`;
-  arrow.style.top = `${spot.y}px`;
+  arrow.dataset.aimX = String(Math.round(spot.x));
+  arrow.dataset.aimY = String(Math.round(spot.y));
   const vista = VISTAS[world.vistaGlance.id];
   if (vista) arrow.setAttribute('aria-label', `看向${vista.name}`);
+  settleVistaArrow(arrow);
 }
 function showStar(title = '飞向星星') {
   const box = $('star-cutscene');
@@ -434,7 +445,7 @@ async function mountWorld(realm, mod, options = {}) {
     world = new RiverWorld(canvas, worldHooks());
     world.facing = 0;
     attachHomeVisitor(world, game);
-    attachValleyStory(world, game, { speak, toast, touring });
+    attachValleyStory(world, game, { speak, toast, touring, layout: () => layoutOverlays() });
     if (started) storyEnter();
   }
   if (realm === 'xing' && world.deviceEnv) world.deviceEnv = qualityEnv();
@@ -556,6 +567,7 @@ async function refreshAccount() {
   if (!chip || !label) return;
   if (staticPreviewEnabled()) {
     markLocalPlayAccount(document);
+    flashChip(chip, label.textContent);
     updateSaveStatus();
     refreshWelcome();
     return;
@@ -587,6 +599,7 @@ async function refreshAccount() {
     chip.title = '还没登录。登录后，每个人会进入自己的河谷。';
     if (dot) dot.style.background = '#c98958';
   }
+  flashChip(chip, label.textContent);
   const space = await valleySync.bind(user);
   updateSaveStatus();
   refreshWelcome();
@@ -602,10 +615,25 @@ function refreshWelcome() {
   const made = (game.state.creation?.figures?.length || 0) + (game.state.creation?.assemblies?.length || 0) + (game.state.blocks?.length || 0);
   if (stats.built || stats.gathered || stats.crafted || made) $('start-button').innerHTML = `继续我的河谷 ${icon('arrow-right', 22)}`;
 }
+function flashChip(el, signature, sticky = false) {
+  if (!el) return;
+  el.classList.toggle('is-problem', sticky);
+  if (sticky) {
+    el.classList.add('is-live');
+    return;
+  }
+  if (el.dataset.shown === signature) return;
+  el.dataset.shown = signature;
+  el.classList.add('is-live');
+  clearTimeout(statusTimers.get(el));
+  statusTimers.set(el, setTimeout(() => el.classList.remove('is-live'), 2000));
+}
 function updateSaveStatus() {
   const error = game.storageError || !game.storage;
   const onAccount = Boolean(game.accountId) && !error;
-  $('save-status').innerHTML = `<i class="save-dot" style="${error ? 'background:#c98958' : ''}"></i>${error ? '请导出备份' : (onAccount ? '已记到账号' : '自动保存')}`;
+  const text = error ? '请导出备份' : (onAccount ? '已记到账号' : '自动保存');
+  $('save-status').innerHTML = `<i class="save-dot" style="${error ? 'background:#c98958' : ''}"></i>${text}`;
+  flashChip($('save-status'), text, Boolean(error));
   $('save-status').title = game.storageError || (!game.storage
     ? '当前窗口无法持久保存，请在暂停菜单导出备份。'
     : (game.accountId
@@ -1188,6 +1216,7 @@ function updateUI() {
     el.setAttribute('aria-pressed', String(selected));
     el.querySelector('.slot-count').textContent = count ? `×${count}` : '暂无';
   }
+  $('hotbar').hidden = mode !== 'build';
   document.querySelectorAll('[data-mode]').forEach(el => { el.classList.toggle('active', el.dataset.mode === mode); el.setAttribute('aria-pressed', String(el.dataset.mode === mode)); });
   $('sound-button').innerHTML = icon(game.state.settings.sound ? 'sound' : 'mute', 23);
   $('sound-button').setAttribute('aria-label', game.state.settings.sound ? '关闭声音' : '打开声音');
@@ -1301,6 +1330,11 @@ function updateContext() {
   $('clock-label').textContent=`${clock.period} ${hh}:${mm} · ${clock.season}`;
   $('clock-drawing').innerHTML=realAnalogClock(54);
   $('life-button').setAttribute('aria-label',`现在${clock.dateLabel}${clock.season}，${clock.weather.label}，${clock.period}，看季节与植物`);
+  const riding = Boolean(world.balloon && $('balloon-hud') && !$('balloon-hud').hidden);
+  $('action-button').hidden = riding;
+  const hint = $('context-text').textContent || '';
+  const specific = Boolean(target?.hint) || Boolean(world.modelFocus) || Boolean(modelMenu) || mode === 'remove' || world.locomotion === 'swim' || Boolean(world.bounce);
+  $('context-hint').hidden = !started || !!panels?.isOpen() || riding || !specific || /摇杆|点材料|双击放置|拖动预览/.test(hint);
   updateLandGuidance();
   layoutOverlays();
 }
@@ -1369,7 +1403,15 @@ $('pause-button').addEventListener('click', () => openPanel('pause'));
 $('craft-button').addEventListener('click', () => openPanel('craft'));
 $('inventory-button').addEventListener('click', () => openPanel('inventory'));
 $('sound-button').addEventListener('click', () => { game.mutate(s => { s.settings.sound = !s.settings.sound; }); setRiSound(game.state.settings.sound); if (!game.state.settings.sound) { clearTimeout(speechTimer); stopVoice(); window.speechSynthesis?.cancel(); } else speak('声音打开了。点喇叭可以听说明。'); });
-$('wish-dismiss').addEventListener('click', () => { $('wish-card').hidden = true; });
+function setFold(card, button, folded) {
+  if (!card || !button) return;
+  card.classList.toggle('is-folded', folded);
+  button.setAttribute('aria-expanded', String(!folded));
+  layoutOverlays();
+}
+$('wish-toggle')?.addEventListener('click', () => setFold($('wish-card'), $('wish-toggle'), !$('wish-card').classList.contains('is-folded')));
+$('map-toggle')?.addEventListener('click', () => setFold(document.querySelector('.minimap-card'), $('map-toggle'), !document.querySelector('.minimap-card')?.classList.contains('is-folded')));
+$('wish-dismiss').addEventListener('click', () => setFold($('wish-card'), $('wish-toggle'), true));
 $('wish-read').addEventListener('click', () => speak(`${$('wish-title').textContent}。${$('wish-description').textContent}`));
 $('action-button').addEventListener('click', () => interact());
 $('focus-exit').addEventListener('click', () => {
@@ -1464,10 +1506,12 @@ $('vista-arrow')?.addEventListener('click', () => { if (started && world?.vistaG
 $('vista-skip')?.addEventListener('click', () => { if (started) world?.skipVistaZoom(); });
 $('vista-later')?.addEventListener('click', () => { if (started) world?.dismissVista(); });
 $('balloon-hud')?.addEventListener('click', event => {
-  const mode = event.target.closest('[data-balloon-mode]')?.dataset.balloonMode;
-  if (!started || !world?.balloon || !mode) return;
-  world.setBalloonMode(mode);
-  toast(mode === 'steer' ? '自己开啦。摇杆前后左右飞。' : '转一圈看河谷。');
+  const picked = event.target.closest('[data-balloon-mode]')?.dataset.balloonMode;
+  if (!started || !world?.balloon || !picked) return;
+  world.setBalloonMode(picked);
+  balloonDriveOpen = picked === 'steer';
+  showBalloon(world.balloonLook());
+  toast(picked === 'steer' ? '自己开啦。摇杆前后左右飞。' : '转一圈看河谷。');
 });
 function holdBalloonClimb(value) {
   return event => {
@@ -1560,7 +1604,7 @@ bindOverlayLayout();
 requestAnimationFrame(frame);
 
 // The browser checks inspect state and exercise the same actions used by the UI.
-window.__valley = { game, get world() { return world; }, get panels() { return panels; }, get story() { return storyApi(); }, touring, start, openPanel, selectItem, changeMode, interact, goHome, goRealm, goXing, openXing, closeXing, startFerry, sceneStats, missingAudio: () => [...missingAudio], voiceReady, playerName: () => playerName, setBuildCell: cell => { buildCell = cell; updateContext(); }, gravityCompare, advanceCrystal: (seconds, flags = {}) => { if (flags?.paused || flags?.hidden) return game.crystalStatus(); game.tick(seconds); return game.crystalStatus(); }, setAge: (band) => { const known = ['little', 'bigger', 'older', 'junior', 'senior']; tutorBand = known.includes(band) ? band : 'little'; }, step(dt = 0.05) { if (!world || world.released || switching) return { realm: game.state.travel?.current || 'he', phase: null, holo: null }; world.update(dt, { x: 0, z: 0 }, false); if (cutscene?.kind === 'stars' || cutscene?.kind === 'ferry') { const done = cutscene.tick(dt, { paused: panelType === 'pause' || !!panels?.isOpen(), hidden: false }); if (done) finishCutscene(); } paintTravel(); return { realm: game.state.travel?.current || 'he', phase: world.balloon?.phase || null, cutscene: cutscene?.kind || null, holo: world.holo?.phase || null }; }, enterHolo() { return world?.beginHolo?.() || false; }, skipHolo() { return world?.skipHolo?.() || false; }, leaveHolo() { return world?.leaveHolo?.() || false; }, holoPhase() { return world?.holo?.phase || 'off'; }, openHoloStage(id) { holoUi?.openStage(id); }, peekStage() { return holoUi?.peek?.() || null; }, setNight(value) { if (world) world.nightOverride = value; if (world) world.vistaMomentOverride = value ? { period: '晚上' } : null; }, sampleStats() { return world?.sampleStats?.() || null; }, quality() { return world?.qualityMode || game.state.settings?.quality || null; } };
+window.__valley = { game, toast, get world() { return world; }, get panels() { return panels; }, get story() { return storyApi(); }, touring, start, openPanel, selectItem, changeMode, interact, goHome, goRealm, goXing, openXing, closeXing, startFerry, sceneStats, missingAudio: () => [...missingAudio], voiceReady, playerName: () => playerName, setBuildCell: cell => { buildCell = cell; updateContext(); }, gravityCompare, advanceCrystal: (seconds, flags = {}) => { if (flags?.paused || flags?.hidden) return game.crystalStatus(); game.tick(seconds); return game.crystalStatus(); }, setAge: (band) => { const known = ['little', 'bigger', 'older', 'junior', 'senior']; tutorBand = known.includes(band) ? band : 'little'; }, step(dt = 0.05) { if (!world || world.released || switching) return { realm: game.state.travel?.current || 'he', phase: null, holo: null }; world.update(dt, { x: 0, z: 0 }, false); if (cutscene?.kind === 'stars' || cutscene?.kind === 'ferry') { const done = cutscene.tick(dt, { paused: panelType === 'pause' || !!panels?.isOpen(), hidden: false }); if (done) finishCutscene(); } paintTravel(); return { realm: game.state.travel?.current || 'he', phase: world.balloon?.phase || null, cutscene: cutscene?.kind || null, holo: world.holo?.phase || null }; }, enterHolo() { return world?.beginHolo?.() || false; }, skipHolo() { return world?.skipHolo?.() || false; }, leaveHolo() { return world?.leaveHolo?.() || false; }, holoPhase() { return world?.holo?.phase || 'off'; }, openHoloStage(id) { holoUi?.openStage(id); }, peekStage() { return holoUi?.peek?.() || null; }, setNight(value) { if (world) world.nightOverride = value; if (world) world.vistaMomentOverride = value ? { period: '晚上' } : null; }, sampleStats() { return world?.sampleStats?.() || null; }, quality() { return world?.qualityMode || game.state.settings?.quality || null; } };
 window.render_game_to_text = () => JSON.stringify({
   coords: 'world x/east, y/up, z/south; integer building grid',
   started, mode, selectedItem, rotation, buildCell, panel: panels?.type() ?? null,

@@ -11,6 +11,7 @@ import {
   chooseObservatorySite,
   clueLine,
   gameDay,
+  guideBrief,
   guideText,
   homeChoices,
   nudgeSpeech,
@@ -28,6 +29,13 @@ import { playUrl, voiceToken } from './voice.js';
 let bound = null;
 let momentOverride = null;
 let domReady = false;
+let guideMode = 'icon';
+let guideChapter = '';
+let briefUntil = 0;
+let pendingBrief = false;
+let lastMove = 0;
+let lastPos = null;
+let idleOffered = false;
 
 function $(id) { return document.getElementById(id); }
 
@@ -70,6 +78,18 @@ function ensureDom() {
   $('story-home-close')?.addEventListener('click', () => { const card = $('story-home'); if (card) card.hidden = true; });
   $('story-home-done')?.addEventListener('click', () => confirmHome());
   $('story-festival')?.addEventListener('click', () => holdFestival());
+  $('tour-guide-pin')?.addEventListener('click', () => {
+    if (guideMode === 'icon') setGuide('brief', 8000);
+    else if (guideMode === 'brief') setGuide('open');
+    else setGuide('icon');
+  });
+  $('tour-guide-more')?.addEventListener('click', () => {
+    if (guideMode === 'open') setGuide('icon');
+    else setGuide('open');
+  });
+  const wake = () => { lastMove = performance.now(); idleOffered = false; };
+  document.addEventListener('pointerdown', wake, true);
+  document.addEventListener('keydown', wake, true);
 }
 
 export function setStoryMoment(moment) { momentOverride = moment; }
@@ -98,7 +118,9 @@ export function storyEnter() {
   if (!bound) return;
   bound.entered = true;
   if (bound.touring) showTour(true);
+  lastMove = performance.now();
   paintGuide();
+  presentGuide();
 }
 
 function momentNow() {
@@ -112,10 +134,75 @@ function showTour(on) {
   if (next) next.hidden = !on;
 }
 
+function setGuide(mode, ms = 8000) {
+  const guide = $('tour-guide');
+  if (!guide) return;
+  if (guideMode === mode && mode !== 'brief') return;
+  guideMode = mode;
+  guide.classList.remove('is-icon', 'is-brief', 'is-open', 'overlay-collapsed', 'overlay-parked', 'overlay-scroll');
+  guide.classList.add(mode === 'open' ? 'is-open' : mode === 'brief' ? 'is-brief' : 'is-icon');
+  if (mode === 'icon') {
+    for (const key of ['left', 'top', 'bottom', 'right', 'width', 'maxHeight', 'transform', 'overflow']) guide.style[key] = '';
+  }
+  const more = $('tour-guide-more');
+  if (more) more.textContent = mode === 'open' ? '收起' : '全文';
+  if (mode === 'brief') briefUntil = performance.now() + ms;
+  bound?.ui?.layout?.();
+}
+
 function paintGuide() {
   if (!bound?.touring) return;
+  const travel = bound.game.state.travel;
+  const chapter = storyChapter(travel);
   const text = $('tour-guide-text');
-  if (text) text.textContent = guideText(bound.game.state.travel);
+  const brief = $('tour-guide-brief');
+  if (text) text.textContent = guideText(travel);
+  if (brief) brief.textContent = guideBrief(travel);
+  if (chapter !== guideChapter) {
+    guideChapter = chapter;
+    pendingBrief = true;
+    idleOffered = false;
+  }
+}
+
+function balloonOrDialog() {
+  const hud = $('balloon-hud');
+  if (hud && !hud.hidden) return true;
+  for (const id of ['story-talk', 'story-home', 'letter-card', 'mei-letter', 'tutor-card', 'travel-cutscene', 'star-cutscene', 'holo-panel', 'xing-sheet']) {
+    const el = $(id);
+    if (el && !el.hidden) return true;
+  }
+  return false;
+}
+
+function presentGuide() {
+  if (!bound?.touring || !bound.entered) return;
+  const now = performance.now();
+  const player = bound.world?.playerPosition;
+  if (player && lastPos && Math.hypot(player.x - lastPos.x, player.z - lastPos.z) > 0.25) {
+    lastMove = now;
+    idleOffered = false;
+  }
+  if (player) lastPos = { x: player.x, z: player.z };
+  if (!lastMove) lastMove = now;
+  if (balloonOrDialog()) {
+    lastMove = now;
+    if (guideMode !== 'icon') setGuide('icon');
+    return;
+  }
+  if (pendingBrief) {
+    pendingBrief = false;
+    setGuide('brief', 8000);
+    return;
+  }
+  if (guideMode === 'brief' && now > briefUntil) {
+    setGuide('icon');
+    return;
+  }
+  if (guideMode === 'icon' && !idleOffered && now - lastMove > 18000) {
+    idleOffered = true;
+    setGuide('brief', 8000);
+  }
 }
 
 function showBanner(text, seconds, audioId, ageBand = null) {
@@ -145,6 +232,7 @@ function skipTourChapter() {
   bound.game.mutate((state) => { applySkip(state, emptyRealm); });
   hideBanner();
   paintGuide();
+  presentGuide();
   bound.ui.toast?.('这一章先记下了。回到河谷时，对应的那一块会亮起来。');
 }
 
@@ -198,7 +286,11 @@ function dusk(world) {
 }
 
 function frame(dt, paused) {
-  if (!bound?.scene || bound.world?.realmId && bound.world.realmId !== 'he') return;
+  if (!bound?.scene) return;
+  if (bound.world?.realmId && bound.world.realmId !== 'he') {
+    if (guideMode !== 'icon') setGuide('icon');
+    return;
+  }
   const state = bound.game.state;
   const height = rideHeight();
   if (!paused && bound.bannerLeft > 0) {
@@ -220,6 +312,7 @@ function frame(dt, paused) {
   considerRestore();
   considerNudge(height);
   paintGuide();
+  presentGuide();
 }
 
 function considerPrologue(height) {

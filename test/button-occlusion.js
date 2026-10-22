@@ -45,7 +45,7 @@ export function buttonBlockers() {
     if (cx < 0 || cy < 0 || cx > window.innerWidth || cy > window.innerHeight) continue;
     const hit = document.elementFromPoint(cx, cy);
     const hitOk = Boolean(hit && (hit === button || button.contains(hit)));
-    if (!hitOk && button.classList.contains('world-label') && hit?.closest?.('button, [role="dialog"]')) continue;
+    if (!hitOk && button.classList.contains('world-label') && hit?.closest?.('button, [role="dialog"], .bottom-dock, .topbar, .action-controls, #joystick')) continue;
     const control = button.closest('#balloon-hud, #bounce-hud, .bottom-dock, .minimap-card, .topbar, .action-controls, #travel-go, #travel-go-mei, #travel-home, #ri-actions, #mei-actions, #xing-actions, #holo-bar, #overlay-more');
     const covers = [];
     if (control) {
@@ -63,4 +63,24 @@ export function buttonBlockers() {
     }
   }
   return blocked;
+}
+
+export function arrowClear() {
+  const arrow = document.getElementById('vista-arrow');
+  if (!arrow || arrow.hidden) return { ok: true, hidden: true, hits: [] };
+  const style = getComputedStyle(arrow);
+  if (style.display === 'none' || style.visibility === 'hidden') return { ok: true, hidden: true, hits: [] };
+  const rect = arrow.getBoundingClientRect();
+  const hits = [];
+  const selectors = '#balloon-hud, #tour-guide, #vista-card, #land-question, #vista-stamp, .minimap-card, .bottom-dock, .topbar, .wish-card, .action-controls, #story-banner, #toast-root .toast';
+  for (const el of document.querySelectorAll(selectors)) {
+    if (el.hidden || el.closest('[hidden]') || el.classList.contains('overlay-parked')) continue;
+    const boxStyle = getComputedStyle(el);
+    if (boxStyle.display === 'none' || boxStyle.visibility === 'hidden') continue;
+    const box = el.getBoundingClientRect();
+    if (box.width < 8 || box.height < 8) continue;
+    const overlap = rect.left < box.right - 1 && rect.right > box.left + 1 && rect.top < box.bottom - 1 && rect.bottom > box.top + 1;
+    if (overlap) hits.push(el.id || el.className?.toString?.().slice(0, 40) || el.tagName);
+  }
+  return { ok: hits.length === 0, hidden: false, hits };
 }

@@ -144,6 +144,19 @@ export function storyFog({ travel, ageBand = null, height = 0, reveal = null } =
   };
 }
 
+export function guideBrief(travel) {
+  const lines = {
+    prologue: '先去西边看石盘。',
+    ri: '下一步：去日谷找潮之片。',
+    mei: '下一步：去美谷找光之片。',
+    xing: '下一步：坐热气球找星之片。',
+    finale: '下一步：选 3 个地方，刻家之片。',
+    festival: '想办星河节，就点今天就办。',
+    done: '想去哪一谷，都由你决定。',
+  };
+  return lines[storyChapter(travel)] || lines.prologue;
+}
+
 export function guideText(travel) {
   const chapter = storyChapter(travel);
   const lines = {

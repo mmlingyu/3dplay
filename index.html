@@ -33,14 +33,26 @@
             <button type="button" id="tour-next" class="secondary-btn" hidden>跳到下一章</button>
           </div>
         </header>
-        <aside class="wish-card" id="wish-card">
-          <div class="wish-kicker"><span data-icon="heart"></span> 一个小点子<button class="wish-dismiss" id="wish-dismiss" aria-label="收起小点子"><span data-icon="close"></span></button></div>
-          <div class="wish-title" id="wish-title">铺一块自己的小院</div>
-          <div class="wish-description" id="wish-description">试着铺 6 格木地板。也可以先去逛逛。</div>
-          <div class="wish-progress" id="wish-progress"></div>
-          <button class="wish-read" id="wish-read" aria-label="听听这个点子"><span data-icon="sound"></span> 听一听</button>
+        <aside class="wish-card is-folded" id="wish-card">
+          <button type="button" id="wish-toggle" class="fold-toggle" aria-expanded="false" aria-label="点子">点子</button>
+          <div class="wish-body">
+            <div class="wish-kicker"><span data-icon="heart"></span> 一个小点子<button class="wish-dismiss" id="wish-dismiss" aria-label="收起小点子"><span data-icon="close"></span></button></div>
+            <div class="wish-title" id="wish-title">铺一块自己的小院</div>
+            <div class="wish-description" id="wish-description">试着铺 6 格木地板。也可以先去逛逛。</div>
+            <div class="wish-progress" id="wish-progress"></div>
+            <button class="wish-read" id="wish-read" aria-label="听听这个点子"><span data-icon="sound"></span> 听一听</button>
+          </div>
         </aside>
-        <aside class="minimap-card"><div class="minimap-title"><span data-icon="map"></span> 我的河谷 <span class="map-north">北 ↑</span></div><canvas id="minimap" width="160" height="132" aria-label="河谷地图，绿色点是小谷的位置"></canvas><div class="minimap-caption">林间 · 工坊 · 数字乐园 · 菜地 · 诗台 · 热气球草场</div><button id="vista-map-button" class="secondary-btn" type="button" aria-label="远处的谷">远处的谷</button><button id="land-button" class="secondary-btn">开垦探索</button></aside>
+        <aside class="minimap-card is-folded">
+          <button type="button" id="map-toggle" class="fold-toggle" aria-expanded="false" aria-label="地图">地图</button>
+          <div class="minimap-body">
+            <div class="minimap-title"><span data-icon="map"></span> 我的河谷 <span class="map-north">北 ↑</span></div>
+            <canvas id="minimap" width="160" height="132" aria-label="河谷地图，绿色点是小谷的位置"></canvas>
+            <div class="minimap-caption">林间 · 工坊 · 数字乐园 · 菜地 · 诗台 · 热气球草场</div>
+            <button id="vista-map-button" class="secondary-btn" type="button" aria-label="远处的谷">远处的谷</button>
+            <button id="land-button" class="secondary-btn">开垦探索</button>
+          </div>
+        </aside>
       </div>
       <section id="land-question" hidden role="region" aria-labelledby="land-question-title">
         <strong id="land-question-title">前面还没整理，想去看看吗？</strong>
@@ -122,18 +134,18 @@
       <div id="balloon-hud" hidden>
         <strong id="balloon-title">热气球游览</strong>
         <span id="balloon-note">转一圈看河谷</span>
-        <button type="button" id="balloon-voyage" class="primary-btn" hidden aria-label="看风景去日谷">看风景去日谷</button>
-        <button type="button" id="balloon-voyage-mei" class="primary-btn" hidden aria-label="看风景去美谷">看风景去美谷</button>
-        <button type="button" id="balloon-stars" class="primary-btn" hidden aria-label="飞向星星（外星谷）">飞向星星（外星谷）</button>
-        <div id="balloon-modes">
-          <button type="button" id="balloon-orbit" data-balloon-mode="orbit" aria-pressed="true">转一圈</button>
-          <button type="button" id="balloon-steer" data-balloon-mode="steer" aria-pressed="false">自己开</button>
+        <div id="balloon-routes">
+          <button type="button" id="balloon-voyage" class="primary-btn" hidden aria-label="看风景去日谷">去日谷</button>
+          <button type="button" id="balloon-voyage-mei" class="primary-btn" hidden aria-label="看风景去美谷">去美谷</button>
+          <button type="button" id="balloon-stars" class="primary-btn" hidden aria-label="飞向星星（外星谷）">飞向星星</button>
         </div>
-        <div id="balloon-height">
+        <button type="button" id="balloon-steer" data-balloon-mode="steer" aria-pressed="false">自己开</button>
+        <div id="balloon-drive" hidden>
+          <button type="button" id="balloon-orbit" data-balloon-mode="orbit" aria-pressed="true">转一圈</button>
           <button type="button" id="balloon-up">升高</button>
           <button type="button" id="balloon-down">降低</button>
         </div>
-        <button type="button" id="balloon-land" class="primary-btn">降落到草坪基地</button>
+        <button type="button" id="balloon-land" class="primary-btn" aria-label="降落到草坪基地">降落</button>
       </div>
       <button type="button" id="vista-arrow" class="vista-arrow" hidden aria-label="看向那边">→</button>
       <div id="vista-card" hidden role="status">
@@ -170,7 +182,7 @@
           <button class="mode-btn" data-mode="build"><span data-icon="hammer"></span><span>搭建</span></button>
           <button class="mode-btn" data-mode="remove"><span data-icon="undo"></span><span>拆除</span></button>
         </div>
-        <div class="hotbar" id="hotbar"></div>
+        <div class="hotbar" id="hotbar" hidden></div>
         <div class="dock-tools">
           <button class="icon-btn" id="undo-button" aria-label="撤销刚才的搭建" data-tooltip="撤销搭建"><span data-icon="undo"></span></button>
           <span class="dock-divider"></span>
@@ -194,9 +206,13 @@
         <button type="button" id="story-skip" class="secondary-btn">跳过</button>
       </div>
       <button type="button" id="story-disk" hidden aria-label="星河图石盘">石盘</button>
-      <aside id="tour-guide" hidden>
-        <strong>下一步</strong>
-        <p id="tour-guide-text">先看雾慢慢进来。</p>
+      <aside id="tour-guide" class="is-icon" hidden>
+        <button type="button" id="tour-guide-pin" aria-label="下一步">下一步</button>
+        <div id="tour-guide-body">
+          <p id="tour-guide-brief">先去西边看石盘。</p>
+          <p id="tour-guide-text">先看雾慢慢进来。</p>
+          <button type="button" id="tour-guide-more">全文</button>
+        </div>
       </aside>
       <section id="story-talk" hidden role="dialog" aria-label="河谷的人">
         <strong id="story-talk-name">船伯</strong>

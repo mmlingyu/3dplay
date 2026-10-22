@@ -3,7 +3,7 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
-import { buttonBlockers } from './button-occlusion.js';
+import { arrowClear, buttonBlockers } from './button-occlusion.js';
 
 const url = process.env.GAME_TEST_URL || 'http://127.0.0.1:5174';
 const shots = '/opt/cursor/artifacts';
@@ -65,19 +65,15 @@ async function buttons(page, label) {
 }
 
 async function showHints(page) {
-  await page.evaluate(() => {
-    const root = document.getElementById('toast-root');
-    root.replaceChildren();
-    for (const text of ['坐稳，热气球起飞啦。转一圈看整个河谷。', '看那边，有一座认得出来的影子。']) {
-      const el = document.createElement('div');
-      el.className = 'toast';
-      el.textContent = text;
-      root.append(el);
-    }
+  const count = await page.evaluate(() => {
+    __valley.toast('坐稳，热气球起飞啦。转一圈看整个河谷。');
+    __valley.toast('看那边，有一座认得出来的影子。');
+    return document.querySelectorAll('#toast-root .toast').length;
   });
   await page.evaluate(() => new Promise((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(resolve));
   }));
+  return count;
 }
 
 async function flyNorth(page) {
@@ -113,6 +109,69 @@ try {
     const { page, errors, api } = await boot(context);
     const tag = viewport.name;
 
+    await page.waitForTimeout(2200);
+    const quiet = await page.evaluate(() => {
+      const brief = document.getElementById('tour-guide-brief');
+      const full = document.getElementById('tour-guide-text');
+      const guide = document.getElementById('tour-guide');
+      const briefShown = brief && getComputedStyle(brief).display !== 'none';
+      return {
+        balloon: document.getElementById('balloon-hud').hidden,
+        ferry: document.getElementById('travel-go').hidden && document.getElementById('travel-go-mei').hidden,
+        hotbar: document.getElementById('hotbar').hidden,
+        map: document.querySelector('.minimap-card').classList.contains('is-folded'),
+        wish: document.getElementById('wish-card').classList.contains('is-folded'),
+        saveLive: document.getElementById('save-status').classList.contains('is-live'),
+        accountLive: document.getElementById('account-chip').classList.contains('is-live'),
+        saveProblem: document.getElementById('save-status').classList.contains('is-problem'),
+        briefShown,
+        brief: brief?.textContent || '',
+        full: full?.textContent || '',
+        clipped: Boolean(briefShown && brief.scrollWidth > brief.clientWidth + 2),
+        icon: guide.classList.contains('is-icon'),
+      };
+    });
+    check(`${tag} 没飞时不显示热气球`, quiet.balloon === true);
+    check(`${tag} 没到渡口不显示渡口`, quiet.ferry === true);
+    check(`${tag} 采集时建造格收起`, quiet.hotbar === true);
+    check(`${tag} 地图平时收起`, quiet.map === true);
+    check(`${tag} 点子平时收起`, quiet.wish === true);
+    check(`${tag} 状态标签只闪一下`, quiet.saveProblem || (quiet.saveLive === false && quiet.accountLive === false));
+    if (quiet.briefShown) {
+      check(`${tag} 下一步是完整短句`, /。$/.test(quiet.brief) && quiet.clipped === false && quiet.full.length > quiet.brief.length);
+    } else check(`${tag} 下一步平时是小图标`, quiet.icon === true);
+    await page.evaluate(() => {
+      const pin = document.getElementById('tour-guide-pin');
+      for (let i = 0; i < 4 && !document.getElementById('tour-guide').classList.contains('is-icon'); i += 1) pin.click();
+    });
+    await page.click('#tour-guide-pin');
+    const opened = await page.evaluate(() => {
+      const brief = document.getElementById('tour-guide-brief');
+      const guide = document.getElementById('tour-guide');
+      return {
+        brief: guide.classList.contains('is-brief'),
+        text: brief.textContent,
+        clipped: brief.scrollWidth > brief.clientWidth + 2,
+        full: document.getElementById('tour-guide-text').textContent,
+      };
+    });
+    check(`${tag} 点下一步出现完整一句`, opened.brief && /。$/.test(opened.text) && opened.clipped === false && opened.full.length > opened.text.length);
+    await page.click('#tour-guide-more');
+    const fullOpen = await page.evaluate(() => {
+      const text = document.getElementById('tour-guide-text');
+      return document.getElementById('tour-guide').classList.contains('is-open') && getComputedStyle(text).display !== 'none' && text.textContent.length > 8;
+    });
+    check(`${tag} 全文能展开`, fullOpen);
+    await page.click('#tour-guide-more');
+    check(`${tag} 全文可以收起`, await page.evaluate(() => document.getElementById('tour-guide').classList.contains('is-icon')));
+    await page.click('[data-mode="build"]');
+    check(`${tag} 搭建时建造格出现`, await page.locator('#hotbar').isVisible());
+    await page.click('[data-mode="gather"]');
+    check(`${tag} 离开搭建后建造格消失`, await page.locator('#hotbar').isHidden());
+    await page.click('#map-toggle');
+    check(`${tag} 点地图才展开`, await page.evaluate(() => !document.querySelector('.minimap-card').classList.contains('is-folded') && !document.getElementById('vista-map-button').hidden && !document.getElementById('land-button').hidden));
+    await page.click('#map-toggle');
+
     if (viewport.voice) {
       const voice = await page.evaluate(async () => {
         window.__voice.plays = [];
@@ -137,7 +196,26 @@ try {
 
     await flyNorth(page);
     check(`${tag} 飞行中不弹出开垦`, await page.evaluate(() => document.getElementById('land-question').hidden));
-    await showHints(page);
+    const flight = await page.evaluate(() => {
+      const visibleLand = [...document.querySelectorAll('button')].filter((el) => {
+        if (el.hidden || el.closest('[hidden]')) return false;
+        const style = getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden') return false;
+        return /降落/.test(`${el.textContent} ${el.getAttribute('aria-label') || ''}`);
+      }).map((el) => el.id || el.textContent);
+      return {
+        hud: document.getElementById('balloon-hud').hidden === false,
+        action: document.getElementById('action-button').hidden,
+        drive: document.getElementById('balloon-drive').hidden,
+        lands: visibleLand,
+        guide: document.getElementById('tour-guide').classList.contains('is-icon') || document.getElementById('tour-guide').hidden,
+      };
+    });
+    check(`${tag} 飞行才出现热气球面板`, flight.hud && flight.drive && flight.action);
+    check(`${tag} 降落只留一个`, flight.lands.length === 1);
+    check(`${tag} 飞行时下一步收成图标`, flight.guide);
+    const hintCount = await showHints(page);
+    check(`${tag} 一次只有一条提示`, hintCount === 1);
     const hints = await page.evaluate(() => {
       const map = document.querySelector('.minimap-card').getBoundingClientRect();
       const toasts = [...document.querySelectorAll('#toast-root .toast')].map((el) => el.getBoundingClientRect());
@@ -148,7 +226,7 @@ try {
       const outside = [];
       for (const id of ids) {
         const el = document.getElementById(id);
-        if (!el || el.hidden) continue;
+        if (!el || el.hidden || el.closest('[hidden]')) continue;
         const rect = el.getBoundingClientRect();
         const inside = rect.top >= hud.top - 1 && rect.bottom <= hud.bottom + 1 && rect.left >= hud.left - 1 && rect.right <= hud.right + 1;
         if (!inside) outside.push(id);
@@ -157,8 +235,34 @@ try {
     });
     check(`${tag} 小提示不压住地图`, hints.covered === false);
     check(`${tag} 热气球按钮都在面板里面`, hints.outside.length === 0 && hints.scrolling === false);
+    const aim = await page.evaluate(arrowClear);
+    check(`${tag} 方向箭头不压住面板`, aim.ok === true);
     await buttons(page, `${tag} 热气球`);
     await page.screenshot({ path: viewport.shot });
+    await page.click('#balloon-steer');
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const drive = await page.evaluate(() => {
+      const hud = document.getElementById('balloon-hud').getBoundingClientRect();
+      const ids = ['balloon-up', 'balloon-down', 'balloon-orbit'];
+      const outside = [];
+      const missed = [];
+      for (const id of ids) {
+        const el = document.getElementById(id);
+        if (!el || el.hidden || el.closest('[hidden]')) {
+          missed.push(id);
+          continue;
+        }
+        const rect = el.getBoundingClientRect();
+        const inside = rect.top >= hud.top - 1 && rect.bottom <= hud.bottom + 1 && rect.left >= hud.left - 1 && rect.right <= hud.right + 1;
+        if (!inside) outside.push(id);
+        const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        if (!hit || (hit !== el && !el.contains(hit))) missed.push(id);
+      }
+      return { outside, missed, steerHidden: document.getElementById('balloon-steer').hidden };
+    });
+    check(`${tag} 自己开才出现升高和降低`, drive.outside.length === 0 && drive.missed.length === 0 && drive.steerHidden);
+    await page.click('#balloon-orbit');
+    check(`${tag} 转一圈后收回驾驶按钮`, await page.evaluate(() => document.getElementById('balloon-drive').hidden === true));
 
     await page.evaluate(() => {
       if (__valley.world.balloon) __valley.world.finishBalloon(true);
@@ -174,6 +278,7 @@ try {
     });
     await pump(page, 0.4);
     await page.locator('#travel-go').waitFor({ state: 'visible' });
+    check(`${tag} 到了渡口才出现渡口按钮`, await page.evaluate(() => document.getElementById('balloon-hud').hidden && document.getElementById('travel-go').hidden === false));
     await buttons(page, `${tag} 渡口`);
 
     await page.locator('#travel-go').click();
