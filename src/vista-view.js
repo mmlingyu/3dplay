@@ -76,6 +76,7 @@ function addMesh(group, geometry, material, vistaId, pick) {
 export function mountVistas(scene) {
   const group = new THREE.Group();
   group.name = 'vistas';
+  group.userData.live = true;
   const pick = [];
   const materials = [];
   const ri = new THREE.Group();

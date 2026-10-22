@@ -13,6 +13,7 @@ import { chooseDockSite } from './realm-data.js';
 import { DISCOVER_HEIGHT, VISTAS, activeBottle, nearestVista, vistaClarity } from './vista-data.js';
 import { ballGravity, playerFall } from './motion-gravity.js';
 import { trackListeners, trackWorldCreated, trackWorldReleased } from './scene-stats.js';
+import { rebuildFastBatch, refreshFastLive } from './fast-batch.js';
 
 const C = { grass: '#a8bf7a', leaf: '#789957', leafLight: '#b6c785', soil: '#b48d64', wood: '#b97944', stone: '#8b9c9b', cream: '#fff5db', roof: '#c98063', water: '#8ebdc0', green: '#426b58' };
 const NAME_SHOW_DISTANCE = 3;
@@ -106,17 +107,17 @@ export class RiverWorld {
     this.mat('door', '#8f6238'); this.mat('window', '#9ec9c4'); this.mat('bed', '#efe0b8'); this.mat('fence', C.wood); this.mat('pot', '#c47a60'); this.mat('wreath', '#5f8a48'); this.mat('lantern', '#e0a35a'); this.mat('flag', '#d36b5a'); this.mat('balloon', '#e27a5f'); this.mat('paper', '#f7f1e4'); this.mat('carp', '#e07a4a');
     this.groundMeshes = []; this.terrain(); this.landmarks(); this.details(); this.batchDecorations();
     this.creation = new CreationWorld(this);
-    this.player = this.avatar(); this.scene.add(this.player);
+    this.player = this.avatar(); this.player.userData.live = true; this.scene.add(this.player);
     this.swimRipple=new THREE.Mesh(new THREE.RingGeometry(.42,.46,32),new THREE.MeshBasicMaterial({color:'#f3f6df',transparent:true,opacity:.48,side:THREE.DoubleSide,depthWrite:false}));
-    this.swimRipple.rotation.x=-Math.PI/2;this.swimRipple.visible=false;this.scene.add(this.swimRipple);
+    this.swimRipple.rotation.x=-Math.PI/2;this.swimRipple.visible=false;this.swimRipple.userData.live=true;this.scene.add(this.swimRipple);
     this.selectionRing = new THREE.Mesh(new THREE.RingGeometry(.55, .63, 40), new THREE.MeshBasicMaterial({ color: '#fff3be', side: THREE.DoubleSide, transparent: true, opacity: .85, depthWrite: false }));
-    this.selectionRing.rotation.x = -Math.PI / 2; this.selectionRing.visible = false; this.scene.add(this.selectionRing);
-    this.frontierPreview=new THREE.Group();this.frontierPreview.visible=false;this.scene.add(this.frontierPreview);
+    this.selectionRing.rotation.x = -Math.PI / 2; this.selectionRing.visible = false; this.selectionRing.userData.live = true; this.scene.add(this.selectionRing);
+    this.frontierPreview=new THREE.Group();this.frontierPreview.visible=false;this.frontierPreview.userData.live=true;this.scene.add(this.frontierPreview);
     this.frontierFillMaterial=new THREE.MeshBasicMaterial({color:C.grass,transparent:true,opacity:.28,depthWrite:false});
     this.frontierLineMaterial=new THREE.MeshBasicMaterial({color:'#fff3be',transparent:true,opacity:.85,depthWrite:false});
     this.frontierFill=new THREE.Mesh(this.box,this.frontierFillMaterial);this.frontierPreview.add(this.frontierFill);
     this.frontierLine=new THREE.Mesh(this.box,this.frontierLineMaterial);this.frontierPreview.add(this.frontierLine);
-    this.preview = new THREE.Group(); this.previewMaterial = new THREE.MeshStandardMaterial({ color: '#fff0ae', transparent: true, opacity: .46, roughness: .9, depthWrite: false, side: THREE.DoubleSide }); this.scene.add(this.preview); this.preview.visible = false;
+    this.preview = new THREE.Group(); this.preview.userData.live = true; this.previewMaterial = new THREE.MeshStandardMaterial({ color: '#fff0ae', transparent: true, opacity: .46, roughness: .9, depthWrite: false, side: THREE.DoubleSide }); this.scene.add(this.preview); this.preview.visible = false;
     this.roofMat = this.mats.roof.clone(); this.roofMat.side = THREE.DoubleSide;
     this.particles = []; this.balls = []; this.ballMaterial = new THREE.MeshStandardMaterial({ color: '#d9ac70', map: this.mats.wood.map, roughness: .83 }); this.minimap = document.getElementById('minimap');
     this.vistaPick = [];
@@ -128,6 +129,7 @@ export class RiverWorld {
       if (this.released) return;
       this.vistaView = mod.mountVistas(this.scene);
       this.vistaPick = this.vistaView.pick;
+      this.fastDirty = true;
     }).catch((error) => { console.warn('远景还没装上', error); });
     this.bindPointer(); this.resizeObserver = new ResizeObserver(() => this.resize()); this.resizeObserver.observe(canvas); this.resize();
     this.updateCamera(1, true); this.renderer.render(this.scene, this.camera);
@@ -172,7 +174,7 @@ export class RiverWorld {
     for (let x = -16; x < 16; x++) for (let z = -16; z < 16; z++) { const y = terrainHeight(x, z); matrix.makeTranslation(x, y - .9, z); land.setMatrixAt(n, matrix); color.setScalar(.93 + seeded(x, z) * .13); land.setColorAt(n++, color); }
     land.receiveShadow = true; this.scene.add(land); this.groundMeshes.push(land);
     const water = new THREE.Mesh(new THREE.PlaneGeometry(3, 33, 1, 32), new THREE.MeshStandardMaterial({ color: C.water, transparent: true, opacity: .84, roughness: .24, metalness: .05 })); water.rotation.x = -Math.PI / 2; water.position.set(4, WATER_RULES.riverLevel, -.5); water.receiveShadow = true; this.scene.add(water); this.water = water;
-    this.ripples = new THREE.Group(); this.scene.add(this.ripples);
+    this.ripples = new THREE.Group(); this.ripples.userData.batchLive = true; this.scene.add(this.ripples);
     for (let i = 0; i < 16; i++) { const line = new THREE.Mesh(new THREE.PlaneGeometry(.3 + seeded(i, 4) * .8, .025), new THREE.MeshBasicMaterial({ color: '#e0eddb', transparent: true, opacity: .35, depthWrite: false })); line.rotation.x = -Math.PI / 2; line.position.set(3 + seeded(i, 6) * 2, -.609, -15 + i * 2); this.ripples.add(line); }
     const path = new THREE.InstancedMesh(new THREE.BoxGeometry(.92, .055, .92), new THREE.MeshStandardMaterial({ color: '#d5c49c', roughness: 1 }), 130); let count = 0;
     for (let x = -13; x <= 11; x++) for (let z = -6; z <= 7; z++) {
@@ -234,22 +236,25 @@ export class RiverWorld {
     const kiln = new THREE.Group(); kiln.position.set(-2.6, 0, -4.5); this.scene.add(kiln);
     this.cube(kiln, 'brick', [0, .65, 0], [1.25, 1.3, 1.25], true); this.cube(kiln, 'dark', [0, .44, .635], [.68, .58, .035], true); this.cube(kiln, 'wood', [0, .22, .68], [.55, .09, .12]); this.cube(kiln, 'brick', [.3, 1.67, -.3], [.4, .8, .4]);
     this.kilnGlow = this.cube(kiln, new THREE.MeshStandardMaterial({ color: '#f1b875', emissive: '#eab070', emissiveIntensity: .15 }), [0, .45, .66], [.43, .24, .02]);
+    this.kilnGlow.userData.live = true;
     const clayMat = new THREE.MeshStandardMaterial({ color: '#6e3d2a', roughness: 0.72, emissive: '#6e3d2a', emissiveIntensity: 0.45 });
     this.kilnPiece = this.mesh(kiln, new THREE.BoxGeometry(0.58, 0.2, 0.28), clayMat, [0, 0.4, 0.74]);
-    this.kilnPiece.visible = false;
+    this.kilnPiece.visible = false; this.kilnPiece.userData.live = true;
     this.kilnCrack = this.mesh(kiln, new THREE.BoxGeometry(0.045, 0.24, 0.02), new THREE.MeshBasicMaterial({ color: '#2c1814' }), [0.05, 0.42, 0.9]);
     this.kilnCrack.rotation.z = 0.7;
-    this.kilnCrack.visible = false;
+    this.kilnCrack.visible = false; this.kilnCrack.userData.live = true;
     this.kilnSteam = [0, 1, 2, 3].map(() => {
       const puff = this.mesh(kiln, new THREE.SphereGeometry(0.14, 10, 8), new THREE.MeshBasicMaterial({ color: '#f4fbff', transparent: true, opacity: 0, depthWrite: false }), [0, 0.8, 0.74]);
       puff.castShadow = false;
       puff.visible = false;
+      puff.userData.live = true;
       return puff;
     });
     this.kilnFlames = ['#ffd27a', '#ff8a32', '#ffb15a'].map((color, index) => {
       const flame = this.mesh(kiln, new THREE.SphereGeometry(0.12, 10, 8), new THREE.MeshBasicMaterial({ color }), [(index - 1) * 0.16, 0.48, 0.7]);
       flame.castShadow = false;
       flame.visible = false;
+      flame.userData.live = true;
       return flame;
     });
     this.kilnFireLight = new THREE.PointLight('#ff9a45', 0, 3.2);
@@ -509,7 +514,7 @@ export class RiverWorld {
     }
     this.mesh(g, new THREE.CylinderGeometry(1.82, 1.88, 0.16, 6), 'mint', [0, 0.92, 0]);
     this.bounceMat = this.mesh(g, new THREE.CylinderGeometry(1.58, 1.58, 0.1, 6), 'bounce', [0, 1.02, 0]);
-    this.bounceMat.userData.baseY = 1.02;
+    this.bounceMat.userData.baseY = 1.02; this.bounceMat.userData.live = true;
     this.mesh(g, new THREE.CylinderGeometry(0.22, 0.22, 0.08, 6), 'cream', [0, 1.08, 0]);
     this.cube(g, 'wood', [-2.05, 0.22, 0], [1.35, 0.12, 0.78], true);
     this.cube(g, 'wood', [-1.55, 0.52, 0], [0.9, 0.12, 0.7], true);
@@ -550,7 +555,7 @@ export class RiverWorld {
     this.sign(lawn, 'balloon', [0, 1.35, -2.35]);
     this.target(lawn, { id: 'balloon-base', type: 'balloon', name: BALLOON_NAME, action: '乘坐热气球', label: '热气球', hint: '这是专门的热气球草场。坐上热气球，飞起来看整个河谷。想下来就点降落到草坪基地。' });
     const craft = new THREE.Group(); craft.position.set(x, 0, z); this.scene.add(craft);
-    this.balloonCraft = craft;
+    this.balloonCraft = craft; craft.userData.batchRoot = true;
     this.cube(craft, 'wood', [0, 0.42, 0], [0.95, 0.55, 0.95], true);
     this.cube(craft, 'cream', [0, 0.68, 0], [1.02, 0.08, 1.02], true);
     for (const sx of [-0.42, 0.42]) for (const sz of [-0.42, 0.42]) this.cube(craft, 'wood', [sx, 0.78, sz], [0.06, 0.28, 0.06]);
@@ -591,7 +596,7 @@ export class RiverWorld {
     const trees = [[-13,-9,1.2],[-11,-12,1.35],[-7,-11,.92],[-14,-4,1.05],[-12,10,1.2],[-8,12,.93],[12,-10,1.2],[14,-4,.95],[12,11,1.05],[-3,-12,1.15],[7,-12,.95],[-13,14,.92],[14,14,1.2],[-14,-14,1.25]];
     trees.forEach(([x,z,s],i) => this.tree(x,z,s,i%3 ? 'leaf' : 'leafLight'));
     for (let i=0;i<12;i++) { const x=-15+seeded(i,22)*30,z=-15+seeded(i,23)*30; if(x>2&&x<6)continue; const stone=this.cube(this.scene,'stone',[x,terrainHeight(Math.round(x),Math.round(z))+.15,z],[.3,.3,.4],true);stone.rotation.y=i; }
-    this.clouds = new THREE.Group(); this.scene.add(this.clouds);
+    this.clouds = new THREE.Group(); this.clouds.userData.batchRoot = true; this.scene.add(this.clouds);
     const cloudMat = new THREE.MeshBasicMaterial({color:'#f6f5df',transparent:true,opacity:.77,depthWrite:false});
     [[-12,11,-22],[10,13,-28],[21,10,-16]].forEach(([x,y,z])=>{const g=new THREE.Group();g.position.set(x,y,z);for(let i=0;i<3;i++)this.mesh(g,new THREE.SphereGeometry(1,10,8),cloudMat,[(i-1)*1.6,i===1?.35:0,0],[1.8,.65,.65]);this.clouds.add(g);});
     this.skyScratch=new THREE.Color();this.grassScratch=new THREE.Color();this.lifeKey='';
@@ -702,13 +707,21 @@ export class RiverWorld {
     return g;
   }
   applyPictureQuality(mode) {
-    // Fast preset skips the shadow map. Block data, build placement, and the camera stay as they are.
+    // Fast preset skips the shadow map and combines repeated static meshes. The camera stays as it is.
     const fine = mode === 'fine';
     const next = fine ? 'fine' : 'fast';
+    const cap = fine ? 1.8 : 1.15;
+    const ratio = Math.min(window.devicePixelRatio || 1, cap);
+    if (this.renderer.getPixelRatio() !== ratio) {
+      this.renderer.setPixelRatio(ratio);
+      const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
+      if (w && h) this.renderer.setSize(w, h, false);
+    }
     if (this.pictureQuality === next) return;
     this.pictureQuality = next;
     this.renderer.shadowMap.enabled = fine;
     this.sun.castShadow = fine;
+    this.fastDirty = true;
   }
   sync(state) {
     this.applyPictureQuality(state?.settings?.quality);
@@ -748,6 +761,7 @@ export class RiverWorld {
     this.placeBottle(state);
     if (!this.dockReady) this.ensureDock(state.blocks);
     this.storySync?.(state);
+    this.fastDirty = true;
     const plants=state.garden||[]; const plantSignature=plants.map(p=>`${p.id}:${p.planted}:${Math.floor((p.age||0)/18)}:${p.moisture}`).join('|');
     if(plantSignature!==this.plantSignature) {this.plantSignature=plantSignature;for(const g of this.plantGroups.values())this.scene.remove(g);this.plantGroups.clear();plants.forEach((p,i)=>{if(!p.planted)return;const x=Number.isFinite(p.x)?p.x:9.5+(i%3-1)*1.3,z=Number.isFinite(p.z)?p.z:5+Math.floor(i/3)*1.3;const g=new THREE.Group();g.position.set(x,.2,z);const stage=Math.min(5,Math.floor((p.age||0)/18));const h=.12+stage*.12;this.cube(g,'leaf',[0,h/2,0],[.045,h,.045]);for(let j=0;j<Math.min(stage+1,5);j++){const sign=j%2?1:-1;const leaf=this.mesh(g,new THREE.SphereGeometry(.16,8,6),'leaf',[sign*.15,.11+j*.085,0],[1,.38,.62]);leaf.rotation.z=sign*.3;}if(stage>=3)this.mesh(g,new THREE.SphereGeometry(.07,6,6),'cream',[.15,h,.01]);if(stage>=4)for(const sign of[-1,1])this.mesh(g,new THREE.CapsuleGeometry(.035,.18,2,6),'leafLight',[sign*.2,h*.7,.04],[1,1,1]);if(p.moisture>=3){const wet=new THREE.Mesh(new THREE.PlaneGeometry(.85,.85),this.water.material);wet.rotation.x=-Math.PI/2;wet.position.y=.008;g.add(wet);}this.scene.add(g);this.plantGroups.set(p.id,g);});}
   }
@@ -776,7 +790,8 @@ export class RiverWorld {
     const from = previous
       ? { x: previous.x + (previous.w - 1) / 2 - block.x, z: previous.z + (previous.d - 1) / 2 - block.z, sx: previous.w / w, sz: previous.d / d }
       : { x: to.x, z: to.z, sx: w === 1 && d === 1 ? 0.35 : 1 / w, sz: w === 1 && d === 1 ? 0.35 : 1 / d };
-    if (Math.abs(from.sx - 1) < 0.02 && Math.abs(from.sz - 1) < 0.02 && Math.abs(from.x - to.x) < 0.02 && Math.abs(from.z - to.z) < 0.02) return;
+      if (Math.abs(from.sx - 1) < 0.02 && Math.abs(from.sz - 1) < 0.02 && Math.abs(from.x - to.x) < 0.02 && Math.abs(from.z - to.z) < 0.02) return;
+    this.fastDirty = true;
     group.userData.roofAnim = { shell, from, to, t: 0, dur: previous ? 0.72 : 0.62 };
     shell.position.x = from.x;
     shell.position.z = from.z;
@@ -794,7 +809,7 @@ export class RiverWorld {
       anim.shell.position.x = anim.from.x + (anim.to.x - anim.from.x) * k;
       anim.shell.position.z = anim.from.z + (anim.to.z - anim.from.z) * k;
       anim.shell.scale.set(anim.from.sx + (anim.to.sx - anim.from.sx) * k, 1, anim.from.sz + (anim.to.sz - anim.from.sz) * k);
-      if (anim.t >= 1) delete host.userData.roofAnim;
+      if (anim.t >= 1) { delete host.userData.roofAnim; this.fastDirty = true; }
     }
   }
   syncLife(state){
@@ -819,6 +834,7 @@ export class RiverWorld {
       this.scene.add(g);
       this.target(g,{id:plant.id,type:'flora',name:'蒲公英',action:'观察',panel:'life',context:{id:plant.id},hint:'一株蒲公英 · 点观察，看看它怎样变化'});
     }
+    this.fastDirty = true;
   }
   syncLand(state){
     const wanted=new Set([...(state.land.opened||[]), ...FACILITY_CHUNKS]),changedSeed=this.landSeed!==state.land.seed;
@@ -852,7 +868,7 @@ export class RiverWorld {
       if(e.kind==='treasure'){
         this.cube(g,'wood',[0,.3,0],[.85,.6,.65],true);this.cube(g,'wood',[0,claimed?.95:.63,claimed?-.28:0],[.9,.12,.7],true);
       }else if(e.kind==='animal'){
-        const body=new THREE.Group();g.add(body);g.userData.animalBody=body;
+        const body=new THREE.Group();body.userData.live=true;g.add(body);g.userData.animalBody=body;
         this.mesh(body,this.floraGeometry,'cream',[0,.26,0],[.25,.25,.32]);this.mesh(body,this.floraGeometry,'cream',[0,.55,.17],[.2,.2,.2]);
         for(const x of [-.09,.09]){this.mesh(body,this.floraGeometry,'cream',[x,.81,.15],[.055,.25,.065]);this.mesh(body,this.floraGeometry,'wood',[x,.56,.35],[.025,.025,.025]);}
       }else{
@@ -1138,7 +1154,7 @@ export class RiverWorld {
       if(!ball.landed&&ball.age>3&&ball.v.length()<.08){ball.landed=true;this.callbacks.onBall?.('小球停下了。换个起点，或试着改一块坡道');}
     }this.balls=this.balls.filter(b=>!b.done);
   }
-  celebrate(position,color='#f4d991') {for(let i=0;i<12;i++){const m=new THREE.Mesh(new THREE.BoxGeometry(.06,.06,.06),new THREE.MeshBasicMaterial({color}));m.position.set(position.x,position.y+.8,position.z);this.scene.add(m);this.particles.push({mesh:m,v:new THREE.Vector3((seeded(i,this.time)-.5)*2,.8+seeded(i,10), (seeded(i,1)-.5)*2),age:0});}}
+  celebrate(position,color='#f4d991') {for(let i=0;i<12;i++){const m=new THREE.Mesh(new THREE.BoxGeometry(.06,.06,.06),new THREE.MeshBasicMaterial({color}));m.userData.live=true;m.position.set(position.x,position.y+.8,position.z);this.scene.add(m);this.particles.push({mesh:m,v:new THREE.Vector3((seeded(i,this.time)-.5)*2,.8+seeded(i,10), (seeded(i,1)-.5)*2),age:0});}}
   placedModel(pick) {
     return this.focusTarget(pick);
   }
@@ -1398,7 +1414,7 @@ export class RiverWorld {
     this.camera.lookAt(this.lookAt);
   }
   update(dt,input={x:0,z:0},paused=false){
-    this.time+=dt;this.stepRoofMotions(dt);spinSouvenirs(this, dt);let mx=input.x||0,mz=input.z||0;
+    this.time+=dt;this.stepRoofMotions(dt);if(this.fastDirty)rebuildFastBatch(this);spinSouvenirs(this, dt);let mx=input.x||0,mz=input.z||0;
     if(!paused){this.motionTime+=dt;if(!this.bounce&&!this.balloon)this.locomotion=this.waterState().mode;}
     if(!paused){if(mx||mz)this.stopWalking();if(this.walkTarget){const dx=this.walkTarget.x-this.playerPosition.x,dz=this.walkTarget.y-this.playerPosition.z,d=Math.hypot(dx,dz);if(d<1.9&&this.walkCallback){const cb=this.walkCallback;this.stopWalking();cb();}else if(d<.15)this.stopWalking();else{const c=Math.cos(this.yaw),s=Math.sin(this.yaw);mx=(dx*c-dz*s)/d;mz=(dx*s+dz*c)/d;}}
       const length=Math.hypot(mx,mz);if(length>1){mx/=length;mz/=length;}
@@ -1479,10 +1495,12 @@ export class RiverWorld {
     for(const p of this.particles){p.age+=dt;p.v.y-=2*dt;p.mesh.position.addScaledVector(p.v,dt);if(p.age>1){this.scene.remove(p.mesh);p.mesh.geometry.dispose();p.mesh.material.dispose();}}this.particles=this.particles.filter(p=>p.age<=1);
     this.animateKiln(dt, paused);
     this.storyFrame?.(dt, paused);
+    if (this.fastDirty) rebuildFastBatch(this);
+    refreshFastLive(this);
     this.renderer.render(this.scene,this.camera);this.positionLabels();if(Math.floor(this.time*5)!==this.lastMapTime){this.lastMapTime=Math.floor(this.time*5);this.drawMinimap();}
     return this.playerPosition;
   }
-  resize(){const w=this.canvas.clientWidth,h=this.canvas.clientHeight;if(!w||!h)return;this.renderer.setSize(w,h,false);this.camera.aspect=w/h;this.camera.updateProjectionMatrix();if(w<600)this.distance=Math.min(this.distance,18);}
+  resize(){const w=this.canvas.clientWidth,h=this.canvas.clientHeight;if(!w||!h)return;const cap=this.pictureQuality==='fine'?1.8:(this.pictureQuality==='fast'?1.15:1.8);this.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,cap));this.renderer.setSize(w,h,false);this.camera.aspect=w/h;this.camera.updateProjectionMatrix();if(w<600)this.distance=Math.min(this.distance,18);}
   createLabels(onClick){
     this.labelOnClick = onClick;
     const root = document.getElementById('world-labels');
@@ -1632,6 +1650,7 @@ export class RiverWorld {
     const cork = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.1, 8), this.mats.wood);
     cork.position.y = 0.74;
     bottle.add(glass, neck, cork);
+    bottle.userData.live = true;
     bottle.visible = false;
     this.scene.add(bottle);
     this.bottle = bottle;
