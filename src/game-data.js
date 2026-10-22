@@ -11,6 +11,13 @@ export function playerDisplayName(user) {
   const raw = typeof user?.name === 'string' ? user.name.replace(/\s+/g, ' ').trim() : '';
   return raw || GUEST_PLAYER_NAME;
 }
+
+/** A name the child picked wins. Otherwise the account name, otherwise 小谷. */
+export function resolvePlayerName(look, user) {
+  const chosen = typeof look?.name === 'string' ? look.name.replace(/\s+/g, '').trim() : '';
+  if (chosen) return chosen.slice(0, 8);
+  return playerDisplayName(user);
+}
 export const DAMAGED_BACKUP_KEY = `${STORAGE_KEY}-damaged-backup`;
 export const FIGURES_KEY = `${STORAGE_KEY}-figures`;
 export const LIFE_BACKUP_KEY = `${STORAGE_KEY}-before-life`;
@@ -23,6 +30,7 @@ export const VISTA_BACKUP_KEY = `${STORAGE_KEY}-before-vista`;
 export const HOLO_BACKUP_KEY = `${STORAGE_KEY}-before-holo`;
 export const XING_SHARD_BACKUP_KEY = `${STORAGE_KEY}-before-xing-shard`;
 export const STORY_BACKUP_KEY = `${STORAGE_KEY}-before-story`;
+export const LOOK_BACKUP_KEY = `${STORAGE_KEY}-before-look`;
 export const RI3_BACKUP_KEY = `${STORAGE_KEY}-before-ri3`;
 export const CRAFT_RULES = Object.freeze({ dragThreshold: 7 });
 

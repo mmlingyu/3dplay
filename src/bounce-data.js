@@ -207,6 +207,35 @@ export function inNumberPark(x, z, extra = 0) {
   return PLAY_MODES.some(mode => Math.hypot(x - (BOUNCE_ISLAND.x + mode.dx), z - (BOUNCE_ISLAND.z + mode.dz)) <= 0.62 + extra);
 }
 
+const JUNIOR_MODES = Object.freeze(['count', 'even', 'make10']);
+
+export function unlockedParkModes(band) {
+  if (band === 'senior' || band === 'older') return PLAY_MODES.map((mode) => mode.id);
+  if (band === 'junior' || band === 'little' || band === 'bigger') return [...JUNIOR_MODES];
+  return PLAY_MODES.map((mode) => mode.id);
+}
+
+export function makeParkQuestion(mode = 'count', index = 0, simple = false) {
+  const step = Math.abs(Math.floor(Number(index) || 0)) % 5;
+  if (mode === 'even') {
+    const answer = (step + 1) * 2;
+    return { prompt: simple ? '哪一块是双数？' : '哪一块是双数？', choices: [answer, answer + 1, answer + 3], answer };
+  }
+  if (mode === 'make10') {
+    const have = (step % 8) + 1;
+    const answer = 10 - have;
+    return { prompt: simple ? `有 ${have} 个，还差几是 10？` : `有 ${have} 个，还差几是 10？`, choices: [answer, answer + 1, Math.max(1, answer - 1)], answer };
+  }
+  if (mode === 'skip' || mode === 'times' || mode === 'prime') {
+    const answer = mode === 'prime' ? [2, 3, 5, 7, 11][step] : (step + 2) * (mode === 'times' ? 3 : 2);
+    const choices = [answer, answer + 1, answer + 4];
+    const prompt = simple ? `跳到 ${answer}` : (mode === 'times' ? `几乘三是 ${answer}？` : `跳到 ${answer}`);
+    return { prompt, choices, answer };
+  }
+  const answer = step + 1;
+  return { prompt: simple ? `跳到数字 ${answer}` : `跳到数字 ${answer}`, choices: [answer, answer + 1, answer + 2], answer };
+}
+
 export function bounceSurface(x, z) {
   if (onBounceIsland(x, z)) return BOUNCE_ISLAND.height;
   if (z >= BOUNCE_ISLAND.z - 0.55 && z <= BOUNCE_ISLAND.z + 0.55 && x >= BOUNCE_ISLAND.rampMinX && x <= BOUNCE_ISLAND.x - BOUNCE_ISLAND.radius + 0.2) {
