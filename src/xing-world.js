@@ -896,6 +896,7 @@ export class XingWorld {
   }
 
   paint() {
+    if (this.holdPaint) return;
     if (this.bloom && this.qualityMode === 'fine') {
       const info = this.renderer.info;
       info.autoReset = false;

@@ -490,7 +490,7 @@ export class RiWorld {
       this.camera.position.lerp(this.lookAt.clone().add(v), 1 - Math.exp(-5 * dt));
       this.camera.lookAt(this.lookAt);
     }
-    this.renderer.render(this.scene, this.camera);
+    if (!this.holdPaint) this.renderer.render(this.scene, this.camera);
     this.positionLabels();
     return this.playerPosition;
   }
