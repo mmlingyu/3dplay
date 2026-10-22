@@ -1257,7 +1257,7 @@ export class RiverWorld {
     if (craft) craft.action = '乘坐热气球';
     this.camera.far = 140;
     this.camera.updateProjectionMatrix();
-    if (!silent) this.callbacks.onBalloonStop?.();
+    this.callbacks.onBalloonStop?.({ silent });
   }
   balloonLook() {
     const phase = this.balloon?.phase || 'idle';

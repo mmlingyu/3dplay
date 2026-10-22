@@ -223,6 +223,8 @@ function paintTravel() {
   const actions = $('ri-actions');
   const xingActions = $('xing-actions');
   const meiActions = $('mei-actions');
+  const map = document.querySelector('.minimap-card');
+  if (map) map.hidden = realm !== 'he';
   if (home) home.hidden = realm === 'he';
   if (actions) actions.hidden = realm !== 'ri';
   if (xingActions) xingActions.hidden = realm !== 'xing' || !!world?.inHolo?.();
@@ -359,7 +361,7 @@ function worldHooks() {
         showStar('飞回河谷');
       }
     },
-    onBalloonStop: () => { hideBalloon(); hideVistaCard(); toast('已经降落。想再看，再点乘坐。'); updateContext(); },
+    onBalloonStop: (info) => { hideBalloon(); hideVistaCard(); if (info?.silent) return; toast('已经降落。想再看，再点乘坐。'); updateContext(); },
     onVistaSpot: (id) => { if (!started) return; showVistaCard(id); },
     onVistaZoom: (id) => { if (!started) return; showVistaZoom(id); },
     onVistaStamp: (id) => { if (!started) return; const result = game.discoverVista(id); showVistaStamp(id, result); },
@@ -525,6 +527,7 @@ function startFerry(realmId = 'ri') {
   cutscene = createCutscene('ferry', 3);
   cutscene.realmId = id;
   showCutscene(id === 'mei' ? SHIP_NOTE : FERRY_NOTE, id);
+  paintTravel();
 }
 async function finishCutscene() {
   const kind = cutscene?.kind;
@@ -717,7 +720,11 @@ function reclaimNearby(cx,cz){
   return result;
 }
 function updateLandGuidance(){
-  if ((game.state.travel?.current || 'he') !== 'he') {
+  const ferryOpen = ['travel-go', 'travel-go-mei'].some((id) => {
+    const button = $(id);
+    return button && !button.hidden;
+  });
+  if ((game.state.travel?.current || 'he') !== 'he' || world.balloon || ferryOpen) {
     landHint = null;
     $('land-question').hidden = true;
     world.setFrontier?.(null);

@@ -3,6 +3,7 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
+import { buttonBlockers } from './button-occlusion.js';
 
 const base = process.env.PREVIEW_URL || process.env.GAME_TEST_URL || 'http://127.0.0.1:4173/3dplay/';
 const staticMode = process.env.PREVIEW_MODE !== 'live';
@@ -121,6 +122,9 @@ async function layout(label) {
     }
   }
   check(`${label} 浮层不互相遮挡也不挡工具栏`, clear);
+  const blocked = await page.evaluate(buttonBlockers);
+  if (blocked.length) console.log('BLOCKED', label, blocked);
+  check(`${label} 按钮都能点到`, blocked.length === 0);
   return scene;
 }
 
@@ -179,9 +183,10 @@ try {
       const el = document.getElementById(id);
       return el && !el.hidden && !el.classList.contains('overlay-parked');
     };
-    return ready('balloon-hud') && ready('land-question') && ready('tour-guide');
+    const land = document.getElementById('land-question');
+    return ready('balloon-hud') && ready('tour-guide') && land && land.hidden;
   });
-  await layout('热气球、开垦和下一步');
+  await layout('热气球和下一步');
   await page.screenshot({ path: `${shots}/tour-balloon-land-tablet.png` });
   await page.evaluate(() => {
     const world = __valley.world;

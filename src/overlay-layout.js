@@ -65,33 +65,97 @@ export function planStack(input) {
   let top = safeTop;
   let bottom = safeBottom;
   const placedPrompts = [];
-  const controlReserve = controls.length ? Math.min(168, controls[0].height) : 0;
+  const viewWidth = Math.max(center * 2, maxWidth + 24);
+
+  function placeAside(item, height) {
+    if (item.id !== 'vista-card') return null;
+    const wanted = Math.min(widthOf(item), 360);
+    const minWidth = 200;
+    if (safeTop + height > safeBottom) return null;
+    const blockers = placements.filter((other) => !other.parked && other.y < safeTop + height && other.y + other.height > safeTop);
+    const leftLimit = blockers.reduce((min, other) => Math.min(min, other.x), viewWidth);
+    const rightLimit = blockers.reduce((max, other) => Math.max(max, other.x + other.width), 0);
+    const leftRoom = leftLimit - 12 - gap;
+    const rightRoom = viewWidth - 12 - gap - rightLimit;
+    const choices = [];
+    if (leftRoom >= minWidth) choices.push({ x: 12, width: Math.min(wanted, leftRoom) });
+    if (rightRoom >= minWidth) choices.push({ x: viewWidth - 12 - Math.min(wanted, rightRoom), width: Math.min(wanted, rightRoom) });
+    const spot = choices.find((choice) => choice.x === 12 && choice.width >= wanted - 1)
+      || choices.find((choice) => choice.width >= wanted - 1)
+      || choices[0];
+    if (!spot) return null;
+    const box = placeBox(item, spot.x, safeTop, spot.width, height);
+    if (box.x < 0 || box.x + box.width > viewWidth + 0.5) return null;
+    if (placements.some((other) => !other.parked && overlap(box, other))) return null;
+    return box;
+  }
+
+  function placeBelowControl(item, height) {
+    if (height > safeBottom - safeTop) return null;
+    const control = placements.find((box) => !box.parked && (box.id === 'balloon-hud' || box.id === 'bounce-hud'));
+    if (!control) return null;
+    const y = safeBottom - height;
+    const limit = y - gap;
+    if (limit - control.y < 160) return null;
+    if (control.y + control.height > limit) {
+      control.height = limit - control.y;
+      control.scroll = true;
+      top = control.y + control.height + gap;
+    }
+    if (y < top - 0.5) return null;
+    const width = widthOf(item);
+    const box = placeBox(item, xOf(item, width), y, width, height);
+    if (placements.some((other) => !other.parked && overlap(box, other))) return null;
+    return box;
+  }
+
+  for (const control of controls) {
+    const width = widthOf(control);
+    const full = control.height;
+    const room = bottom - top;
+    if (full <= room) {
+      placements.push(placeBox(control, xOf(control, width), top, width, full));
+      top += full + gap;
+      continue;
+    }
+    if (room >= full * 0.92 && room >= 160) {
+      placements.push(placeBox(control, xOf(control, width), top, width, room, { scroll: true }));
+      top = bottom;
+      continue;
+    }
+    placements.push(parked(control));
+  }
 
   for (const prompt of prompts) {
     const width = widthOf(prompt);
     const full = prompt.height;
     const collapsed = prompt.collapseTo && prompt.collapseTo < full - 4 ? prompt.collapseTo : 0;
-    const room = bottom - top - controlReserve - gap;
-    if (full <= room || (placedPrompts.length === 0 && full <= bottom - top - gap)) {
-      const height = Math.min(full, bottom - top - gap);
-      const y = bottom - height;
-      placements.push(placeBox(prompt, xOf(prompt, width), y, width, height, { scroll: height < full - 2 }));
+    const room = bottom - top - gap;
+    if (room < (collapsed || full)) {
+      const aside = prompt.id === 'vista-card' ? (placeAside(prompt, full) || placeBelowControl(prompt, full)) : null;
+      if (aside) {
+        placements.push(aside);
+        if (aside.x === xOf(prompt, aside.width)) bottom = aside.y - gap;
+        continue;
+      }
+      placements.push(parked(prompt));
+      continue;
+    }
+    if (full <= room) {
+      const y = bottom - full;
+      placements.push(placeBox(prompt, xOf(prompt, width), y, width, full));
       bottom = y - gap;
       placedPrompts.push(prompt);
       continue;
     }
-    if (collapsed && collapsed <= bottom - top - controlReserve - gap) {
-      const y = bottom - collapsed;
-      placements.push(placeBox(prompt, xOf(prompt, width), y, width, collapsed, { collapsed: true }));
-      bottom = y - gap;
-      placedPrompts.push(prompt);
-      continue;
-    }
-    placements.push(parked(prompt));
+    const y = bottom - collapsed;
+    placements.push(placeBox(prompt, xOf(prompt, width), y, width, collapsed, { collapsed: true }));
+    bottom = y - gap;
+    placedPrompts.push(prompt);
   }
 
   for (const hint of hints) {
-    if (placedPrompts.length) {
+    if (placedPrompts.length || controls.length) {
       placements.push(parked(hint));
       continue;
     }
@@ -103,6 +167,7 @@ export function planStack(input) {
     } else placements.push(parked(hint));
   }
 
+  const occupied = () => placements.filter((item) => !item.parked);
   for (const notice of notices) {
     const slim = notice.height <= 64;
     const stamp = notice.id === 'vista-stamp';
@@ -112,21 +177,27 @@ export function planStack(input) {
     }
     const width = widthOf(notice);
     if (top + notice.height + gap <= bottom) {
-      placements.push(placeBox(notice, xOf(notice, width), top, width, notice.height));
-      top += notice.height + gap;
-    } else placements.push(parked(notice));
-  }
-
-  for (const control of controls) {
-    const room = bottom - top;
-    if (room < 96) {
-      placements.push(parked(control));
+      const box = placeBox(notice, xOf(notice, width), top, width, notice.height);
+      if (occupied().every((item) => !overlap(box, item))) {
+        placements.push(box);
+        top += notice.height + gap;
+        continue;
+      }
+    }
+    const sideWidth = Math.min(width, 200);
+    const sideSpots = [
+      { x: 12, y: safeTop },
+      { x: Math.max(12, viewWidth - sideWidth - 12), y: safeTop },
+    ];
+    const side = sideSpots
+      .map((spot) => placeBox(notice, spot.x, spot.y, sideWidth, notice.height))
+      .find((box) => box.x >= 0 && box.x + box.width <= viewWidth && occupied().every((item) => !overlap(box, item)));
+    if (side) {
+      placements.push(side);
       continue;
     }
-    const width = widthOf(control);
-    const height = Math.min(control.height, room);
-    placements.push(placeBox(control, xOf(control, width), top, width, height, { scroll: height < control.height - 2 }));
-    top += height + gap;
+    const below = stamp ? placeBelowControl(notice, notice.height) : null;
+    placements.push(below || parked(notice));
   }
 
   const visible = placements.filter((item) => !item.parked);
@@ -244,6 +315,69 @@ function chipSpot(safeTop, safeBottom, reserved) {
   return { x: 12, y: safeTop, width, height };
 }
 
+function hits(box, blocks) {
+  return blocks.some((item) => box.left < item.right && box.right > item.left && box.top < item.bottom && box.bottom > item.top);
+}
+
+function placeToast(toast, safeTop, safeBottom, reserved) {
+  const width = Math.min(Math.max(toast.offsetWidth || 180, 140), 280);
+  const height = toast.offsetHeight || 0;
+  toast.style.right = 'auto';
+  toast.style.transform = 'none';
+  if (height < 12) {
+    toast.style.left = '12px';
+    toast.style.top = `${Math.round(safeTop)}px`;
+    return;
+  }
+  const blocks = reserved.map((box) => ({ left: box.left, top: box.top, right: box.right, bottom: box.bottom }));
+  for (const selector of ['.minimap-card', '#wish-card']) {
+    const el = document.querySelector(selector);
+    if (!shown(el) || el.classList.contains('overlay-parked')) continue;
+    const rect = el.getBoundingClientRect();
+    blocks.push({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom });
+  }
+  const map = document.querySelector('.minimap-card');
+  const underMap = map && shown(map) ? map.getBoundingClientRect().bottom + 8 : safeTop;
+  const spots = [
+    { x: 12, y: safeTop },
+    { x: 12, y: Math.min(safeBottom - height, safeTop + 64) },
+    { x: Math.max(12, window.innerWidth - width - 12), y: underMap },
+    { x: 12, y: Math.max(safeTop, safeBottom - height) },
+  ];
+  const spot = spots.find((item) => {
+    const box = { left: item.x, top: item.y, right: item.x + width, bottom: item.y + height };
+    return item.y >= safeTop - 1 && item.y + height <= safeBottom + 1 && !hits(box, blocks);
+  }) || spots[0];
+  toast.style.left = `${Math.round(spot.x)}px`;
+  toast.style.top = `${Math.round(spot.y)}px`;
+  reserved.push({ left: spot.x, top: spot.y, right: spot.x + width, bottom: spot.y + height });
+}
+
+function keepButtonsClear(root) {
+  const owners = [...root.querySelectorAll('#balloon-hud, #bounce-hud, #land-question, .minimap-card, .bottom-dock, .action-controls, .topbar')];
+  for (const owner of owners) {
+    if (!shown(owner) || owner.classList.contains('overlay-parked')) continue;
+    const ownerRect = owner.getBoundingClientRect();
+    for (const button of owner.querySelectorAll('button')) {
+      if (button.hidden || button.closest('[hidden]')) continue;
+      const rect = button.getBoundingClientRect();
+      if (rect.width < 8 || rect.height < 8) continue;
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      if (cx < ownerRect.left || cx > ownerRect.right || cy < ownerRect.top || cy > ownerRect.bottom) continue;
+      for (const id of ['tour-guide', 'land-question', 'story-banner', 'vista-card', 'context-hint', 'story-festival', 'toast-root']) {
+        const other = root.getElementById(id);
+        if (!other || other === owner || !shown(other) || other.classList.contains('overlay-parked')) continue;
+        if (other.contains(button) || button.contains(other)) continue;
+        const cover = other.getBoundingClientRect();
+        if (cx < cover.left || cx > cover.right || cy < cover.top || cy > cover.bottom) continue;
+        other.classList.add('overlay-parked');
+        other.classList.remove('overlay-collapsed', 'overlay-scroll');
+      }
+    }
+  }
+}
+
 function nudge(el, reserved) {
   if (!shown(el)) {
     el.style.top = '';
@@ -282,6 +416,24 @@ export function layoutOverlays(root = document) {
       maxWidth: Math.min(560, window.innerWidth - 24),
       items,
     });
+    const map = root.querySelector('.minimap-card');
+    if (map && shown(map)) {
+      map.classList.remove('overlay-parked');
+      const remembered = map.getAttribute('data-overlay-top');
+      const previousTop = map.style.top;
+      if (remembered == null) map.setAttribute('data-overlay-top', previousTop || '');
+      map.style.top = map.getAttribute('data-overlay-top') || '';
+      const rect = map.getBoundingClientRect();
+      map.style.top = previousTop;
+      for (const box of plan.placements) {
+        if (box.parked || (box.id !== 'balloon-hud' && box.id !== 'bounce-hud')) continue;
+        const right = box.x + box.width;
+        const overlaps = right > rect.left && box.x < rect.right && box.y + box.height > rect.top && box.y < rect.bottom;
+        if (!overlaps) continue;
+        const shift = right - (rect.left - 8);
+        if (box.x - shift >= 8) box.x -= shift;
+      }
+    }
     const reserved = [];
     for (const box of plan.placements) {
       const el = root.getElementById(box.id);
@@ -313,25 +465,53 @@ export function layoutOverlays(root = document) {
       reserved.push({ left: spot.x, top: spot.y, right: spot.x + spot.width, bottom: spot.y + spot.height });
     } else chip.hidden = true;
 
+    let chromeTop = window.innerHeight - 8;
+    for (const selector of ['.bottom-dock', '#joystick', '.action-controls']) {
+      const el = root.querySelector(selector);
+      if (!shown(el)) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.height < 8) continue;
+      chromeTop = Math.min(chromeTop, rect.top - 8);
+    }
     for (const selector of SIDES) {
       const el = root.querySelector(selector);
       if (!el) continue;
-      const rect = el.getBoundingClientRect();
-      const hits = reserved.some((box) => rect.left < box.right && rect.right > box.left && rect.top < box.bottom && rect.bottom > box.top);
-      el.classList.toggle('overlay-parked', hits && reserved.length > 0);
+      el.classList.remove('overlay-parked');
+      if (!shown(el)) continue;
+      const remembered = el.getAttribute('data-overlay-top');
+      if (remembered == null) el.setAttribute('data-overlay-top', el.style.top || '');
+      el.style.top = el.getAttribute('data-overlay-top') || '';
+      let guard = 0;
+      let rect = el.getBoundingClientRect();
+      const blocked = (box) => reserved.some((item) => box.left < item.right && box.right > item.left && box.top < item.bottom && box.bottom > item.top);
+      while (guard < 8 && blocked(rect)) {
+        const hit = reserved.find((item) => rect.left < item.right && rect.right > item.left && rect.top < item.bottom && rect.bottom > item.top);
+        el.style.top = `${Math.round(hit.bottom + 8)}px`;
+        rect = el.getBoundingClientRect();
+        guard += 1;
+      }
+      if (blocked(rect) || rect.bottom > chromeTop || rect.top < 0) {
+        el.classList.add('overlay-parked');
+        el.style.top = '';
+        continue;
+      }
+      reserved.push({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom });
     }
     const obstacles = reserved.map((box) => ({ left: box.left, right: box.right, top: box.top, bottom: box.bottom }));
     for (const selector of RAILS) {
       const el = root.querySelector(selector);
-      if (el) nudge(el, obstacles);
+      if (!el) continue;
+      nudge(el, obstacles);
+      if (!shown(el)) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.bottom > chromeTop && rect.top < chromeTop - 48) {
+        el.style.maxHeight = `${Math.round(chromeTop - rect.top)}px`;
+        el.style.overflow = 'auto';
+      }
     }
     const toast = root.getElementById('toast-root');
-    if (toast) {
-      toast.style.left = 'auto';
-      toast.style.right = '12px';
-      toast.style.top = `${Math.round(safeTop)}px`;
-      toast.style.transform = 'none';
-    }
+    if (toast) placeToast(toast, safeTop, safeBottom, reserved);
+    keepButtonsClear(root);
   } finally {
     laying = false;
   }
