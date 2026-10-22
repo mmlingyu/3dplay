@@ -21,6 +21,9 @@ try {
     const press = selector => page.locator(selector)[touch ? 'tap' : 'click']();
     await press('#start-button');
     await page.evaluate(() => { __valley.game.state.settings.sound = false; });
+    assert.equal(await page.locator('#hotbar').isHidden(), true, '采集时建造格收起');
+    await press('[data-mode="build"]');
+    assert.equal(await page.locator('#hotbar').isVisible(), true, '搭建时建造格展开');
     await press('#hotbar [data-item="plank"]');
     assert.equal(await page.locator('#placement-controls').count(), 1, '选材料后应有就近的放置操作区');
     assert.ok(await page.locator('#placement-confirm').isDisabled(), '未选位置不能隐式放到角色前方');
@@ -64,8 +67,10 @@ try {
     await press('#placement-cancel');
     assert.ok(await page.locator('#placement-controls').isHidden());
     assert.equal(await page.locator('[data-mode="gather"]').getAttribute('aria-pressed'), 'true');
-    await press('#hotbar [data-item="brick"]');
+    assert.equal(await page.locator('#hotbar').isHidden(), true, '取消后建造格收回');
+    await page.keyboard.press('2');
     assert.equal(await page.locator('[data-mode="gather"]').getAttribute('aria-pressed'), 'true', '没有的材料不切换到无法放置的模式');
+    await press('[data-mode="build"]');
     await press('#hotbar [data-item="plank"]');
     await page.evaluate(() => __valley.setBuildCell({ x: -5, y: 0, z: 5 }));
     assert.ok(await page.locator('#placement-confirm').isDisabled(), '角色脚下不能放置');

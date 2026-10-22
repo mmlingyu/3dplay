@@ -108,6 +108,7 @@ export class CreationWorld {
       const bp = c.blueprints.find(b => b.id === asm.blueprintId);
       const filled = new Set(bp.parts.map(p => p.id));
       const holder = new THREE.Group();
+      holder.userData.live = true;
       holder.position.set(asm.world.x, ground(asm.world.x, asm.world.z), asm.world.z);
       const model = this.factory.assembly(bp, catalog, filled, { showGhosts: false });
       holder.add(model);
@@ -120,6 +121,7 @@ export class CreationWorld {
     }
     for (const fig of c.figures.filter(f => f.placed)) {
       const holder = new THREE.Group();
+      holder.userData.live = true;
       holder.position.set(fig.placed.x, ground(fig.placed.x, fig.placed.z), fig.placed.z);
       holder.rotation.y = fig.placed.rotY;
       const model = this.factory.figure(fig.figure);

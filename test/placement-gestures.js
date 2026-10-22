@@ -19,6 +19,7 @@ try {
     await page.waitForFunction(() => window.__valley?.world);
     await page.locator('#start-button')[touch ? 'tap' : 'click']();
     await page.evaluate(() => { __valley.game.state.settings.sound = false; });
+    await page.locator('[data-mode="build"]')[touch ? 'tap' : 'click']();
     await page.locator('#hotbar [data-item="plank"]')[touch ? 'tap' : 'click']();
     const project = async (x, y, z) => page.evaluate(([x, y, z]) => {
       const w = __valley.world, p = w.playerPosition.clone().set(x, y, z).project(w.camera);

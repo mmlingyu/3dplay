@@ -115,6 +115,7 @@ async function discoverFromBalloon(page, kind) {
   check(`${kind} 没发现也能去三个谷`, voyage.every((item) => item && !item.hidden && !item.disabled));
   await assertTap(page, '#vista-look', `${kind} 看过去`);
   await assertTap(page, '#vista-later', `${kind} 先不看`);
+  if (await page.locator('.minimap-card.is-folded').count()) await page.locator('#map-toggle').click();
   await assertTap(page, '#vista-map-button', `${kind} 远处的谷`);
   const arrow = await boxOf(page, '#vista-arrow');
   if (arrow && !arrow.hidden) check(`${kind} 箭头至少 44 像素`, arrow.w >= 44 && arrow.h >= 44);

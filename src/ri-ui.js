@@ -1,7 +1,7 @@
 /** Day-valley prompts. Pictures and speech sit beside the words. */
 
 import { icon } from './icons.js';
-import { playBeep, playRiAudio } from './ri-audio.js';
+import { playRiAudio } from './ri-audio.js';
 import {
   MIKO_CLUE,
   RI_SHOPS,
@@ -124,13 +124,7 @@ export function handleRiTap(target, hooks) {
     const shop = RI_SHOPS[target.shopIndex];
     const junior = band !== 'senior';
     const say = () => {
-      if (junior) {
-        playRiAudio('zh-shop-hear', { text: '听一听，再点对的那一个。', lang: 'zh-CN' });
-        playRiAudio(shop.audio, { text: shop.reading, lang: 'ja-JP' });
-        speak('听一听，再点对的那一个。');
-      } else {
-        playRiAudio(shop.audio, { text: shop.reading, lang: 'ja-JP' });
-      }
+      playRiAudio(shop.audio, { text: shop.reading, lang: 'ja-JP' });
     };
     say();
     const node = openSheet(junior ? '听一听，点亮这家店。' : `招牌写着 ${shop.kana}。它是什么？`, { replay: say });
@@ -141,7 +135,6 @@ export function handleRiTap(target, hooks) {
       button.addEventListener('click', () => {
         if (!choice.ok) {
           toast('再听一次，点另一个。');
-          speak('再听一次。');
           say();
           return;
         }
@@ -215,35 +208,29 @@ export function handleRiTap(target, hooks) {
     if (!city.greenNow()) {
       playRiAudio('zh-wait', { text: '红灯先等一等。', lang: 'zh-CN' });
       toast('红灯先等一等。');
-      speak('红灯先等一等。');
       return true;
     }
-    playBeep();
     const result = game.markRiManner('signal');
     playRiAudio('zh-green', { text: '绿灯亮了，可以走。', lang: 'zh-CN' });
     toast(result.message, result.ok);
-    speak('绿灯亮了，可以走。');
     return true;
   }
   if (target.riKind === 'queue') {
     const result = game.markRiManner('queue');
     playRiAudio('zh-queue', { text: '请站到脚印上，排好队。', lang: 'zh-CN' });
     toast(result.message, result.ok);
-    speak('请站到脚印上，排好队。');
     return true;
   }
   if (target.riKind === 'shoes') {
     const result = game.markRiManner('shoes');
     playRiAudio('zh-shoes', { text: '进屋前，把鞋脱下来。', lang: 'zh-CN' });
     toast(result.message, result.ok);
-    speak('进屋前，把鞋脱下来。');
     return true;
   }
   if (target.riKind === 'thanks') {
     const result = game.markRiManner('thanks');
     playRiAudio('ja-itadakimasu', { text: 'いただきます', lang: 'ja-JP' });
     toast(result.message, result.ok);
-    speak('开动前说いただきます。');
     return true;
   }
   if (target.riKind === 'cabinet') {
@@ -284,9 +271,7 @@ function showShard(speak) {
   skip.textContent = '跳过';
   skip.addEventListener('click', () => closeRiSheet());
   node.append(stone, film, line, skip);
-  playRiAudio('zh-shard', { text: '蓝色石片上有海浪，边上是一排小方孔。', lang: 'zh-CN' });
   playRiAudio('zh-miko-film', { text: MIKO_CLUE, lang: 'zh-CN' });
-  speak?.(MIKO_CLUE);
 }
 
 export function playQuestionAudio(question, band, speak) {
@@ -294,8 +279,7 @@ export function playQuestionAudio(question, band, speak) {
   const key = `${question.id}:${question.audio}`;
   if (lastAudio === key) return;
   lastAudio = key;
-  playRiAudio(question.audio, { text: question.reading || '', lang: 'ja-JP' });
-  if (band === 'junior' && question.ask) speak?.(question.ask);
+  playRiAudio(question.audio, { text: question.reading || question.ask || '', lang: 'ja-JP' });
 }
 
 export function resetQuestionAudio() {

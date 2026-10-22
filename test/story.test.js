@@ -10,6 +10,7 @@ import {
   fogProfile,
   pendingZones,
   prologueTrigger,
+  guideBrief,
   storyChapter,
   storyFog,
 } from '../src/story-data.js';
@@ -174,6 +175,14 @@ test('体验模式使用独立存档键，不读写孩子的正式存档', () =>
   assert.equal(keys.some((key) => key === CHILD_STORAGE_KEY || key.startsWith(`${CHILD_STORAGE_KEY}-`) && !key.startsWith(TOUR_STORAGE_KEY)), true);
   assert.equal(keys.includes(CHILD_STORAGE_KEY), true);
   assert.equal(storage.getItem(CHILD_STORAGE_KEY), 'child-save');
+});
+
+test('下一步短句是完整的一句', () => {
+  const travel = { story: { restored: [] }, realms: { ri: {}, mei: {}, xing: {} } };
+  const line = guideBrief(travel);
+  assert.match(line, /。$/);
+  assert.equal(line.includes('…'), false);
+  assert.ok(line.length < 24);
 });
 
 test('年龄两档：4到6和7到9都读成6到8', () => {

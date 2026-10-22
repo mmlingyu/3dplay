@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { attachFigure } from './ri-characters.js';
-import { playBeep, playRiAudio } from './ri-audio.js';
+import { playRiAudio } from './ri-audio.js';
 import {
   LANTERN_ALL,
   RI_LAYOUT,

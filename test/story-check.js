@@ -150,6 +150,7 @@ try {
   check('再拿潮之片恢复河水', waterBack.includes('water') && waterBack.includes('sky'));
   await shot(old.page, 'story-restore-after');
 
+  if (await old.page.locator('.minimap-card.is-folded').count()) await old.page.click('#map-toggle');
   await old.page.click('#vista-map-button');
   await old.page.waitForSelector('#vista-map');
   await shot(old.page, 'story-star-map');

@@ -13,7 +13,8 @@ try{
     await page.goto(process.env.GAME_TEST_URL||'http://127.0.0.1:5173');
     await page.waitForFunction(()=>window.__valley?.world);
     await page.locator('#start-button').click();
-    await page.locator('#wish-dismiss').click();
+    if (await page.locator('#wish-dismiss').isVisible()) await page.locator('#wish-dismiss').click();
+    await page.locator('#map-toggle').click();
     await page.locator('#land-button').click();
     assert.equal(await page.locator('[data-action="land-open"]').count(),0,'原地没有远程开区入口');
     assert.ok((await page.locator('.panel-body').textContent()).includes('走到边界'));

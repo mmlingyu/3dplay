@@ -124,7 +124,7 @@ try {
   } else {
     const chip = page.locator('#account-chip');
     await page.waitForFunction(() => document.querySelector('#account-label')?.textContent === '本地游玩');
-    check('登录入口显示本地游玩', (await page.locator('#account-label').innerText()) === '本地游玩');
+    check('登录入口显示本地游玩', (await page.locator('#account-label').textContent()) === '本地游玩');
     check('本地游玩没有账号链接', await chip.evaluate((el) => !el.getAttribute('href') && !el.getAttribute('target')));
     check('页面上没有 /account 链接', await page.evaluate(() => [...document.querySelectorAll('a')].every((el) => !String(el.getAttribute('href') || '').includes('/account'))));
     await page.screenshot({ path: `${shotDir}/static-preview-local-play.png` });
@@ -179,6 +179,7 @@ try {
     await page.screenshot({ path: `${shotDir}/static-preview-lookout-map.png` });
 
     const before = look.y;
+    await page.locator('#balloon-steer').click();
     await page.locator('#balloon-up').dispatchEvent('pointerdown');
     await pump(2);
     await page.locator('#balloon-up').dispatchEvent('pointerup');

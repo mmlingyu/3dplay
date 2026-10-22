@@ -1,5 +1,7 @@
 /** Hollywood-lot rules for beauty valley. Optional save fields. No travel.story writes. */
 
+import { playUrl } from './voice.js';
+
 export const SHARD_LINE = '放映机放出一片星空，一艘飞船慢慢飞过。那个方向，只有热气球能去。';
 export const PREMIERE_NOTE = '星光首映夜放你自己拍的照片和小电影。每部都有掌声。不评名次。';
 export const SET_NOTE = '绕到后面能看见木头架子。这是布景。没有枪，也没有决斗。';
@@ -127,29 +129,7 @@ export function audioUrl(id) {
 }
 
 export function playMeiLine(id, fallbackText, lang = 'en-US') {
-  const finish = () => speakFallback(fallbackText, lang);
-  try {
-    const audio = new Audio(audioUrl(id));
-    audio.addEventListener('error', finish, { once: true });
-    const played = audio.play();
-    if (played && typeof played.catch === 'function') played.catch(finish);
-    return audio;
-  } catch {
-    finish();
-    return null;
-  }
-}
-
-function speakFallback(text, lang) {
-  if (!text || typeof speechSynthesis === 'undefined') return;
-  try {
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = lang;
-    utterance.rate = lang.startsWith('zh') ? 0.92 : 0.86;
-    utterance.volume = 0.7;
-    speechSynthesis.cancel();
-    speechSynthesis.speak(utterance);
-  } catch { /* icons still explain the step */ }
+  return playUrl(audioUrl(id), { text: fallbackText || '', lang, fallback: Boolean(fallbackText) });
 }
 
 export function shardClue() {
