@@ -65,6 +65,56 @@ export function buttonBlockers() {
   return blocked;
 }
 
+export function foldChipMatch() {
+  const keys = ['borderTopWidth', 'borderTopStyle', 'borderTopColor', 'borderRadius', 'backgroundColor', 'boxShadow', 'minHeight', 'minWidth', 'fontSize', 'fontWeight', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'color', 'lineHeight'];
+  const read = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    const style = getComputedStyle(el);
+    return Object.fromEntries(keys.map((key) => [key, style[key]]));
+  };
+  const base = read('wish-toggle');
+  const mismatches = [];
+  if (!base) mismatches.push('wish-toggle:missing');
+  for (const id of ['map-toggle', 'tour-guide-pin', 'overlay-more']) {
+    const style = read(id);
+    if (!style) {
+      if (id !== 'overlay-more') mismatches.push(`${id}:missing`);
+      continue;
+    }
+    if (!base) continue;
+    for (const key of keys) {
+      if (style[key] !== base[key]) mismatches.push(`${id}.${key}:${style[key]}!=${base[key]}`);
+    }
+  }
+  return mismatches;
+}
+
+export function wrappedButtonLabels() {
+  const hits = [];
+  const range = document.createRange();
+  for (const button of document.querySelectorAll('button')) {
+    if (button.hidden || button.closest('[hidden]') || button.classList.contains('overlay-parked')) continue;
+    const style = getComputedStyle(button);
+    if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) continue;
+    const box = button.getBoundingClientRect();
+    if (box.width < 8 || box.height < 8) continue;
+    const walker = document.createTreeWalker(button, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const text = node.textContent.replace(/\s+/g, '');
+      if (!text) continue;
+      range.selectNodeContents(node);
+      const lines = [...range.getClientRects()].filter((rect) => rect.width > 1 && rect.height > 1);
+      if (lines.length > 1) {
+        const name = button.id || button.getAttribute('aria-label') || text.slice(0, 8);
+        hits.push(`${name}:${text.slice(0, 12)}`);
+      }
+    }
+  }
+  return hits;
+}
+
 export function arrowClear() {
   const arrow = document.getElementById('vista-arrow');
   if (!arrow || arrow.hidden) return { ok: true, hidden: true, hits: [] };

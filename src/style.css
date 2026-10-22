@@ -19,7 +19,7 @@
 html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
 body { -webkit-font-smoothing: antialiased; }
 button, input, select { font: inherit; }
-button { color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+button { color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; white-space: nowrap; }
 button:disabled { cursor: default; opacity: .42; box-shadow: none !important; transform: none !important; }
 button:focus-visible, [tabindex]:focus-visible { outline: 3px solid #bb8b42; outline-offset: 3px; }
 button, a, canvas { -webkit-user-select: none; user-select: none; }
@@ -56,7 +56,7 @@ button .game-icon { pointer-events: none; }
 .wish-card { position: absolute; top: 84px; left: 0; width: 258px; padding: 17px 18px 12px; background: var(--paper); border: 1px solid rgba(255, 255, 255, .85); border-radius: var(--radius); box-shadow: var(--shadow); z-index: 9; }
 .wish-card.is-folded, .minimap-card.is-folded { width: auto !important; padding: 0; background: transparent; border: 0; box-shadow: none; }
 .wish-card.is-folded .wish-body, .minimap-card.is-folded .minimap-body { display: none; }
-.fold-toggle { min-width: 48px; min-height: 48px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); color: var(--green); font-weight: 800; box-shadow: var(--shadow); }
+.fold-toggle { appearance: none; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; min-width: 48px; min-height: 48px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); color: var(--green); font-size: 14px; font-weight: 800; line-height: 1.2; white-space: nowrap; box-shadow: var(--shadow); }
 .wish-kicker { display: flex; align-items: center; gap: 6px; color: #9b7945; font-size: 10px; font-weight: 700; letter-spacing: 2px; margin-bottom: 10px; }
 .wish-kicker > .game-icon, .wish-kicker > span .game-icon { width: 16px; height: 16px; }
 .wish-title { margin: 0 24px 8px 0; font-size: 17px; font-weight: 750; line-height: 1.45; }
@@ -1046,12 +1046,12 @@ button.creation-chip { cursor: pointer; }
 @media (max-width: 700px) {
   #story-banner { left: 16px; top: 268px; width: min(420px, calc(100vw - 32px)); }
 }
-#story-banner p { margin: 0; font-size: 15px; line-height: 1.4; }
-#story-skip { min-height: 44px; min-width: 64px; }
+#story-banner p { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 15px; line-height: 1.4; }
+#story-skip { flex: 0 0 auto; min-height: 44px; min-width: 64px; white-space: nowrap; }
 #story-disk { position: absolute; z-index: 18; left: 16px; top: 46%; width: 56px; height: 56px; border-radius: 50%; border: 3px solid #f4e4d2; background: radial-gradient(circle at 40% 35%, #fff6d8, #8ea4c8 70%); color: #243044; font-weight: 800; box-shadow: 0 0 16px rgba(255, 236, 180, .85); }
 #tour-guide { position: absolute; z-index: 23; left: 50%; bottom: 148px; transform: translateX(-50%); width: min(420px, calc(100vw - 32px)); padding: 10px 14px; border-radius: 18px; background: rgba(255, 250, 240, .96); color: #2e5343; border: 2px solid #c4a574; box-shadow: var(--shadow); text-align: center; }
 #tour-guide p { margin: 4px 0 0; font-size: 16px; line-height: 1.45; }
-#tour-guide-pin, #tour-guide-more { min-height: 48px; min-width: 64px; }
+#tour-guide-more { min-height: 48px; min-width: 64px; white-space: nowrap; }
 #tour-guide.is-icon { left: 16px; top: 62%; bottom: auto; width: auto; transform: none; padding: 0; background: transparent; border: 0; box-shadow: none; }
 #tour-guide.is-icon #tour-guide-body, #tour-guide.is-brief #tour-guide-text, #tour-guide.is-open #tour-guide-brief { display: none; }
 #tour-guide.overlay-collapsed, #tour-guide.is-icon { max-height: none !important; overflow: visible !important; }

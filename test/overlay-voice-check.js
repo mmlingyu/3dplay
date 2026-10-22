@@ -3,7 +3,7 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
-import { arrowClear, buttonBlockers } from './button-occlusion.js';
+import { arrowClear, buttonBlockers, foldChipMatch, wrappedButtonLabels } from './button-occlusion.js';
 
 const url = process.env.GAME_TEST_URL || 'http://127.0.0.1:5174';
 const shots = '/opt/cursor/artifacts';
@@ -59,8 +59,11 @@ async function buttons(page, label) {
     requestAnimationFrame(() => requestAnimationFrame(resolve));
   }));
   const blocked = await page.evaluate(buttonBlockers);
+  const wrapped = await page.evaluate(wrappedButtonLabels);
   if (blocked.length) console.log('BLOCKED', label, blocked);
+  if (wrapped.length) console.log('WRAPPED', label, wrapped);
   check(`${label} 每个可见按钮都能点到`, blocked.length === 0);
+  check(`${label} 按钮文字不换行`, wrapped.length === 0);
   return blocked;
 }
 
@@ -108,6 +111,25 @@ try {
     });
     const { page, errors, api } = await boot(context);
     const tag = viewport.name;
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const prologue = await page.evaluate(() => {
+      const shown = (el) => {
+        if (!el || el.hidden || el.closest('[hidden]')) return false;
+        const style = getComputedStyle(el);
+        return style.display !== 'none' && style.visibility !== 'hidden';
+      };
+      return {
+        banner: shown(document.getElementById('story-banner')),
+        skip: shown(document.getElementById('story-skip')),
+      };
+    });
+    check(`${tag} 序章提示还在`, prologue.banner && prologue.skip);
+    const introWrap = await page.evaluate(wrappedButtonLabels);
+    if (introWrap.length) console.log('WRAPPED', `${tag} 序章`, introWrap);
+    check(`${tag} 序章按钮文字不换行`, introWrap.length === 0);
+    const folds = await page.evaluate(foldChipMatch);
+    if (folds.length) console.log('FOLD', tag, folds);
+    check(`${tag} 折叠按钮样式一致`, folds.length === 0);
 
     await page.waitForTimeout(2200);
     const quiet = await page.evaluate(() => {
