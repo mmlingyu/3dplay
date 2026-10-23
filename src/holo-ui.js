@@ -17,6 +17,7 @@ import {
   tierLabel,
 } from './holo-data.js';
 import { ARENA_SPEAK, DOME_HOME, DOME_SPEAK, FESTIVAL_LINE, SHIP_LINE } from './xing-data.js';
+import { emitMood } from './avatar-mood.js';
 
 const SEED = 'xing-1';
 
@@ -266,6 +267,7 @@ export function mountHoloUi({ game, speak, toast, world, band, onPaint, tour }) 
       return;
     }
     world?.()?.setDomeFilled?.(true);
+    if (result.shard && !result.already) emitMood('happy');
     toast?.(result.message);
     say(result.line || DOME_HOME);
     paint(`<h2>星之片</h2><p>${result.message || ''}</p><p>${result.line || DOME_HOME}</p><div class="panel-row"><button type="button" class="primary-btn" data-holo="close">先离开</button><button type="button" class="secondary-btn" data-holo="speak" data-text="${DOME_HOME}">听一听</button></div>`);

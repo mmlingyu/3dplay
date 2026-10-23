@@ -1,6 +1,7 @@
 /** Glue the star-map story onto the home valley without moving the camera. */
 
 import { emptyRealm, normalizeAgeBand } from './realm-data.js';
+import { emitMood } from './avatar-mood.js';
 import { realMoment } from './life-data.js';
 import { DISCOVER_HEIGHT } from './vista-data.js';
 import { isTour } from './tour-mode.js';
@@ -381,6 +382,7 @@ function considerRestore() {
   });
   const line = restoreLine(zone, ageOf(bound.game));
   showBanner(line, zone === 'all' ? 12 : 10, `restore-${zone}`, ageOf(bound.game));
+  emitMood('surprise');
   bound.ui.toast?.(line);
 }
 

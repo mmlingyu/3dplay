@@ -5,6 +5,7 @@ import { BALLOON_CONTROL, balloonLook } from './balloon-data.js';
 import { trackListeners, trackWorldCreated, trackWorldReleased } from './scene-stats.js';
 import { attachFigure, stepFigures } from './ri-characters.js';
 import { attachRiCity } from './ri-city.js';
+import { bindMood } from './avatar-mood.js';
 
 const RI = REALMS.ri;
 const LISTENER_COUNT = 6;
@@ -77,6 +78,7 @@ export class RiWorld {
     this.previewMaterial = new THREE.MeshStandardMaterial({ color: '#fff0ae', transparent: true, opacity: 0.46, roughness: 0.9, depthWrite: false });
     this.player = new THREE.Group();
     person(this, this.player, { shirt: '#f2d27a', hair: '#4a3428', scale: 0.92 });
+    bindMood(this);
     this.player.traverse((obj) => { if (obj.isMesh) obj.castShadow = true; });
     this.scene.add(this.player);
     this.selectionRing = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.63, 32), new THREE.MeshBasicMaterial({ color: '#fff3be', side: THREE.DoubleSide, transparent: true, opacity: 0.85, depthWrite: false }));
@@ -490,6 +492,7 @@ export class RiWorld {
       this.camera.position.lerp(this.lookAt.clone().add(v), 1 - Math.exp(-5 * dt));
       this.camera.lookAt(this.lookAt);
     }
+    if (!paused) this.stepMoodScale?.(dt);
     if (!this.holdPaint) this.renderer.render(this.scene, this.camera);
     this.positionLabels();
     return this.playerPosition;

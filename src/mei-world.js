@@ -11,6 +11,7 @@ import { drawSouvenir, spinSouvenirs } from './mei-models.js';
 import { REALMS, realmTerrainHeight } from './realm-data.js';
 import { realMoment } from './life-data.js';
 import { trackListeners, trackWorldCreated, trackWorldReleased } from './scene-stats.js';
+import { bindMood } from './avatar-mood.js';
 
 const MEI = REALMS.mei;
 const LISTENER_COUNT = 6;
@@ -77,6 +78,7 @@ export class MeiWorld {
     this.previewMaterial = new THREE.MeshStandardMaterial({ color: '#82c98c', transparent: true, opacity: 0.48, roughness: 0.9, depthWrite: false });
     this.player = new THREE.Group();
     person(this, this.player, { shirt: '#f2d27a', hair: '#4a3428', scale: 0.92 });
+    bindMood(this);
     this.scene.add(this.player);
     this.selectionRing = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.63, 32), new THREE.MeshBasicMaterial({ color: '#fff3be', side: THREE.DoubleSide, transparent: true, opacity: 0.85, depthWrite: false }));
     this.selectionRing.rotation.x = -Math.PI / 2;
@@ -601,6 +603,7 @@ export class MeiWorld {
       this.camera.position.lerp(this.lookAt.clone().add(v), 1 - Math.exp(-5 * dt));
       this.camera.lookAt(this.lookAt);
     }
+    if (!paused) this.stepMoodScale?.(dt);
     if (!this.holdPaint) this.renderer.render(this.scene, this.camera);
     this.positionLabels();
     return this.playerPosition;

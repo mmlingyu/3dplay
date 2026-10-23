@@ -1,6 +1,7 @@
 /** Day-valley prompts. Pictures and speech sit beside the words. */
 
 import { icon } from './icons.js';
+import { emitMood } from './avatar-mood.js';
 import { playRiAudio } from './ri-audio.js';
 import {
   MIKO_CLUE,
@@ -236,7 +237,7 @@ export function handleRiTap(target, hooks) {
   if (target.riKind === 'cabinet') {
     const result = game.claimRiShard();
     toast(result.message, result.ok);
-    if (result.shard && !result.already) showShard(speak);
+    if (result.shard && !result.already) { emitMood('happy'); showShard(speak); }
     else speak(result.message);
     world.sync(game.state);
     return true;

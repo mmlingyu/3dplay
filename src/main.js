@@ -14,6 +14,7 @@ import { startValleySync } from './valley-sync.js';
 import { BOUNCE_ISLAND, PARK_NAME, PLAY_MODES, SKIP_STEPS, TIMES_TABLES, bounceInfo, inNumberPark, onBounceIsland, playMode, unlockedParkModes } from './bounce-data.js';
 import { BALLOON_BASE, BALLOON_CONTROL, BALLOON_NAME, balloonBaseFor, onBalloonLawn } from './balloon-data.js';
 import { LOOK_COLORS, LOOK_HATS, LOOK_SHAPES, NAME_PRESETS, lookColor, normalizeLook } from './avatar-data.js';
+import { emitMood, lookMarkup, MOOD_LABELS, PREVIEW_MOODS, pupilShift } from './avatar-mood.js';
 import { yardPlankCount } from './yard-goal.js';
 import { nearestShard, shardNote } from './story-data.js';
 import { gradeQuestion, loadTutorPack, nextQuestion, primeTutorPack, tutorById, tutors, useTutorRealm } from './tutor-data.js';
@@ -133,6 +134,7 @@ function toast(message, gain = false) {
   speak(message);
 }
 function speak(text, options = {}) {
+  if (text) emitMood('talking', { soft: true });
   if (!game.state.settings.sound || !text) return;
   const now = performance.now();
   if (lastSpoken.text === text && now - lastSpoken.at < 500) return;
@@ -672,6 +674,7 @@ async function mountWorld(realm, mod, options = {}) {
   }
   if (realm === 'xing' && world.deviceEnv) world.deviceEnv = qualityEnv();
   world.sync(game.state);
+  if (outer) emitMood('surprise');
   if ((realm === 'ri' || realm === 'mei') && game.state.travel.via === 'balloon') world.beginArrivalDescend?.();
   if (realm === 'xing' && options.descend) world.beginArrivalDescend?.();
   world.createLabels((target) => approach(target, true));
@@ -1302,10 +1305,10 @@ function interact(target = null) {
     const now = performance.now();
     if (now - (cooldowns.get(target.id) || -10000) < 1500) { toast('刚取过啦，材料很快补好。'); return; }
     const result = game.harvest(target.item); toast(result.message, result.ok);
-    if (result.ok) { cooldowns.set(target.id, now); world.celebrate(target.position, ITEMS[target.item].color); }
+    if (result.ok) { cooldowns.set(target.id, now); world.celebrate(target.position, ITEMS[target.item].color); emitMood('happy'); }
   } else if(target.type==='encounter'){
     const result=game.claimEncounter(target.id);toast(result.message,result.ok);
-    chosenTarget=null;world.select(null);if(result.ok)world.celebrate(target.position);updateContext();
+    chosenTarget=null;world.select(null);if(result.ok){world.celebrate(target.position);emitMood('happy');}updateContext();
   } else if (target.type === 'pool') { world.walkTo({x:POOL.x,z:POOL.z}); toast('从木坡道入水，游向池沿就能上岸。'); }
   else if (target.type === 'bounce') {
     if (world.bounce) { world.stopBounce(); toast('停下来啦。想再跳，再走上小岛。'); }
@@ -1389,7 +1392,7 @@ function interact(target = null) {
     if (!world.bounce) world.walkTo(BOUNCE_ISLAND);
   }
   else if (target.panel) openPanel(target.panel, target.context || {});
-  else if (target.type === 'creation') { const message = world.creation.tryOut(target.id) || `${target.name}很开心！`; world.celebrate(target.position); toast(message); speak(message); updateContext(); }
+  else if (target.type === 'creation') { const message = world.creation.tryOut(target.id) || `${target.name}很开心！`; world.celebrate(target.position); emitMood('happy'); toast(message); speak(message); updateContext(); }
   else if (target.type === 'experiment') { world.releaseBall(); }
   else if (target.type === 'block') {
     if (target.item === 'glyph-plaque') { const hello = '咕咕。小咕向你问好。'; toast(hello); speak(hello); return; }
@@ -1412,7 +1415,7 @@ function build() {
   }
   const result = game.placeBlock(selectedItem, { ...cell, rotation });
   toast(result.message, result.ok);
-  if (result.ok) { world.celebrate({ x: cell.x, y: cell.y, z: cell.z }, ITEMS[selectedItem].color); buildCell = null; updateUI(); updateContext(); }
+  if (result.ok) { world.celebrate({ x: cell.x, y: cell.y, z: cell.z }, ITEMS[selectedItem].color); emitMood('happy'); buildCell = null; updateUI(); updateContext(); }
 }
 function placementIssue(cell) {
   if (!game.state.inventory[selectedItem]) return `${ITEMS[selectedItem].name}用完了，换一种材料吧。`;
@@ -1498,7 +1501,7 @@ function updateWish() {
   if (count >= 6 && !completedWish) {
     completedWish = true;
     $('wish-title').textContent = '小院铺好啦！'; $('wish-description').textContent = '想加一面墙，还是去看看小球？接下来由你决定。';
-    if (started) { toast('自己的小院，完成啦！', true); world.celebrate(world.playerPosition); }
+    if (started) { toast('自己的小院，完成啦！', true); world.celebrate(world.playerPosition); emitMood('happy'); }
   }
   if (count < 6 && completedWish) {
     completedWish = false; $('wish-title').textContent = '铺一块自己的小院'; $('wish-description').textContent = '试着铺 6 格木板。也可以先去逛逛。';
@@ -1907,13 +1910,38 @@ function currentLookDraft() {
   if (typed) look.name = String(typed.value || '').replace(/\s+/g, '').slice(0, 8);
   return look;
 }
+let previewMoodAt = -1;
+function paintLookMood(name) {
+  const stage = $('look-avatar');
+  const mood = MOOD_LABELS[name] ? name : 'idle';
+  if (stage) stage.dataset.mood = mood;
+  const svg = stage?.querySelector('.av');
+  if (svg) {
+    for (const item of [...svg.classList]) if (item.startsWith('mood-')) svg.classList.remove(item);
+    svg.classList.add(`mood-${mood}`);
+    svg.setAttribute('aria-label', MOOD_LABELS[mood]);
+  }
+  const hint = document.querySelector('.look-mood-hint');
+  if (hint) hint.textContent = mood === 'idle' ? '点一下，看表情' : MOOD_LABELS[mood];
+}
+function showLookMood(name) {
+  const mood = MOOD_LABELS[name] ? name : 'idle';
+  paintLookMood(mood);
+  clearTimeout(showLookMood.timer);
+  if (mood !== 'idle') showLookMood.timer = setTimeout(() => paintLookMood('idle'), 2400);
+}
 function paintLookStage() {
   const stage = $('look-avatar');
   if (!stage) return;
   const look = currentLookDraft();
   stage.dataset.shape = look.shape;
   stage.dataset.hat = look.hat;
-  stage.style.setProperty('--look', lookColor(look));
+  const mood = stage.dataset.mood || 'idle';
+  const key = `${look.shape}|${look.color}|${look.hat}`;
+  if (stage.dataset.key !== key || !stage.querySelector('.av')) {
+    stage.dataset.key = key;
+    stage.innerHTML = lookMarkup({ shape: look.shape, color: lookColor(look), hat: look.hat, mood });
+  }
   if (world) world.applyLook(look);
 }
 function chooseLook(patch) {
@@ -1956,18 +1984,43 @@ function mountLook() {
   fillLookRow('look-hats', LOOK_HATS, 'hat', (item) => chooseLook({ hat: item.id }));
   $('look-heart')?.addEventListener('click', () => {
     const name = currentLookDraft().name || GUEST_PLAYER_NAME;
-    world?.pulseHeart?.();
-    $('look-avatar')?.classList.add('is-heart');
-    setTimeout(() => $('look-avatar')?.classList.remove('is-heart'), 700);
+    emitMood('happy');
     speak(`${name}，就这个。`);
   });
-  $('look-stage')?.addEventListener('pointermove', (event) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = (event.clientX - rect.left) / rect.width - 0.5;
-    const y = (event.clientY - rect.top) / rect.height - 0.5;
-    $('look-avatar')?.style.setProperty('--eye-x', `${x * 4}px`);
-    $('look-avatar')?.style.setProperty('--eye-y', `${y * 3}px`);
+  $('look-stage')?.addEventListener('click', (event) => {
+    if (event.target.closest('button, input')) return;
+    previewMoodAt = (previewMoodAt + 1) % PREVIEW_MOODS.length;
+    emitMood(PREVIEW_MOODS[previewMoodAt], { seconds: 2.4 });
   });
+  document.addEventListener('pointermove', (event) => {
+    const root = $('look-avatar');
+    const svg = root?.querySelector('.av');
+    if (!svg || svg.classList.contains('mood-yawn') || root.closest('[hidden]')) return;
+    const rect = svg.getBoundingClientRect();
+    if (!rect.width) return;
+    const shift = pupilShift(event.clientX - (rect.left + rect.width / 2), event.clientY - (rect.top + rect.height / 2));
+    const bias = svg.classList.contains('mood-curious') ? -1.1 : 0;
+    svg.querySelectorAll('.pupil').forEach((node) => {
+      node.setAttribute('transform', `translate(${shift.x.toFixed(2)} ${(shift.y + bias).toFixed(2)})`);
+    });
+  });
+  window.addEventListener('valley-mood', (event) => {
+    const detail = event.detail || {};
+    const applied = world ? world.setMood?.(detail.name, detail) : true;
+    if (applied !== false) showLookMood(detail.name);
+  });
+  setInterval(() => {
+    const root = $('look-avatar');
+    const svg = root?.querySelector('.av');
+    if (!svg || svg.classList.contains('mood-yawn') || root.closest('[hidden]')) return;
+    if (Math.random() > 0.2) return;
+    svg.querySelectorAll('.lid').forEach((lid) => {
+      lid.classList.remove('blink');
+      try { void lid.getBBox(); } catch { /* not painted yet */ }
+      lid.classList.add('blink');
+      setTimeout(() => lid.classList.remove('blink'), 200);
+    });
+  }, 520);
   $('look-dialog-close')?.addEventListener('click', () => {
     commitLook();
     $('look-dialog').hidden = true;
