@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#426b58" />
+    <meta name="description" content="一片属于你的河谷。采集、搭建、种植，在自由探索中慢慢发现世界。" />
+    <title>我的河谷 · 自由探索，慢慢发现</title>
+    <link rel="icon" href="/3dplay/favicon.svg" type="image/svg+xml" />
+    <script type="module" crossorigin src="/3dplay/assets/index-DDzyQne8.js"></script>
+    <link rel="stylesheet" crossorigin href="/3dplay/assets/index-CUcm5Gvo.css">
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="world-canvas" aria-label="我的河谷三维开放世界。可用触屏摇杆或方向键移动，点选物品，再按动作按钮。"></canvas>
+      <div id="world-labels"></div>
+      <button type="button" id="focus-exit" hidden>退出近看</button>
+      <div id="model-menu" class="model-menu" hidden role="dialog" aria-label="这个模型">
+        <strong id="model-menu-name"></strong>
+        <p id="model-menu-guide">双击这个模型靠近看看，再双击一次回到原来的视角。</p>
+        <button type="button" id="model-menu-act" class="primary-btn">做个动作</button>
+        <button type="button" id="model-menu-edit" class="secondary-btn">继续修改</button>
+        <button type="button" id="model-menu-recall" class="secondary-btn">收回背包</button>
+      </div>
+      <div class="hud">
+        <header class="topbar">
+          <div id="brand"><span class="brand-mark" data-icon="leaf"></span><div><div class="brand-name">我的河谷</div><div class="brand-subtitle">自由探索 · 慢慢发现</div></div></div>
+          <button id="life-button" class="location-pill" aria-label="看时钟、季节与植物"><span id="clock-drawing"></span><span id="clock-label">春 · 第1天</span><span id="location-name" hidden>我的小院</span></button>
+          <div class="top-actions">
+            <a id="account-chip" class="account-chip" href="/account" target="_blank" rel="noopener"><i class="save-dot" id="account-dot"></i><span id="account-label">登录</span></a>
+            <span id="save-status" class="save-status"><span class="save-dot"></span> 已保存</span>
+            <button class="icon-btn" id="sound-button" aria-label="关闭声音" data-tooltip="声音"><span data-icon="sound"></span></button>
+            <button class="icon-btn" id="help-button" aria-label="怎么看、怎么玩" data-tooltip="怎么玩"><span data-icon="help"></span></button>
+            <button class="icon-btn" id="pause-button" aria-label="保存与暂停" data-tooltip="保存与暂停"><span data-icon="pause"></span></button>
+            <button type="button" id="tour-next" class="secondary-btn" hidden>跳到下一章</button>
+          </div>
+        </header>
+        <aside class="wish-card is-folded" id="wish-card">
+          <button type="button" id="wish-toggle" class="fold-toggle" aria-expanded="false" aria-label="点子">点子</button>
+          <div class="wish-body">
+            <div class="wish-kicker"><span data-icon="heart"></span> 一个小点子<button class="wish-dismiss" id="wish-dismiss" aria-label="收起小点子"><span data-icon="close"></span></button></div>
+            <div class="wish-title" id="wish-title">铺一块自己的小院</div>
+            <div class="wish-description" id="wish-description">试着铺 6 格木板。也可以先去逛逛。</div>
+            <div class="wish-progress" id="wish-progress"></div>
+            <button class="wish-read" id="wish-read" aria-label="听听这个点子"><span data-icon="sound"></span> 听一听</button>
+          </div>
+        </aside>
+        <aside class="minimap-card is-folded">
+          <button type="button" id="map-toggle" class="fold-toggle" aria-expanded="false" aria-label="地图">地图</button>
+          <div class="minimap-body">
+            <div class="minimap-title"><span data-icon="map"></span> 我的河谷 <span class="map-north">北 ↑</span></div>
+            <canvas id="minimap" width="160" height="132" aria-label="河谷地图，绿色点是小谷的位置"></canvas>
+            <div class="minimap-caption">林间 · 工坊 · 数字乐园 · 菜地 · 诗台 · 热气球草场</div>
+            <button id="vista-map-button" class="secondary-btn" type="button" aria-label="远处的谷">远处的谷</button>
+            <button id="land-button" class="secondary-btn">开垦探索</button>
+          </div>
+        </aside>
+      </div>
+      <section id="land-question" hidden role="region" aria-labelledby="land-question-title">
+        <strong id="land-question-title">前面还没整理，想去看看吗？</strong>
+        <p id="land-question-detail"></p>
+        <div class="land-question-actions"><button id="land-question-open" class="primary-btn">开垦这里</button><button id="land-question-skip" class="secondary-btn">先不</button></div>
+      </section>
+      <div id="bounce-hud" hidden>
+        <strong id="bounce-park">数字乐园</strong>
+        <div id="bounce-modes" role="tablist" aria-label="数字玩法"></div>
+        <div id="bounce-picks" hidden></div>
+        <span id="bounce-count">1</span>
+        <span id="bounce-word">one</span>
+        <span id="bounce-formula" hidden></span>
+        <span id="bounce-note">first · 第一下</span>
+        <span id="bounce-ask" hidden></span>
+        <button type="button" id="bounce-stop" class="primary-btn">停下来</button>
+      </div>
+      <button type="button" id="travel-home" class="primary-btn" hidden aria-label="回家">回家</button>
+      <button type="button" id="holo-back" class="primary-btn" hidden aria-label="回到外星谷">回到外星谷</button>
+      <button type="button" id="travel-go" class="primary-btn" hidden aria-label="去日谷">去日谷</button>
+      <button type="button" id="travel-go-mei" class="primary-btn" hidden aria-label="去美谷">去美谷</button>
+      <div id="ri-actions" hidden>
+        <button type="button" id="ri-washi" class="primary-btn" aria-label="做和纸">做和纸</button>
+        <button type="button" id="ri-claim" class="primary-btn" aria-label="收下和纸" hidden>收下和纸</button>
+        <button type="button" id="ri-crane" class="primary-btn" aria-label="折纸鹤">折纸鹤</button>
+        <button type="button" id="ri-stamps" class="secondary-btn" aria-label="印章本">印章</button>
+        <button type="button" id="ri-flag" class="secondary-btn" aria-label="修鲤鱼旗">修旗</button>
+      </div>
+      <div id="mei-actions" hidden>
+        <button type="button" id="mei-maple" class="primary-btn" aria-label="熬枫糖">熬枫糖</button>
+        <button type="button" id="mei-project" class="primary-btn" aria-label="项目板">项目板</button>
+        <button type="button" id="mei-quilt" class="primary-btn" aria-label="拼布">拼布</button>
+        <button type="button" id="mei-stamps" class="secondary-btn" aria-label="印章本">印章</button>
+        <button type="button" id="mei-trade" class="secondary-btn" aria-label="交换板" hidden>交换</button>
+        <button type="button" id="mei-lantern" class="secondary-btn" aria-label="南瓜灯">南瓜灯</button>
+        <button type="button" id="mei-thanks" class="secondary-btn" aria-label="感谢卡">感谢卡</button>
+        <button type="button" id="mei-stage" class="primary-btn" aria-label="摄影棚">摄影棚</button>
+        <button type="button" id="mei-projector" class="primary-btn" aria-label="放映机">放映机</button>
+        <button type="button" id="mei-premiere" class="secondary-btn" aria-label="首映夜">首映夜</button>
+      </div>
+      <div id="travel-cutscene" hidden role="dialog" aria-label="出发">
+        <p id="travel-cutscene-text"></p>
+        <p id="travel-journey-line"></p>
+        <div class="ship-pass" aria-hidden="true"><span class="ship-deck"></span><span class="ship-boat"></span></div>
+        <button type="button" id="travel-skip" class="fold-toggle" aria-label="跳过">跳过</button>
+      </div>
+      <div id="xing-actions" hidden>
+        <button type="button" id="xing-lab" class="primary-btn" aria-label="看球跳得高">看球跳得高</button>
+        <button type="button" id="xing-crystal" class="primary-btn" aria-label="培养盐晶">培养盐晶</button>
+        <button type="button" id="xing-gugu" class="primary-btn" aria-label="送小咕回家">送小咕回家</button>
+        <button type="button" id="xing-case" class="primary-btn" aria-label="装进展柜">装进展柜</button>
+        <button type="button" id="xing-stamps" class="secondary-btn" aria-label="印章本">印章</button>
+        <button type="button" id="balloon-return" class="primary-btn" aria-label="坐热气球回家">坐热气球回家</button>
+      </div>
+      <div id="letter-card" hidden role="dialog" aria-label="一封画">
+        <p id="letter-text">纸船上画着一面缺了角的鲤鱼旗。</p>
+        <button type="button" id="letter-close" class="primary-btn" aria-label="先放着">先放着</button>
+      </div>
+      <div id="mei-letter" hidden role="dialog" aria-label="纸飞机来信">
+        <p>纸飞机上画着一座没搭完的小木屋。</p>
+        <button type="button" id="mei-letter-close" class="primary-btn" aria-label="先放着">先放着</button>
+      </div>
+      <div id="holo-transition" hidden role="dialog" aria-label="进入星网">
+        <p id="holo-transition-text">光从脚下慢慢亮起来。地面变成光点，再聚成平台。</p>
+        <button type="button" id="holo-skip" class="primary-btn" aria-label="跳过">跳过</button>
+      </div>
+      <div id="holo-bar" hidden>
+        <button type="button" id="holo-avatar-open" class="primary-btn" aria-label="化身">化身</button>
+        <button type="button" id="holo-tier-open" class="primary-btn" aria-label="星阶">星阶</button>
+        <button type="button" id="holo-stage-open" class="primary-btn" aria-label="数之环">数之环</button>
+        <button type="button" id="holo-dome-open" class="primary-btn" aria-label="补星图">补星图</button>
+        <button type="button" id="holo-zones-open" class="secondary-btn" aria-label="星区">星区</button>
+      </div>
+      <div id="holo-panel" hidden role="dialog" aria-label="星网"></div>
+      <div id="star-cutscene" hidden role="dialog" aria-label="飞向星星">
+        <strong id="star-title">飞向星星</strong>
+        <p id="star-note">这是游戏里的幻想航线，真实的热气球飞不出大气层。</p>
+        <p id="star-journey-line"></p>
+        <button type="button" id="star-skip" class="fold-toggle" aria-label="跳过">跳过</button>
+      </div>
+      <div id="xing-sheet" hidden role="dialog" aria-label="外星谷"></div>
+      <div id="balloon-hud" hidden>
+        <button type="button" id="balloon-chip" class="fold-toggle" hidden>飞行中</button>
+        <div id="balloon-panel">
+        <strong id="balloon-title">热气球游览</strong>
+        <span id="balloon-note">转一圈看河谷</span>
+        <div id="balloon-routes">
+          <button type="button" id="balloon-voyage" class="primary-btn" hidden aria-label="看风景去日谷">去日谷</button>
+          <button type="button" id="balloon-voyage-mei" class="primary-btn" hidden aria-label="看风景去美谷">去美谷</button>
+          <button type="button" id="balloon-stars" class="primary-btn" hidden aria-label="飞向星星（外星谷）">飞向星星</button>
+        </div>
+        <button type="button" id="balloon-steer" data-balloon-mode="steer" aria-pressed="false">自己开</button>
+        <div id="balloon-drive" hidden>
+          <button type="button" id="balloon-orbit" data-balloon-mode="orbit" aria-pressed="true">转一圈</button>
+          <button type="button" id="balloon-up">升高</button>
+          <button type="button" id="balloon-down">降低</button>
+        </div>
+        <button type="button" id="balloon-reroute" class="secondary-btn" hidden>改去别处</button>
+        <button type="button" id="balloon-land" class="primary-btn" aria-label="降落到草坪基地">降落到草坪基地</button>
+        </div>
+      </div>
+      <button type="button" id="vista-arrow" class="vista-arrow" hidden aria-label="看向那边">→</button>
+      <div id="vista-card" hidden role="status">
+        <span id="vista-icon" aria-hidden="true"></span>
+        <p id="vista-line">看，那边。</p>
+        <button type="button" id="vista-look" class="primary-btn" aria-label="看过去">看过去</button>
+        <button type="button" id="vista-skip" class="secondary-btn" hidden aria-label="跳过靠近">跳过</button>
+        <button type="button" id="vista-later" class="secondary-btn" aria-label="先不看">先不看</button>
+      </div>
+      <div id="vista-stamp" hidden role="status">
+        <span id="vista-stamp-icon" aria-hidden="true"></span>
+        <strong id="vista-stamp-name">发现</strong>
+      </div>
+      <section id="tutor-card" hidden role="dialog" aria-label="角色对话">
+        <div id="npc-surface"></div>
+      </section>
+      <div id="context-hint"><span data-icon="hand"></span><span id="context-text">点一下木料，再去采集吧</span></div>
+      <div id="joystick" aria-label="移动摇杆"><div class="joystick-ring"><span class="joystick-direction north"></span><span class="joystick-direction east"></span><span class="joystick-direction south"></span><span class="joystick-direction west"></span><div class="joystick-knob"><span data-icon="footsteps"></span></div></div></div>
+      <div class="action-controls">
+        <button class="action-btn" id="action-button" aria-label="操作所选物品"><span class="action-icon" id="action-icon" data-icon="hand"></span><span class="action-name" id="action-name">采集</span></button>
+        <button class="jump-btn" id="jump-button" aria-label="跳一下"><span data-icon="jump"></span></button>
+      </div>
+      <nav class="bottom-dock" aria-label="工具与材料">
+        <section id="placement-controls" class="placement-controls" aria-label="放置所选材料" hidden>
+          <div class="placement-summary"><span id="placement-item"></span><span id="placement-status" role="status">点场景选位置</span></div>
+          <div class="placement-actions">
+            <button class="icon-btn" id="rotate-button" aria-label="转个方向" data-tooltip="转个方向"><span data-icon="rotate"></span><span>旋转</span></button>
+            <button class="primary-btn" id="placement-confirm" disabled>先选位置</button>
+            <button class="secondary-btn" id="placement-cancel">取消</button>
+          </div>
+        </section>
+          <div class="mode-switch">
+          <button class="mode-btn active" data-mode="gather"><span data-icon="hand"></span><span>找材料</span></button>
+          <button class="mode-btn" data-mode="build"><span data-icon="hammer"></span><span>搭建</span></button>
+          <button class="mode-btn" data-mode="remove"><span data-icon="undo"></span><span>拆除</span></button>
+        </div>
+        <div class="hotbar" id="hotbar" hidden></div>
+        <div class="dock-tools">
+          <button class="icon-btn" id="undo-button" aria-label="撤销刚才的搭建" data-tooltip="撤销搭建"><span data-icon="undo"></span></button>
+          <span class="dock-divider"></span>
+          <button class="icon-btn" id="craft-button" aria-label="打开随身合成格" data-tooltip="合成"><span data-icon="craft"></span></button>
+          <button class="icon-btn backpack-button" id="inventory-button" aria-label="打开背包" data-tooltip="背包"><span data-icon="backpack"></span></button>
+        </div>
+      </nav>
+      <div id="welcome" class="welcome-screen">
+        <section class="welcome-card">
+          <div class="welcome-eyebrow"><span data-icon="sun"></span> 今天，想做点什么？</div>
+          <h1 class="welcome-title">一片河谷，<br />好多小小的<span>可能。</span></h1>
+          <p class="welcome-copy">搭一间自己的小屋，让小球滚过溪边，<br />或者种下一颗豆子。慢慢来，世界会等你。</p>
+          <div class="welcome-features"><span><i data-icon="hand"></i> 采集</span><span><i data-icon="hammer"></i> 搭建</span><span><i data-icon="plant"></i> 发现</span></div>
+          <div id="look-maker" class="look-maker">
+            <div id="look-stage" class="look-stage"><div id="look-avatar" class="look-avatar" data-shape="round" data-hat="sprout" role="img" aria-label="点一下看表情"></div><p class="look-mood-hint">点一下，看表情</p></div>
+            <div id="look-names" class="look-row"></div>
+            <input id="look-name" maxlength="8" aria-label="名字" placeholder="名字，不写就叫小谷" />
+            <div id="look-shapes" class="look-row"></div>
+            <div id="look-colors" class="look-row"></div>
+            <div id="look-hats" class="look-row"></div>
+            <button type="button" id="look-heart" class="secondary-btn">就这个</button>
+          </div>
+          <div class="welcome-actions"><button class="primary-btn" id="start-button">去河谷看看 <span data-icon="arrow-right"></span></button><button class="secondary-btn" id="welcome-help">怎么玩 <span data-icon="book"></span></button></div>
+          <div class="welcome-footnote"><span data-icon="save"></span> 随时保存，下次接着玩。</div>
+        </section>
+      </div>
+      <div id="boot-screen" role="status">河谷正在醒来</div>
+      <section id="look-dialog" hidden role="dialog" aria-label="换个样子">
+        <div id="look-dialog-body"></div>
+        <button type="button" id="look-dialog-close" class="primary-btn">好了</button>
+      </section>
+      <div id="story-banner" hidden role="status">
+        <p id="story-banner-text">雾不会伤害任何东西。</p>
+        <button type="button" id="story-skip" class="secondary-btn">跳过</button>
+      </div>
+      <button type="button" id="story-disk" hidden aria-label="星河图石盘">石盘</button>
+      <aside id="tour-guide" class="is-icon" hidden>
+        <button type="button" id="tour-guide-pin" class="fold-toggle" aria-label="下一步">下一步</button>
+        <div id="tour-guide-body">
+          <p id="tour-guide-brief">先去西边看石盘。</p>
+          <p id="tour-guide-text">先看雾慢慢进来。</p>
+          <button type="button" id="tour-guide-more">全文</button>
+        </div>
+      </aside>
+      <section id="story-talk" hidden role="dialog" aria-label="河谷的人">
+        <strong id="story-talk-name">船伯</strong>
+        <p id="story-talk-line"></p>
+        <div id="story-shard-board" hidden></div>
+        <button type="button" id="story-talk-hear" class="secondary-btn speak-btn" hidden>听一听</button>
+        <button type="button" id="story-talk-extra" class="secondary-btn" hidden>帮船伯记一份豆子</button>
+        <button type="button" id="story-talk-close" class="primary-btn">先走</button>
+      </section>
+      <section id="story-home" hidden role="dialog" aria-label="家之片">
+        <strong>选 3 个最喜欢的地方</strong>
+        <div id="story-home-picks"></div>
+        <button type="button" id="story-home-done" class="primary-btn">刻成家之片</button>
+        <button type="button" id="story-home-close" class="secondary-btn">以后再选</button>
+      </section>
+      <button type="button" id="story-festival" class="primary-btn" hidden>今天就办</button>
+      <div id="voice-caption" hidden role="status"></div>
+      <div id="toast-root" aria-live="polite"></div>
+      <div id="modal-root"></div>
+      <div id="webgl-fallback" hidden><h1>河谷还没显示出来</h1><p>请用支持 WebGL 的浏览器打开，再试一次。</p><button onclick="location.reload()">再试一次</button></div>
+    </div>
+  </body>
+</html>
