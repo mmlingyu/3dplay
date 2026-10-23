@@ -8,6 +8,7 @@ import { LAND_RULES, FACILITY_CHUNKS, isPointOpen, landBounds, openChunks, landE
 import { CreationWorld } from './creation-world.js';
 import { BOUNCE_ISLAND, PARK_NAME, PLAY_MODES, bounceSurface, makeParkQuestion, onBounceIsland, parkPadAt, playBounce, playMode, unlockedParkModes } from './bounce-data.js';
 import { lookColor } from './avatar-data.js';
+import { createBlink, createMoodClock, setMood as applyMood, stepBlink, stepMood } from './avatar-mood.js';
 import { YARD_CELLS, yardCellFilled } from './yard-goal.js';
 import { shardBoard } from './story-data.js';
 import { BALLOON_BASE, BALLOON_CONTROL, BALLOON_NAME, balloonAngleFrom, balloonHomeAngle, balloonHomeDuration, balloonLook, balloonNearBase, balloonReturnPose, balloonScaleFrom, balloonSteer, balloonTourPoint, onBalloonLawn } from './balloon-data.js';
@@ -111,6 +112,9 @@ export class RiverWorld {
     this.groundMeshes = []; this.terrain(); this.landmarks(); this.details(); this.batchDecorations();
     this.creation = new CreationWorld(this);
     this.player = this.avatar(); this.player.userData.live = true; this.scene.add(this.player);
+    this.moodClock = createMoodClock();
+    this.blinkState = createBlink();
+    this.stillFor = 0;
     this.swimRipple=new THREE.Mesh(new THREE.RingGeometry(.42,.46,32),new THREE.MeshBasicMaterial({color:'#f3f6df',transparent:true,opacity:.48,side:THREE.DoubleSide,depthWrite:false}));
     this.swimRipple.rotation.x=-Math.PI/2;this.swimRipple.visible=false;this.swimRipple.userData.live=true;this.scene.add(this.swimRipple);
     this.selectionRing = new THREE.Mesh(new THREE.RingGeometry(.55, .63, 40), new THREE.MeshBasicMaterial({ color: '#fff3be', side: THREE.DoubleSide, transparent: true, opacity: .85, depthWrite: false }));
@@ -693,8 +697,8 @@ export class RiverWorld {
     const leaf=this.mesh(g,new THREE.SphereGeometry(.12,8,6),'leaf',[.23,1.47,.05],[.5,1.1,.3]);leaf.rotation.z=-.6; leaf.material = leaf.material.clone();
     const eyes = [];
     for(const x of[-.112,.112]) eyes.push(this.mesh(g,new THREE.SphereGeometry(.032,8,6),'dark',[x,1.16,.357],[1,1.15,.55]));
-    g.userData.parts = { body, face, hat, hatDome, leaf, eyes, bodyMat };
     const smile=new THREE.Mesh(new THREE.TorusGeometry(.045,.008,4,12,Math.PI),this.mats.dark);smile.position.set(0,1.078,.37);smile.rotation.z=Math.PI;g.add(smile);
+    g.userData.parts = { body, face, hat, hatDome, leaf, eyes, bodyMat, smile };
     const blushMat=new THREE.MeshStandardMaterial({color:'#dfad8a',roughness:.9});for(const x of[-.2,.2])this.mesh(g,new THREE.SphereGeometry(.045,8,6),blushMat,[x,1.09,.29],[1,.6,.3]);
     g.userData.feet=[];g.userData.arms=[];
     for(const x of[-.16,.16]) {const foot=this.mesh(g,new THREE.SphereGeometry(.14,12,8),shoeMat,[x,.13,.065],[1,.65,1.45]);g.userData.feet.push(foot);const arm=this.mesh(g,new THREE.SphereGeometry(.13,12,8),faceMat,[x<0?-.38:.38,.69,.05],[.85,1.2,.85]);g.userData.arms.push(arm);}
@@ -714,23 +718,115 @@ export class RiverWorld {
     parts.leaf.visible = look.hat === 'sprout' || look.hat === 'flower' || cat;
     parts.leaf.position.set(cat ? 0.28 : 0.23, cat ? 1.5 : 1.47, 0.05);
     if (parts.leaf.material?.color) parts.leaf.material.color.set(look.hat === 'flower' ? '#e07a8a' : '#789957');
+    parts.body.userData.baseScale = parts.body.scale.clone();
+    parts.body.userData.baseY = parts.body.position.y;
+  }
+  setMood(name, options) {
+    if (!this.moodClock) this.moodClock = createMoodClock();
+    return applyMood(this.moodClock, name, options);
   }
   pulseHeart() {
-    if (this.player) this.player.userData.heart = 1;
+    this.setMood('happy');
+  }
+  nearCast() {
+    if (this.balloon || this.bounce) return false;
+    const stories = new Set(['boatman', 'aunt', 'grandma', 'mumu', 'swallow']);
+    for (const item of this.targets || []) {
+      const story = item.type === 'story' && stories.has(item.storyId);
+      const tutor = item.type === 'tutor';
+      if (!story && !tutor || !item.position) continue;
+      if (this.distanceTo(item) < 3.6) return true;
+    }
+    return false;
+  }
+  avatarPose() {
+    const eye = this.player?.userData?.parts?.eyes?.[0];
+    const smile = this.player?.userData?.parts?.smile;
+    return {
+      mood: this.moodClock?.name || 'idle',
+      eyeY: eye?.scale?.y ?? null,
+      smileX: smile?.scale?.x ?? null,
+      smileY: smile?.scale?.y ?? null,
+      scale: this.player?.scale?.y ?? 1,
+      sway: this.player?.rotation?.z ?? 0,
+    };
   }
   stepAvatar(dt) {
     const parts = this.player?.userData?.parts;
     if (!parts) return;
-    const heart = this.player.userData.heart || 0;
-    if (heart > 0) {
-      this.player.userData.heart = Math.max(0, heart - dt * 1.4);
-      const beat = 1 + Math.sin((1 - this.player.userData.heart) * Math.PI * 4) * 0.06 * this.player.userData.heart;
-      this.player.scale.setScalar(beat);
+    if (!this.moodClock) this.moodClock = createMoodClock();
+    if (!this.blinkState) this.blinkState = createBlink();
+    const calm = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    stepMood(this.moodClock, dt);
+    const near = this.nearCast();
+    if (near && (this.moodClock.name === 'idle' || this.moodClock.name === 'curious')) {
+      applyMood(this.moodClock, 'curious', { hold: true });
+    } else if (!near && this.moodClock.held && this.moodClock.name === 'curious') {
+      applyMood(this.moodClock, 'idle');
     }
-    this.blinkIn = (this.blinkIn || 2.4) - dt;
-    const shut = this.blinkIn < 0.12;
-    if (this.blinkIn < 0) this.blinkIn = 2.2 + Math.random() * 2.4;
-    for (const eye of parts.eyes) eye.scale.y = shut ? 0.15 : 1.15;
+    const busy = this.lastMove || this.balloon || this.bounce || this.locomotion === 'swim';
+    this.stillFor = busy ? 0 : (this.stillFor || 0) + dt;
+    if (this.stillFor > 14 && this.moodClock.name === 'idle') {
+      this.stillFor = 0;
+      applyMood(this.moodClock, 'yawn');
+    }
+    const mood = this.moodClock.name;
+    const blinkShut = stepBlink(this.blinkState, dt);
+    const yawnShut = mood === 'yawn' && this.moodClock.left < 1.65 && this.moodClock.left > 0.4;
+    const shut = yawnShut || blinkShut;
+    let eyeY = shut ? 0.14 : (mood === 'happy' || mood === 'curious' ? 1.34 : mood === 'surprise' ? 1.5 : 1.15);
+    for (const eye of parts.eyes) {
+      eye.scale.y = eyeY;
+      eye.scale.x = mood === 'surprise' && !shut ? 1.12 : 1;
+    }
+    if (!parts.body.userData.baseScale) parts.body.userData.baseScale = parts.body.scale.clone();
+    const src = parts.body.userData.baseScale;
+    const baseY = parts.body.userData.baseY ?? parts.body.position.y;
+    if (parts.body.userData.baseY == null) parts.body.userData.baseY = parts.body.position.y;
+    let sx = 1;
+    let sy = 1;
+    let hop = 0;
+    if (!calm) {
+      const breathe = Math.sin(this.time * 2.2) * 0.03;
+      sx = 1 - breathe * 0.45;
+      sy = 1 + breathe;
+      hop = Math.sin(this.time * 2.1) * 0.01;
+      if (mood === 'happy') {
+        const beat = Math.abs(Math.sin(this.time * 9));
+        sx = 1 + beat * 0.05;
+        sy = 1.03 - beat * 0.07;
+        hop = beat * 0.055;
+      } else if (mood === 'surprise') {
+        hop = Math.sin(Math.min(1, (1.25 - this.moodClock.left) / 0.32) * Math.PI) * 0.06;
+        sy = 1.06;
+      }
+    }
+    parts.body.scale.set(src.x * sx, src.y * sy, src.z);
+    parts.body.position.y = baseY + hop;
+    const smile = parts.smile;
+    if (smile) {
+      let mx = 1;
+      let my = 1;
+      if (mood === 'happy') { mx = 1.45; my = 1.15; }
+      else if (mood === 'talking') { mx = 1.05; my = 0.45 + Math.abs(Math.sin(this.time * 16)) * 1.05; }
+      else if (mood === 'surprise') { mx = 0.72; my = 0.72; }
+      else if (mood === 'yawn') { mx = 0.82; my = yawnShut ? 1.45 : 0.7; }
+      else if (mood === 'curious') { mx = 0.9; my = 0.62; }
+      smile.scale.set(mx, my, 1);
+    }
+    if (!parts.face.userData.baseY) parts.face.userData.baseY = parts.face.position.y;
+    const lift = this.lastMove && mood !== 'yawn' ? 0.028 : (mood === 'curious' ? 0.02 : 0);
+    parts.face.position.y = parts.face.userData.baseY + lift;
+    const sway = calm ? 0 : (!this.lastMove && mood === 'idle' && !busy ? Math.sin(this.time * 1.25) * 0.035 : mood === 'curious' ? Math.sin(this.time * 1.6) * 0.08 : 0);
+    this.player.rotation.z = sway;
+    let scale = 1;
+    if (!calm && mood === 'happy') scale = 1 + Math.sin(this.time * 12) * 0.035;
+    else if (!calm && mood === 'surprise') scale = 1 + Math.sin(this.time * 14) * 0.04;
+    else if (!calm) scale = 1 + Math.sin(this.time * 1.8) * 0.012;
+    this.player.scale.setScalar(scale);
+    if (mood === 'happy') {
+      for (const arm of this.player.userData.arms || []) arm.position.y += 0.1;
+    }
   }
   blockModel(block, ghost = false) {
     const g = new THREE.Group(); g.position.set(block.x, block.y, block.z); g.rotation.y = (block.rotation || 0) * Math.PI / 2;
@@ -1573,7 +1669,7 @@ export class RiverWorld {
       const swimming=this.locomotion==='swim',bouncing=!!this.bounce,flying=!!this.balloon,stride=this.lastMove?Math.sin(this.motionTime*12):0;
       this.player.rotation.x+=((swimming?WATER_RULES.swimTilt:bouncing?Math.min(.18,this.velocityY*.03):flying?0.04:0)-this.player.rotation.x)*(1-Math.exp(-WATER_RULES.poseRate*dt));
       this.player.userData.feet.forEach((foot,i)=>{const kick=Math.sin(this.motionTime*9+i*Math.PI);foot.position.y=.13+(swimming?kick*.06:flying?0.02:bouncing?.04+Math.max(0,-this.velocityY)*.02:Math.max(0,i?-stride:stride)*.07);foot.position.z=.065+(swimming?kick*.1:flying?0.08:0);});
-      this.player.userData.arms.forEach((arm,i)=>{const stroke=Math.sin(this.motionTime*5+i*Math.PI);arm.position.set(i?.38:-.38,flying?0.92:bouncing?1.05:swimming?.78+stroke*.07:.69,flying?0.18:bouncing?.12:swimming?.08+stroke*.23:.05+(i?1:-1)*stride*.09);});
+      this.player.userData.arms.forEach((arm,i)=>{const stroke=Math.sin(this.motionTime*5+i*Math.PI);arm.position.set(i?.38:-.38,flying?0.92:bouncing?1.05:swimming?.78+stroke*.07:.69,flying?0.18:bouncing?.12:swimming?.08+stroke*.23:.05+(i?1:-1)*stride*.16);});
       if(this.bounceMat){this.bounceSquash=Math.max(0,(this.bounceSquash||0)-dt*4);const s=this.bounceSquash;this.bounceMat.scale.y=1-s*.45;this.bounceMat.position.y=this.bounceMat.userData.baseY-s*.04;}
       this.swimRipple.visible=swimming;
       if(swimming){this.swimRipple.position.set(this.playerPosition.x,this.waterState().level+.025,this.playerPosition.z);this.swimRipple.scale.setScalar(1+Math.sin(this.motionTime*5)*.15);}

@@ -1,6 +1,7 @@
 /** Lot panels: two age bands, projector, premiere. No scores. */
 
 import { LANTERN_NOTE } from './mei-data.js';
+import { emitMood } from './avatar-mood.js';
 import {
   LIGHTS,
   LOT_NOTE,
@@ -92,6 +93,7 @@ export function handleLotAction({ action, target, game, notifyResult, render }) 
   } else if (action === 'lot-fix') {
     const result = game.fixMeiProjector();
     if (result.shard) reelOpen = true;
+    if (result.shard && !result.replay) emitMood('happy');
     if (result.audio) say(result.audio, result.speak || result.message, 'zh-CN');
     notifyResult(result);
   } else if (action === 'lot-skip') {

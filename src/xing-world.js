@@ -12,6 +12,7 @@ import { trackListeners, trackWorldCreated, trackWorldReleased } from './scene-s
 import { realMoment } from './life-data.js';
 import { GATE_FRONT, HOLO_TRANSITION_SECONDS, STAR_GATE, resolveQuality } from './holo-data.js';
 import { makeGate, makeGugu, makeZero } from './holo-figures.js';
+import { bindMood } from './avatar-mood.js';
 
 const XING = REALMS.xing;
 const LISTENER_COUNT = 6;
@@ -74,6 +75,7 @@ export class XingWorld {
     this.player = new THREE.Group();
     this.scene.add(this.player);
     this.paintPlayer();
+    bindMood(this);
     this.selectionRing = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.63, 28), new THREE.MeshBasicMaterial({ color: '#fff3be', side: THREE.DoubleSide, transparent: true, opacity: 0.85, depthWrite: false }));
     this.selectionRing.rotation.x = -Math.PI / 2;
     this.selectionRing.visible = false;
@@ -812,6 +814,7 @@ export class XingWorld {
     }
     this.player.position.copy(this.playerPosition);
     this.player.rotation.y = this.facing;
+    if (!paused) this.stepMoodScale?.(dt);
     this.frameCamera(dt);
     this.paint();
     this.positionLabels();

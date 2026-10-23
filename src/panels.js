@@ -11,6 +11,7 @@ import { STAMP_BOOK } from './stamp-book.js';
 import { MEI_PANEL_TITLES, handleMeiAction, meiPanelHtml } from './mei-panels.js';
 import { KEEPSAKES, VISTA_IDS, VISTAS, VISTA_QUIZ, drawVistaMap, gradeVistaQuiz, vistaBand, vistaDistanceCopy } from './vista-data.js';
 import { clueLine, drawStarOverlay } from './story-data.js';
+import { emitMood } from './avatar-mood.js';
 
 const escapeHTML = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 const BUILDABLE = new Set(['plank', 'stone', 'brick', 'ramp', 'post', 'chest', 'workbench', 'roof', 'window', 'door', 'bed', 'fence', 'pot', 'wreath', 'lantern', 'flag']);
@@ -213,6 +214,7 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
       return;
     }
     const result = game.craft(recipe.pattern, recipe.id);
+    if (result.ok) emitMood('happy');
     if (result.ok) {
       result.message = madeLine(recipe, result.count);
       mathPut[id] = 0;
@@ -839,6 +841,7 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
     if (action === 'craft-confirm') {
       const result = game.craft(grid, selectedRecipe);
       craftNotice = result.message;
+      if (result.ok) emitMood('happy');
       if (notifyResult(result)) { grid = emptyGrid(side); selectedRecipe = null; }
       render(); return;
     }
@@ -916,6 +919,7 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
       const recipe = target.dataset.recipe;
       const grid = recipe === 'paper-koinobori' ? [['washi', 'bamboo-strip']] : recipe === 'paper-door' ? [['washi', 'stick']] : recipe === 'paper-boat' ? [['washi', 'washi']] : [['washi']];
       const result = game.craft(grid, recipe);
+      if (result.ok) emitMood('happy');
       notifyResult(result); render(); return;
     }
     if (action === 'export' || action === 'export-backup') {
