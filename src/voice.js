@@ -92,6 +92,10 @@ function speakNow(text, lang = 'zh-CN') {
   utterance.volume = 0.7;
   if (voice) utterance.voice = voice;
   speechSynthesis.cancel();
+  const kick = new SpeechSynthesisUtterance('\u200b');
+  kick.volume = 0;
+  kick.rate = 2;
+  speechSynthesis.speak(kick);
   speechSynthesis.speak(utterance);
 }
 

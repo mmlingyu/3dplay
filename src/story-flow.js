@@ -14,6 +14,8 @@ import {
   guideBrief,
   guideText,
   homeChoices,
+  shardBoard,
+  shardSpots,
   nudgeSpeech,
   observatorySite,
   pendingZones,
@@ -134,6 +136,12 @@ function showTour(on) {
   if (next) next.hidden = !on;
 }
 
+function shardHunt(travel) {
+  if (!travel?.story?.fogIntro || travel.story.hintsOff || travel.story.fogOff) return false;
+  const chapter = storyChapter(travel);
+  return chapter === 'ri' || chapter === 'mei' || chapter === 'xing';
+}
+
 function setGuide(mode, ms = 8000) {
   const guide = $('tour-guide');
   if (!guide) return;
@@ -151,13 +159,27 @@ function setGuide(mode, ms = 8000) {
 }
 
 function paintGuide() {
-  if (!bound?.touring) return;
-  const travel = bound.game.state.travel;
+  const travel = bound?.game?.state?.travel;
+  const live = Boolean(bound?.touring) || shardHunt(travel);
+  if (!live) {
+    if (bound && !bound.touring) {
+      const guide = $('tour-guide');
+      if (guide) guide.hidden = true;
+    }
+    return;
+  }
+  if (bound && !bound.touring) {
+    const guide = $('tour-guide');
+    const next = $('tour-next');
+    if (guide) guide.hidden = false;
+    if (next) next.hidden = true;
+  }
   const chapter = storyChapter(travel);
   const text = $('tour-guide-text');
   const brief = $('tour-guide-brief');
+  const pos = bound.world?.playerPosition;
   if (text) text.textContent = guideText(travel);
-  if (brief) brief.textContent = guideBrief(travel);
+  if (brief) brief.textContent = guideBrief(travel, pos ? { x: pos.x, z: pos.z } : null);
   if (chapter !== guideChapter) {
     guideChapter = chapter;
     pendingBrief = true;
@@ -176,7 +198,8 @@ function balloonOrDialog() {
 }
 
 function presentGuide() {
-  if (!bound?.touring || !bound.entered) return;
+  if (!bound?.entered) return;
+  if (!bound.touring && !shardHunt(bound.game.state.travel)) return;
   const now = performance.now();
   const player = bound.world?.playerPosition;
   if (player && lastPos && Math.hypot(player.x - lastPos.x, player.z - lastPos.z) > 0.25) {
@@ -436,9 +459,49 @@ export function storyTalk(target) {
       bound.ui.toast?.('记下了。不带豆子，也不影响找光之片。');
     };
   }
+  paintShardBoard(id);
+  const hear = $('story-talk-hear');
+  if (hear) {
+    hear.hidden = false;
+    hear.onclick = () => {
+      hear.classList.add('is-speaking');
+      playLine(id, line, true, ageOf(bound.game));
+    };
+  }
   const card = $('story-talk');
   if (card) card.hidden = false;
   playLine(id, line, senior ? null : bound.ui.speak, ageOf(bound.game));
+}
+
+function paintShardBoard(id) {
+  const board = $('story-shard-board');
+  if (!board) return;
+  board.replaceChildren();
+  if (id !== 'grandma') {
+    board.hidden = true;
+    return;
+  }
+  board.hidden = false;
+  const spots = shardSpots();
+  for (const item of shardBoard(bound.game.state.travel)) {
+    const row = document.createElement('div');
+    row.className = `shard-row${item.got ? ' is-got' : ''}`;
+    const copy = document.createElement('p');
+    copy.textContent = `${item.valley} · ${item.piece} · ${item.how} · ${item.got ? '已经拿到' : '还没有'}`;
+    const go = document.createElement('button');
+    go.type = 'button';
+    go.className = 'primary-btn';
+    go.textContent = item.spot === 'balloon' ? '去坐热气球' : '去渡口';
+    go.addEventListener('click', () => {
+      const spot = spots[item.spot];
+      bound.world?.walkTo?.({ x: spot.x, z: spot.z });
+      const talk = $('story-talk');
+      if (talk) talk.hidden = true;
+      bound.ui.toast?.(item.spot === 'balloon' ? `去南边坐热气球，找${item.piece}。` : `去渡口坐船，找${item.piece}。`);
+    });
+    row.append(copy, go);
+    board.append(row);
+  }
 }
 
 function openDisk() {

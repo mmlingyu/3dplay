@@ -449,6 +449,20 @@ export function layoutOverlays(root = document) {
         if (box.x - shift >= 8) box.x -= shift;
       }
     }
+    const flight = root.getElementById('balloon-hud');
+    if (flight && shown(flight) && flight.classList.contains('is-flight')) {
+      const chip = flight.classList.contains('is-chip');
+      const width = chip ? Math.min(220, window.innerWidth - 24) : Math.min(300, window.innerWidth - 24);
+      const height = chip ? 48 : Math.min(flight.scrollHeight || 200, 240);
+      const box = plan.placements.find((item) => item.id === 'balloon-hud');
+      if (box) {
+        box.x = Math.max(8, window.innerWidth - width - 16);
+        box.y = Math.max(safeTop, safeBottom - height - 8);
+        box.width = width;
+        box.height = height;
+        box.parked = false;
+      }
+    }
     const reserved = [];
     for (const box of plan.placements) {
       const el = root.getElementById(box.id);

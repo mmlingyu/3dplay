@@ -38,7 +38,7 @@
           <div class="wish-body">
             <div class="wish-kicker"><span data-icon="heart"></span> 一个小点子<button class="wish-dismiss" id="wish-dismiss" aria-label="收起小点子"><span data-icon="close"></span></button></div>
             <div class="wish-title" id="wish-title">铺一块自己的小院</div>
-            <div class="wish-description" id="wish-description">试着铺 6 格木地板。也可以先去逛逛。</div>
+            <div class="wish-description" id="wish-description">试着铺 6 格木板。也可以先去逛逛。</div>
             <div class="wish-progress" id="wish-progress"></div>
             <button class="wish-read" id="wish-read" aria-label="听听这个点子"><span data-icon="sound"></span> 听一听</button>
           </div>
@@ -67,6 +67,7 @@
         <span id="bounce-word">one</span>
         <span id="bounce-formula" hidden></span>
         <span id="bounce-note">first · 第一下</span>
+        <span id="bounce-ask" hidden></span>
         <button type="button" id="bounce-stop" class="primary-btn">停下来</button>
       </div>
       <button type="button" id="travel-home" class="primary-btn" hidden aria-label="回家">回家</button>
@@ -134,6 +135,8 @@
       </div>
       <div id="xing-sheet" hidden role="dialog" aria-label="外星谷"></div>
       <div id="balloon-hud" hidden>
+        <button type="button" id="balloon-chip" class="fold-toggle" hidden>飞行中</button>
+        <div id="balloon-panel">
         <strong id="balloon-title">热气球游览</strong>
         <span id="balloon-note">转一圈看河谷</span>
         <div id="balloon-routes">
@@ -147,7 +150,9 @@
           <button type="button" id="balloon-up">升高</button>
           <button type="button" id="balloon-down">降低</button>
         </div>
-        <button type="button" id="balloon-land" class="primary-btn" aria-label="降落到草坪基地">降落</button>
+        <button type="button" id="balloon-reroute" class="secondary-btn" hidden>改去别处</button>
+        <button type="button" id="balloon-land" class="primary-btn" aria-label="降落到草坪基地">降落到草坪基地</button>
+        </div>
       </div>
       <button type="button" id="vista-arrow" class="vista-arrow" hidden aria-label="看向那边">→</button>
       <div id="vista-card" hidden role="status">
@@ -179,8 +184,8 @@
             <button class="secondary-btn" id="placement-cancel">取消</button>
           </div>
         </section>
-        <div class="mode-switch">
-          <button class="mode-btn active" data-mode="gather"><span data-icon="hand"></span><span>采集</span></button>
+          <div class="mode-switch">
+          <button class="mode-btn active" data-mode="gather"><span data-icon="hand"></span><span>找材料</span></button>
           <button class="mode-btn" data-mode="build"><span data-icon="hammer"></span><span>搭建</span></button>
           <button class="mode-btn" data-mode="remove"><span data-icon="undo"></span><span>拆除</span></button>
         </div>
@@ -198,11 +203,24 @@
           <h1 class="welcome-title">一片河谷，<br />好多小小的<span>可能。</span></h1>
           <p class="welcome-copy">搭一间自己的小屋，让小球滚过溪边，<br />或者种下一颗豆子。慢慢来，世界会等你。</p>
           <div class="welcome-features"><span><i data-icon="hand"></i> 采集</span><span><i data-icon="hammer"></i> 搭建</span><span><i data-icon="plant"></i> 发现</span></div>
+          <div id="look-maker" class="look-maker">
+            <div id="look-stage" class="look-stage"><div id="look-avatar" class="look-avatar" data-shape="round" data-hat="sprout"><b></b><i></i><i></i><em></em></div></div>
+            <div id="look-names" class="look-row"></div>
+            <input id="look-name" maxlength="8" aria-label="名字" placeholder="名字，不写就叫小谷" />
+            <div id="look-shapes" class="look-row"></div>
+            <div id="look-colors" class="look-row"></div>
+            <div id="look-hats" class="look-row"></div>
+            <button type="button" id="look-heart" class="secondary-btn">就这个</button>
+          </div>
           <div class="welcome-actions"><button class="primary-btn" id="start-button">去河谷看看 <span data-icon="arrow-right"></span></button><button class="secondary-btn" id="welcome-help">怎么玩 <span data-icon="book"></span></button></div>
           <div class="welcome-footnote"><span data-icon="save"></span> 随时保存，下次接着玩。</div>
         </section>
-        <div class="welcome-world-note"><span class="welcome-note-dot"></span> <span id="welcome-player-note">小谷</span>正在小院等你</div>
       </div>
+      <div id="boot-screen" role="status">河谷正在醒来</div>
+      <section id="look-dialog" hidden role="dialog" aria-label="换个样子">
+        <div id="look-dialog-body"></div>
+        <button type="button" id="look-dialog-close" class="primary-btn">好了</button>
+      </section>
       <div id="story-banner" hidden role="status">
         <p id="story-banner-text">雾不会伤害任何东西。</p>
         <button type="button" id="story-skip" class="secondary-btn">跳过</button>
@@ -219,6 +237,8 @@
       <section id="story-talk" hidden role="dialog" aria-label="河谷的人">
         <strong id="story-talk-name">船伯</strong>
         <p id="story-talk-line"></p>
+        <div id="story-shard-board" hidden></div>
+        <button type="button" id="story-talk-hear" class="secondary-btn speak-btn" hidden>听一听</button>
         <button type="button" id="story-talk-extra" class="secondary-btn" hidden>帮船伯记一份豆子</button>
         <button type="button" id="story-talk-close" class="primary-btn">先走</button>
       </section>
@@ -229,6 +249,7 @@
         <button type="button" id="story-home-close" class="secondary-btn">以后再选</button>
       </section>
       <button type="button" id="story-festival" class="primary-btn" hidden>今天就办</button>
+      <div id="voice-caption" hidden role="status"></div>
       <div id="toast-root" aria-live="polite"></div>
       <div id="modal-root"></div>
       <div id="webgl-fallback" hidden><h1>河谷还没显示出来</h1><p>请用支持 WebGL 的浏览器打开，再试一次。</p><button onclick="location.reload()">再试一次</button></div>

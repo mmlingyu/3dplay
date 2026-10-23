@@ -6,7 +6,10 @@ import { WATER_RULES, POOL, inPoolReservedArea } from './water-data.js';
 import { FLORA_BY_ID, floraStage, floraBlocked, realMoment, skyLook } from './life-data.js';
 import { LAND_RULES, FACILITY_CHUNKS, isPointOpen, landBounds, openChunks, landEncounters } from './land-data.js';
 import { CreationWorld } from './creation-world.js';
-import { BOUNCE_ISLAND, PARK_NAME, PLAY_MODES, bounceSurface, onBounceIsland, parkPadAt, playBounce, playMode } from './bounce-data.js';
+import { BOUNCE_ISLAND, PARK_NAME, PLAY_MODES, bounceSurface, makeParkQuestion, onBounceIsland, parkPadAt, playBounce, playMode, unlockedParkModes } from './bounce-data.js';
+import { lookColor } from './avatar-data.js';
+import { YARD_CELLS, yardCellFilled } from './yard-goal.js';
+import { shardBoard } from './story-data.js';
 import { BALLOON_BASE, BALLOON_CONTROL, BALLOON_NAME, balloonAngleFrom, balloonHomeAngle, balloonHomeDuration, balloonLook, balloonNearBase, balloonReturnPose, balloonScaleFrom, balloonSteer, balloonTourPoint, onBalloonLawn } from './balloon-data.js';
 import { dockShip, drawSouvenir, spinSouvenirs } from './mei-models.js';
 import { chooseDockSite } from './realm-data.js';
@@ -112,6 +115,18 @@ export class RiverWorld {
     this.swimRipple.rotation.x=-Math.PI/2;this.swimRipple.visible=false;this.swimRipple.userData.live=true;this.scene.add(this.swimRipple);
     this.selectionRing = new THREE.Mesh(new THREE.RingGeometry(.55, .63, 40), new THREE.MeshBasicMaterial({ color: '#fff3be', side: THREE.DoubleSide, transparent: true, opacity: .85, depthWrite: false }));
     this.selectionRing.rotation.x = -Math.PI / 2; this.selectionRing.visible = false; this.selectionRing.userData.live = true; this.scene.add(this.selectionRing);
+    this.walkRing = new THREE.Mesh(new THREE.RingGeometry(.42, .62, 32), new THREE.MeshBasicMaterial({ color: '#9fd0ff', side: THREE.DoubleSide, transparent: true, opacity: .9, depthWrite: false }));
+    this.walkRing.rotation.x = -Math.PI / 2; this.walkRing.visible = false; this.walkRing.userData.live = true; this.scene.add(this.walkRing);
+    this.occludeRing = new THREE.Mesh(new THREE.RingGeometry(.7, .86, 32), new THREE.MeshBasicMaterial({ color: '#fff6c8', side: THREE.DoubleSide, transparent: true, opacity: .8, depthWrite: false }));
+    this.occludeRing.rotation.x = -Math.PI / 2; this.occludeRing.visible = false; this.occludeRing.userData.live = true; this.scene.add(this.occludeRing);
+    this.yardMarks = new THREE.Group();
+    for (const cell of YARD_CELLS) {
+      const mark = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.025, 0.72), new THREE.MeshStandardMaterial({ color: '#f4e7bf', roughness: 0.9 }));
+      mark.position.set(cell.x, 0.03, cell.z);
+      mark.userData.yard = cell;
+      this.yardMarks.add(mark);
+    }
+    this.scene.add(this.yardMarks);
     this.frontierPreview=new THREE.Group();this.frontierPreview.visible=false;this.frontierPreview.userData.live=true;this.scene.add(this.frontierPreview);
     this.frontierFillMaterial=new THREE.MeshBasicMaterial({color:C.grass,transparent:true,opacity:.28,depthWrite:false});
     this.frontierLineMaterial=new THREE.MeshBasicMaterial({color:'#fff3be',transparent:true,opacity:.85,depthWrite:false});
@@ -527,6 +542,19 @@ export class RiverWorld {
     this.bounce = null; this.bounceHold = false; this.bounceSquash = 0;
     this.parkMode = 'count'; this.parkStep = 2; this.parkTable = 2;
     this.target(g, { id: 'bounce-island', type: 'bounce', name: PARK_NAME, action: '跳上去', label: PARK_NAME, hint: '走上小岛就会一直跳。点玩法可以换数一数、双数、凑十、跳着数、乘法或质数。点停下来才停止。' });
+    this.parkChoices = [];
+    this.parkQuestion = null;
+    this.parkAskLock = '';
+    for (let i = 0; i < 3; i += 1) {
+      const pad = new THREE.Group();
+      pad.position.set(BOUNCE_ISLAND.x - 1.35 + i * 1.35, 0, BOUNCE_ISLAND.z + 3.35);
+      pad.visible = false;
+      this.scene.add(pad);
+      const mat = new THREE.MeshStandardMaterial({ color: '#d7efe8', roughness: 0.55, emissive: '#000000' });
+      const mesh = this.mesh(pad, new THREE.CylinderGeometry(0.46, 0.5, 0.16, 6), mat, [0, 0.1, 0]);
+      const target = this.target(pad, { id: `park-ask-${i}`, type: 'park-ask', ask: i, name: '数字石', action: '跳上去', label: '?', hint: '跳到对的数字上。', quiet: true });
+      this.parkChoices.push({ pad, mesh, mat, target, index: i });
+    }
     for (const mode of PLAY_MODES) {
       const pad = new THREE.Group();
       pad.position.set(BOUNCE_ISLAND.x + mode.dx, 0, BOUNCE_ISLAND.z + mode.dz);
@@ -660,15 +688,49 @@ export class RiverWorld {
   }
   avatar(bodyColor = '#93b7a0') {
     const g = new THREE.Group(); const bodyMat = new THREE.MeshStandardMaterial({color:bodyColor,roughness:.85}); const faceMat=new THREE.MeshStandardMaterial({color:'#f4d8a5',roughness:.9}); const shoeMat=new THREE.MeshStandardMaterial({color:'#e6c59a',roughness:.9});
-    this.mesh(g,new THREE.SphereGeometry(.39,18,14),bodyMat,[0,.68,0],[1,1.1,.86]); this.mesh(g,new THREE.SphereGeometry(.35,20,14),faceMat,[0,1.12,.04],[1,1,.96]);
-    const hat=this.mesh(g,new THREE.CylinderGeometry(.41,.42,.11,16),'cream',[0,1.34,.01]);this.mesh(g,new THREE.SphereGeometry(.31,16,10),'cream',[0,1.36,0],[1,.54,1]);
-    const leaf=this.mesh(g,new THREE.SphereGeometry(.12,8,6),'leaf',[.23,1.47,.05],[.5,1.1,.3]);leaf.rotation.z=-.6;
-    for(const x of[-.112,.112]) this.mesh(g,new THREE.SphereGeometry(.032,8,6),'dark',[x,1.16,.357],[1,1.15,.55]);
+    const body = this.mesh(g,new THREE.SphereGeometry(.39,18,14),bodyMat,[0,.68,0],[1,1.1,.86]); const face = this.mesh(g,new THREE.SphereGeometry(.35,20,14),faceMat,[0,1.12,.04],[1,1,.96]);
+    const hat=this.mesh(g,new THREE.CylinderGeometry(.41,.42,.11,16),'cream',[0,1.34,.01]); const hatDome = this.mesh(g,new THREE.SphereGeometry(.31,16,10),'cream',[0,1.36,0],[1,.54,1]);
+    const leaf=this.mesh(g,new THREE.SphereGeometry(.12,8,6),'leaf',[.23,1.47,.05],[.5,1.1,.3]);leaf.rotation.z=-.6; leaf.material = leaf.material.clone();
+    const eyes = [];
+    for(const x of[-.112,.112]) eyes.push(this.mesh(g,new THREE.SphereGeometry(.032,8,6),'dark',[x,1.16,.357],[1,1.15,.55]));
+    g.userData.parts = { body, face, hat, hatDome, leaf, eyes, bodyMat };
     const smile=new THREE.Mesh(new THREE.TorusGeometry(.045,.008,4,12,Math.PI),this.mats.dark);smile.position.set(0,1.078,.37);smile.rotation.z=Math.PI;g.add(smile);
     const blushMat=new THREE.MeshStandardMaterial({color:'#dfad8a',roughness:.9});for(const x of[-.2,.2])this.mesh(g,new THREE.SphereGeometry(.045,8,6),blushMat,[x,1.09,.29],[1,.6,.3]);
     g.userData.feet=[];g.userData.arms=[];
     for(const x of[-.16,.16]) {const foot=this.mesh(g,new THREE.SphereGeometry(.14,12,8),shoeMat,[x,.13,.065],[1,.65,1.45]);g.userData.feet.push(foot);const arm=this.mesh(g,new THREE.SphereGeometry(.13,12,8),faceMat,[x<0?-.38:.38,.69,.05],[.85,1.2,.85]);g.userData.arms.push(arm);}
     this.cube(g,'wood',[0,.72,-.32],[.35,.43,.18],true);this.cube(g,'cream',[0,.91,-.33],[.3,.07,.17],true); return g;
+  }
+  applyLook(look) {
+    const parts = this.player?.userData?.parts;
+    if (!parts || !look) return;
+    parts.bodyMat.color.set(lookColor(look));
+    const shape = look.shape || 'round';
+    parts.body.scale.set(shape === 'square' ? 1.12 : shape === 'cat' ? 0.92 : 1, shape === 'square' ? 0.92 : 1.1, shape === 'square' ? 1.12 : 0.86);
+    const hood = shape === 'hood';
+    const cat = shape === 'cat';
+    parts.hat.visible = look.hat !== 'none' || hood || cat;
+    parts.hatDome.visible = parts.hat.visible;
+    parts.hat.scale.set(hood ? 1.35 : 1, hood ? 1.8 : 1, hood ? 1.35 : 1);
+    parts.leaf.visible = look.hat === 'sprout' || look.hat === 'flower' || cat;
+    parts.leaf.position.set(cat ? 0.28 : 0.23, cat ? 1.5 : 1.47, 0.05);
+    if (parts.leaf.material?.color) parts.leaf.material.color.set(look.hat === 'flower' ? '#e07a8a' : '#789957');
+  }
+  pulseHeart() {
+    if (this.player) this.player.userData.heart = 1;
+  }
+  stepAvatar(dt) {
+    const parts = this.player?.userData?.parts;
+    if (!parts) return;
+    const heart = this.player.userData.heart || 0;
+    if (heart > 0) {
+      this.player.userData.heart = Math.max(0, heart - dt * 1.4);
+      const beat = 1 + Math.sin((1 - this.player.userData.heart) * Math.PI * 4) * 0.06 * this.player.userData.heart;
+      this.player.scale.setScalar(beat);
+    }
+    this.blinkIn = (this.blinkIn || 2.4) - dt;
+    const shut = this.blinkIn < 0.12;
+    if (this.blinkIn < 0) this.blinkIn = 2.2 + Math.random() * 2.4;
+    for (const eye of parts.eyes) eye.scale.y = shut ? 0.15 : 1.15;
   }
   blockModel(block, ghost = false) {
     const g = new THREE.Group(); g.position.set(block.x, block.y, block.z); g.rotation.y = (block.rotation || 0) * Math.PI / 2;
@@ -761,6 +823,8 @@ export class RiverWorld {
     this.placeBottle(state);
     if (!this.dockReady) this.ensureDock(state.blocks);
     this.storySync?.(state);
+    this.applyLook(state.look);
+    this.paintYardMarks(state);
     this.fastDirty = true;
     const plants=state.garden||[]; const plantSignature=plants.map(p=>`${p.id}:${p.planted}:${Math.floor((p.age||0)/18)}:${p.moisture}`).join('|');
     if(plantSignature!==this.plantSignature) {this.plantSignature=plantSignature;for(const g of this.plantGroups.values())this.scene.remove(g);this.plantGroups.clear();plants.forEach((p,i)=>{if(!p.planted)return;const x=Number.isFinite(p.x)?p.x:9.5+(i%3-1)*1.3,z=Number.isFinite(p.z)?p.z:5+Math.floor(i/3)*1.3;const g=new THREE.Group();g.position.set(x,.2,z);const stage=Math.min(5,Math.floor((p.age||0)/18));const h=.12+stage*.12;this.cube(g,'leaf',[0,h/2,0],[.045,h,.045]);for(let j=0;j<Math.min(stage+1,5);j++){const sign=j%2?1:-1;const leaf=this.mesh(g,new THREE.SphereGeometry(.16,8,6),'leaf',[sign*.15,.11+j*.085,0],[1,.38,.62]);leaf.rotation.z=sign*.3;}if(stage>=3)this.mesh(g,new THREE.SphereGeometry(.07,6,6),'cream',[.15,h,.01]);if(stage>=4)for(const sign of[-1,1])this.mesh(g,new THREE.CapsuleGeometry(.035,.18,2,6),'leafLight',[sign*.2,h*.7,.04],[1,1,1]);if(p.moisture>=3){const wet=new THREE.Mesh(new THREE.PlaneGeometry(.85,.85),this.water.material);wet.rotation.x=-Math.PI/2;wet.position.y=.008;g.add(wet);}this.scene.add(g);this.plantGroups.set(p.id,g);});}
@@ -781,6 +845,8 @@ export class RiverWorld {
     this.previewSpan = item === 'roof' && model ? { x: model.x, z: model.z, w: model.w || 1, d: model.d || 1 } : null;
     this.preview.visible=!!cell;
     this.previewMaterial.color.set(valid ? '#82c98c' : '#e58471');
+    const ghost = this.preview.children[0];
+    if (ghost && model && model.y < 0) ghost.position.y = 0.06;
   }
   startRoofMotion(group, block, previous) {
     const shell = group.userData.roofShell;
@@ -939,8 +1005,10 @@ export class RiverWorld {
       if (this.tapTimer) this.cancelScheduledTap();
       this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       gesture.pointerType = e.pointerType;
-      if (this.pointers.size === 1) {
+        if (this.pointers.size === 1) {
         gesture.start = { x: e.clientX, y: e.clientY }; gesture.dragged = false;
+        const aim = this.pick(e.clientX, e.clientY);
+        if (aim) this.callbacks.onAim?.(aim);
         gesture.previewOffset = null; gesture.dragPick = null;
         if (e.pointerType === 'touch' && this.callbacks.canDragPreview?.() && this.hitPreview(e.clientX, e.clientY)) {
           // Keep the grabbed point aligned with the finger instead of jumping to its ground ray.
@@ -1005,6 +1073,7 @@ export class RiverWorld {
     if (this.pointerGesture) Object.assign(this.pointerGesture, { start: null, dragged: true, previewOffset: null, dragPick: null, mouseTap: false });
   }
   select(target) {this.selectedTarget=target;this.selectionRing.visible=!!target;if(target){this.selectionPulse=1;this.selectionRing.position.set(target.position.x,terrainHeight(Math.round(target.position.x),Math.round(target.position.z))+.025,target.position.z);}}
+  nearestTarget(max=3, type=null){let best=null,dist=max;for(const t of this.targets){if(t.type==='flora'||t.quiet)continue;if(type&&t.type!==type)continue;const d=Math.hypot(t.position.x-this.playerPosition.x,t.position.z-this.playerPosition.z);if(d<dist){best=t;dist=d;}}return best;}
   cancelScheduledTap() { clearTimeout(this.tapTimer); this.tapTimer = 0; }
   scheduleTap(pick) {
     this.cancelScheduledTap();
@@ -1025,8 +1094,14 @@ export class RiverWorld {
     this.frontierLine.position.set(dx?x-.5:chunk.cx*s+(s-1)/2,.06,dz?z-.5:chunk.cz*s+(s-1)/2);
     this.frontierLine.scale.set(dx?.12:s,.08,dz?.12:s);
   }
-  walkTo(point,callback=null) {this.walkTarget=new THREE.Vector2(point.x,point.z);this.walkCallback=callback;}
-  stopWalking(){this.walkTarget=null;this.walkCallback=null;}
+  walkTo(point,callback=null) {
+    this.walkTarget=new THREE.Vector2(point.x,point.z);this.walkCallback=callback;
+    if (this.walkRing) {
+      this.walkRing.visible = true;
+      this.walkRing.position.set(point.x, 0.045, point.z);
+    }
+  }
+  stopWalking(){this.walkTarget=null;this.walkCallback=null;if(this.walkRing)this.walkRing.visible=false;}
   jump(){
     if(this.locomotion==='swim'){this.callbacks.onWater?.('游向池沿或木坡道，就能上岸。');return;}
     if(this.balloon){
@@ -1095,7 +1170,6 @@ export class RiverWorld {
     for(const c of this.decorColliders){if(c.width&&Math.abs(x-c.x)<c.width/2+.18&&Math.abs(z-c.z)<c.depth/2+.18)return false;if(c.radius&&Math.hypot(x-c.x,z-c.z)<c.radius+.25)return false;}
     const y=this.surfaceAt(x,z);return y-this.playerPosition.y<1.05;
   }
-  nearestTarget(max=3){let best=null,dist=max;for(const t of this.targets){if(t.type==='flora')continue;const d=Math.hypot(t.position.x-this.playerPosition.x,t.position.z-this.playerPosition.z);if(d<dist){best=t;dist=d;}}return best;}
   distanceTo(target){return Math.hypot(target.position.x-this.playerPosition.x,target.position.z-this.playerPosition.z);}
   forwardCell(){const x=Math.round(this.playerPosition.x+Math.sin(this.facing)*1.65),z=Math.round(this.playerPosition.z+Math.cos(this.facing)*1.65);return{x,y:terrainHeight(x,z),z};}
   releaseBall(point = null) {
@@ -1212,6 +1286,28 @@ export class RiverWorld {
   requestBalloonLand() {
     if (this.balloon?.phase === 'voyage') return false;
     return this.stopBalloon();
+  }
+  landFromVoyage() {
+    if (!this.balloon || this.balloon.phase !== 'voyage') return this.requestBalloonLand();
+    const pose = this.balloonCraft?.position || this.playerPosition;
+    this.balloon.phase = 'home';
+    this.balloon.t = 0;
+    this.balloon.scripted = false;
+    this.balloon.arrived = false;
+    this.balloon.from = { x: pose.x, y: pose.y, z: pose.z, angle: this.balloon.angle };
+    this.balloon.homeSeconds = balloonHomeDuration(pose.x, pose.z);
+    this.callbacks.onBalloonLook?.(this.balloonLook());
+    return true;
+  }
+  rerouteVoyage() {
+    if (!this.balloon || this.balloon.phase !== 'voyage') return false;
+    this.balloon.phase = 'tour';
+    this.balloon.t = 0;
+    this.balloon.realmId = null;
+    this.balloon.scripted = false;
+    this.balloon.arrived = false;
+    this.callbacks.onBalloonLook?.(this.balloonLook());
+    return true;
   }
   startVoyage(realmId = 'ri') {
     if (!this.balloon || this.balloon.phase !== 'tour') return false;
@@ -1491,6 +1587,9 @@ export class RiverWorld {
     if (this.bottle?.visible) this.bottle.rotation.y += dt * 0.6;
     this.updateCamera(dt);this.followSky(dt);this.ripples.children.forEach((m,i)=>{m.position.z=-15+i*2+(this.time*.1)%2;});
     this.selectionRing.rotation.z=this.time*.15;
+    if (this.walkRing?.visible) { this.walkRing.rotation.z = -this.time * 0.7; this.walkRing.scale.setScalar(1 + Math.sin(this.time * 4) * 0.06); }
+    if (!paused) { this.stepAvatar(dt); this.stepParkQuestion(); }
+    this.stepOcclusion();
     if (this.selectionPulse > 0) { this.selectionPulse = Math.max(0, this.selectionPulse - dt * 2.4); const s = 1 + Math.sin((1 - this.selectionPulse) * Math.PI) * 0.35; this.selectionRing.scale.setScalar(s); }
     for(const p of this.particles){p.age+=dt;p.v.y-=2*dt;p.mesh.position.addScaledVector(p.v,dt);if(p.age>1){this.scene.remove(p.mesh);p.mesh.geometry.dispose();p.mesh.material.dispose();}}this.particles=this.particles.filter(p=>p.age<=1);
     this.animateKiln(dt, paused);
@@ -1604,6 +1703,7 @@ export class RiverWorld {
     const player = this.playerPosition;
     for (const t of this.targets) {
       if (!t.labelElement) continue;
+      if (t.quiet || (t.type === 'park-ask' && t.group && !t.group.visible)) { t.labelElement.hidden = true; continue; }
       const p = t.position.clone();
       p.y += t.type === 'tutor' ? 2.6 : t.type === 'station' ? 2.0 : 1.1;
       p.project(this.camera);
@@ -1624,6 +1724,126 @@ export class RiverWorld {
     for(const t of this.targets){if(t.type==='block')continue;const [x,y]=point(t.position.x,t.position.z);ctx.fillStyle=t.type==='resource'?'#819165':t.id==='garden'?'#637c4b':t.id==='bounce-island'||t.type==='park'?'#7ec8c0':t.type==='balloon'?'#e27a5f':'#b48760';const s=t.type==='park'?1.6:2.3;ctx.beginPath();ctx.roundRect(x-s,y-s,s*2,s*2,1);ctx.fill();}
     for(const b of this.state?.blocks||[]){const [x,y]=point(b.x,b.z);ctx.fillStyle='#b58a55';ctx.fillRect(x-1.7,y-1.7,3.4,3.4);}
     const [px,py]=point(this.playerPosition.x,this.playerPosition.z);ctx.fillStyle='#fff9e5';ctx.beginPath();ctx.arc(px,py,5,0,Math.PI*2);ctx.fill();ctx.fillStyle=C.green;ctx.beginPath();ctx.arc(px,py,3,0,Math.PI*2);ctx.fill();
+    if (this.state?.travel?.story?.fogIntro) {
+      const board = shardBoard(this.state.travel);
+      board.forEach((item, index) => {
+        const x = 18 + index * 48;
+        const y = h - 16;
+        ctx.beginPath();
+        ctx.fillStyle = item.got ? '#ffe08a' : '#fffaf0';
+        ctx.strokeStyle = '#3d4a55';
+        ctx.lineWidth = 2;
+        ctx.arc(x, y, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#24344a';
+        ctx.font = '700 11px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(item.got ? `${item.piece}有` : item.piece, x + 10, y + 4);
+      });
+    }
+  }
+  paintYardMarks(state) {
+    if (!this.yardMarks) return;
+    let signature = '';
+    for (const mark of this.yardMarks.children) {
+      const cell = mark.userData.yard;
+      const filled = yardCellFilled(state?.blocks, cell.x, cell.z);
+      signature += filled ? '1' : '0';
+      mark.material.color.set(filled ? '#8fbf78' : '#f4e7bf');
+    }
+    if (signature !== this.yardSignature) {
+      this.yardSignature = signature;
+      this.fastDirty = true;
+    }
+  }
+  refreshParkQuestion(force = false) {
+    if (!this.parkChoices?.length) return;
+    const mode = this.parkMode || 'count';
+    const band = this.state?.settings?.ageBand || null;
+    const open = unlockedParkModes(band);
+    const usable = open.includes(mode) ? mode : open[0];
+    const simple = band === 'junior' || band === 'little' || band === 'bigger';
+    const key = `${usable}:${this.parkAskIndex || 0}:${simple}`;
+    if (!force && this.parkQuestion?.key === key) return;
+    const question = makeParkQuestion(usable, this.parkAskIndex || 0, simple);
+    question.key = key;
+    this.parkQuestion = question;
+    this.parkAskLock = '';
+    this.parkChoices.forEach((choice, index) => {
+      const value = question.choices[index];
+      choice.value = value;
+      choice.pad.visible = true;
+      choice.target.quiet = false;
+      choice.target.label = String(value);
+      choice.target.name = `数字 ${value}`;
+      if (choice.target.labelElement) choice.target.labelElement.textContent = String(value);
+      choice.mat.emissive.set('#000000');
+      choice.mat.color.set('#d7efe8');
+    });
+    this.fastDirty = true;
+    this.callbacks.onParkAsk?.(question);
+  }
+  hideParkQuestion() {
+    if (!this.parkChoices) return;
+    for (const choice of this.parkChoices) {
+      choice.pad.visible = false;
+      choice.target.quiet = true;
+    }
+    if (this.parkQuestion) {
+      this.parkQuestion = null;
+      this.callbacks.onParkAsk?.(null);
+      this.fastDirty = true;
+    }
+  }
+  stepParkQuestion() {
+    if (!this.parkChoices?.length || this.realmId && this.realmId !== 'he') return;
+    const near = Math.hypot(this.playerPosition.x - BOUNCE_ISLAND.x, this.playerPosition.z - BOUNCE_ISLAND.z) < 7.2;
+    if (!near) {
+      this.hideParkQuestion();
+      return;
+    }
+    this.refreshParkQuestion();
+    for (const choice of this.parkChoices) {
+      if (!choice.pad.visible) continue;
+      const close = Math.hypot(this.playerPosition.x - choice.pad.position.x, this.playerPosition.z - choice.pad.position.z) < 0.72;
+      if (!close) continue;
+      const token = `${this.parkQuestion?.key}:${choice.value}`;
+      if (this.parkAskLock === token) return;
+      this.parkAskLock = token;
+      const correct = choice.value === this.parkQuestion.answer;
+      choice.mat.emissive.set(correct ? '#7dbe6a' : '#e7a15a');
+      choice.mat.color.set(correct ? '#c6efb4' : '#f6d7b0');
+      this.fastDirty = true;
+      if (correct) this.parkAskIndex = (this.parkAskIndex || 0) + 1;
+      this.callbacks.onParkAnswer?.({ correct, prompt: this.parkQuestion.prompt, value: choice.value, answer: this.parkQuestion.answer });
+      if (correct) this.refreshParkQuestion(true);
+      return;
+    }
+  }
+  stepOcclusion() {
+    if (!this.occludeRing || !this.player) return;
+    if (this.time - (this.occludeAt || 0) < 0.5) return;
+    this.occludeAt = this.time;
+    const target = this.playerPosition.clone();
+    target.y += 0.9;
+    const origin = this.camera.position;
+    const direction = target.clone().sub(origin);
+    const distance = direction.length();
+    if (distance < 0.4) { this.occludeRing.visible = false; return; }
+    direction.normalize();
+    const ray = new THREE.Raycaster(origin, direction, 0, distance - 0.45);
+    const hits = ray.intersectObjects(this.scene.children, true);
+    const blocked = hits.some((hit) => {
+      let node = hit.object;
+      while (node) {
+        if (node === this.player || node === this.occludeRing || node === this.walkRing || node === this.selectionRing) return false;
+        node = node.parent;
+      }
+      return hit.object.visible !== false;
+    });
+    this.occludeRing.visible = blocked;
+    if (blocked) this.occludeRing.position.set(this.playerPosition.x, 0.05, this.playerPosition.z);
   }
   ensureDock(blocks) {
     this.dockReady = true;

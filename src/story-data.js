@@ -1,7 +1,8 @@
 /** Star-map story rules. Fog is a picture. Shards are read from each valley. */
 
 import { DISCOVER_HEIGHT } from './vista-data.js';
-import { normalizeAgeBand } from './realm-data.js';
+import { HOME_DOCKS, normalizeAgeBand } from './realm-data.js';
+import { BALLOON_BASE } from './balloon-data.js';
 import { PAPER_BOAT_LETTER } from './valley-tutors.js';
 
 export { DISCOVER_HEIGHT };
@@ -144,7 +145,50 @@ export function storyFog({ travel, ageBand = null, height = 0, reveal = null } =
   };
 }
 
-export function guideBrief(travel) {
+export const SHARD_GUIDE = Object.freeze([
+  { id: 'ri', key: 'tide', piece: '潮之片', valley: '日谷', how: '渡口坐船', spot: 'dock', brief: '下一步：渡口坐船去日谷。' },
+  { id: 'mei', key: 'light', piece: '光之片', valley: '美谷', how: '渡口坐船', spot: 'dock', brief: '下一步：去美谷找光之片。' },
+  { id: 'xing', key: 'star', piece: '星之片', valley: '外星谷', how: '坐热气球', spot: 'balloon', brief: '下一步：热气球找星之片。' },
+]);
+
+export function shardSpots() {
+  const dock = HOME_DOCKS[0] || { x: 4, z: 14 };
+  return {
+    dock: { x: dock.x, z: dock.z },
+    balloon: { x: BALLOON_BASE.x, z: BALLOON_BASE.z },
+  };
+}
+
+export function shardBoard(travel) {
+  const shards = realmShards(travel);
+  return SHARD_GUIDE.map((item) => ({ ...item, got: shards[item.key] === true }));
+}
+
+export function nearestShard(travel, position, spots = shardSpots()) {
+  if (!position) return null;
+  const missing = shardBoard(travel).filter((item) => !item.got);
+  if (!missing.length) return null;
+  let best = missing[0];
+  let bestDistance = Infinity;
+  for (const item of missing) {
+    const spot = spots[item.spot] || spots.dock;
+    const distance = Math.hypot((Number(position.x) || 0) - spot.x, (Number(position.z) || 0) - spot.z);
+    if (distance < bestDistance) {
+      best = item;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+export function shardNote(realmId, travel) {
+  if (!travel?.story?.fogIntro) return '';
+  const item = shardBoard(travel).find((row) => row.id === realmId);
+  if (!item) return '';
+  return item.got ? `${item.piece}已经拿到。` : `${item.piece}还在这里。${item.how}。`;
+}
+
+export function guideBrief(travel, position = null) {
   const lines = {
     prologue: '先去西边看石盘。',
     ri: '下一步：去日谷找潮之片。',
@@ -154,16 +198,26 @@ export function guideBrief(travel) {
     festival: '想办星河节，就点今天就办。',
     done: '想去哪一谷，都由你决定。',
   };
-  return lines[storyChapter(travel)] || lines.prologue;
+  const chapter = storyChapter(travel);
+  if (position && (chapter === 'ri' || chapter === 'mei' || chapter === 'xing')) {
+    const near = nearestShard(travel, position);
+    if (near?.brief) return near.brief;
+  }
+  return lines[chapter] || lines.prologue;
+}
+
+function shardParagraph(travel) {
+  return shardBoard(travel).map((item) => `${item.piece}在${item.valley}，${item.how}，${item.got ? '已经拿到' : '还没有'}`).join('。') + '。';
 }
 
 export function guideText(travel) {
   const chapter = storyChapter(travel);
+  const where = shardParagraph(travel);
   const lines = {
     prologue: '先看雾慢慢进来。可以点「跳过」。然后去西边的观星台，看石盘。',
-    ri: '下一步去日谷：走到渡口，点「去日谷」。找到潮之片再回家。右上角「跳到下一章」也能先把这一片记下。',
-    mei: '下一步去美谷：渡口坐大船，或热气球上看风景。找到光之片再回家。',
-    xing: '下一步坐热气球，飞高以后点「飞向星星」。找到星之片再回家。这是游戏里的幻想航线。',
+    ri: `下一步去拿还没有的星河碎片。${where}走到渡口坐船，或到南边坐热气球。`,
+    mei: `下一步去拿还没有的星河碎片。${where}美谷可以渡口坐船，也可以热气球。`,
+    xing: `下一步去拿还没有的星河碎片。${where}外星谷坐热气球，飞向星星。这是游戏里的幻想航线。`,
     finale: '三片都在了。到观星台选 3 个最喜欢的地方，刻成家之片。',
     festival: '雾散开了。想办四谷星河节，就在观星台点「今天就办」。不办也可以接着玩。',
     done: '星河节可以再看。想去哪一谷，都由你决定。',
@@ -270,12 +324,26 @@ export function drawStarOverlay(ctx, layout, travel) {
     ctx.moveTo(from.x, from.y);
     ctx.lineTo(to.x, to.y);
     ctx.stroke();
-    if (!clear[id]) {
-      ctx.fillStyle = '#3d4a55';
-      ctx.font = '700 16px sans-serif';
+    const names = { ri: '潮之片', mei: '光之片', xing: '星之片' };
+    const midX = (from.x + to.x) / 2;
+    const midY = (from.y + to.y) / 2;
+    ctx.beginPath();
+    ctx.fillStyle = clear[id] ? '#ffe08a' : '#fffaf0';
+    ctx.strokeStyle = clear[id] ? '#8a6a20' : '#3d4a55';
+    ctx.lineWidth = 2;
+    ctx.arc(midX, midY - 10, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    if (clear[id]) {
+      ctx.fillStyle = '#8a6a20';
+      ctx.font = '700 12px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('?', (from.x + to.x) / 2, (from.y + to.y) / 2);
+      ctx.fillText('有', midX, midY - 6);
     }
+    ctx.fillStyle = '#24344a';
+    ctx.font = '700 12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(names[id] || '', midX, midY + 10);
   }
   ctx.fillStyle = '#fff6d8';
   ctx.beginPath();
