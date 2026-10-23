@@ -26,7 +26,7 @@ const randomInt = (min, max) => min + Math.floor(Math.random() * (max - min + 1)
 const uniqueID = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const emptyGrid = (side) => Array.from({ length: side }, () => Array(side).fill(null));
 
-export function createPanels({ game, icon, toast = () => {}, speak = () => {}, onClose = () => {}, onSelect = () => {}, onChanged = () => {}, onReclaim = (cx,cz) => game.reclaim(cx,cz), onPlaceFigure = () => ({ ok: false, message: '现在还放不下。' }), onTravelHome = () => {}, onAge = () => {} }) {
+export function createPanels({ game, icon, toast = () => {}, speak = () => {}, onClose = () => {}, onSelect = () => {}, onChanged = () => {}, onReclaim = (cx,cz) => game.reclaim(cx,cz), onPlaceFigure = () => ({ ok: false, message: '现在还放不下。' }), onTravelHome = () => {}, onAge = () => {}, onLook = () => {}, onWalkShard = () => {} }) {
   let root = document.getElementById('modal-root');
   if (!root) {
     root = document.createElement('div');
@@ -48,6 +48,7 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
   let importPending = null;
   let vistaQuizNote = '';
   let pauseNotice = '';
+  let tellClose = false;
   let lastMarkup = '';
   let craftDrag=null;
   let workshop = null;
@@ -67,7 +68,7 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
   }
   function button(action, label, options = {}) {
     const attrs = Object.entries(options.data || {}).map(([key, value]) => `data-${key}="${escapeHTML(value)}"`).join(' ');
-    return `<button type="button" class="${options.className || 'secondary-btn'}" data-action="${action}" ${attrs} ${options.disabled ? 'disabled' : ''} ${options.label ? `aria-label="${escapeHTML(options.label)}"` : ''}>${label}</button>`;
+    return `<button type="button" class="${options.className || 'secondary-btn'}" data-action="${action}" ${attrs} ${options.pressed ? 'aria-pressed="true"' : ''} ${options.disabled ? 'disabled' : ''} ${options.label ? `aria-label="${escapeHTML(options.label)}"` : ''}>${label}</button>`;
   }
   function readButton(text) {
     return button('speak', `${svg('sound', 20)}<span>听说明</span>`, { className: 'secondary-btn speak-btn', data: { text } });
@@ -313,8 +314,8 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
       <div class="workshop-intro"><strong>点想做的 → 制作</strong><span>做好放进背包</span></div>
       <div class="workshop-stage"><canvas id="workshop-canvas" aria-label="实体工作台。上面先看材料和数量，再拖材料进插槽，点右侧产物，向下拉木杆制作。"></canvas><div class="workshop-labels" aria-hidden="true"></div></div>
       <p id="workshop-status" role="status"></p>
-      <div class="workshop-controls">${button('workshop-pull', '制作 · 拉杆备用', { className: 'primary-btn', disabled: true })}${button('workshop-clear', '全部拿回')}${button('workshop-size', '小桌', { data: { side: 2 } })}${button('workshop-size', '大桌', { data: { side: 3 }, disabled: !large })}</div>
-      <div class="workshop-secondary">${button('workshop-flat', '二维格子备用')}<details class="panel-details"><summary>更多操作与说明</summary><p>也可点材料，再点空槽；点槽里的材料拿回。图卡会演示摆法。同一摆法有多个结果时，先点右边的实体物品。拉杆是游戏制作约定，不模拟真实锯切。</p>${readButton('拖材料进槽，试摆不扣料。点右边的产物，再把木拉杆向下拉，松手制作。也可先点材料，再点空槽。')}</details></div>`;
+      <div class="workshop-controls">${button('workshop-pull', '制作', { className: 'primary-btn', disabled: true })}${button('workshop-clear', '全部拿回')}${button('workshop-size', '小桌', { data: { side: 2 } })}${button('workshop-size', '大桌', { data: { side: 3 }, disabled: !large })}</div>
+      <div class="workshop-secondary">${button('workshop-flat', '平面格子')}<details class="panel-details"><summary>更多操作与说明</summary><p>也可点材料，再点空槽；点槽里的材料拿回。图卡会演示摆法。同一摆法有多个结果时，先点右边的实体物品。拉杆是游戏制作约定，不模拟真实锯切。</p>${readButton('拖材料进槽，试摆不扣料。点右边的产物，再把木拉杆向下拉，松手制作。也可先点材料，再点空槽。')}</details></div>`;
   }
   function axleView() {
     return `<div class="axle-intro"><strong>固定轴 · 两个独立转轮</strong><span>点轮子装上或取下 · 拖轮子转动</span></div>
@@ -424,7 +425,7 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
     return `<div class="panel-note">${svg('warehouse', 28)}<span>愿意就帮忙，不做也能自由采集和建造。补给来自仓库已有的原料，<strong>不会增加游玩时间</strong>。</span></div>${readButton('这里的三个小帮忙都可以跳过。答错不扣材料，你可以看图数一数。奖励是仓库发给你的原料，不会增加玩游戏的时间。')}
       <div class="warehouse-orders">${orders.map((order, index) => `<article class="order-card"><div class="panel-row"><h3>${index + 1}. ${escapeHTML(order.title)}</h3><span>${order.answered ? '✓ 已领取' : `补给：${nameOf(order.reward.item)} × ${order.reward.count}`}</span></div><p>${escapeHTML(orderQuestion(order))}</p>${readButton(orderQuestion(order))}
       ${order.kind === 'add' ? `${tokens(wood, order.have)}<p>想凑够：${order.need} 根</p>${order.hint ? `<div class="order-targets" style="display:flex;flex-wrap:wrap;gap:6px">${Array.from({ length: order.need }, (_, i) => `<span class="number-token">${i < order.have ? svg(wood, 26) : '空位'}<small>${i + 1}</small></span>`).join('')}</div>` : ''}` : (order.kind === 'subtract' ? tokens('clay', order.total, order.taken) : `<div class="word-card"><strong style="font-size:56px">木</strong><span style="font-size:28px">mù</span><p>木头的“木”</p></div>`)}
-      <div class="order-options">${order.options.map((answer) => button('order-answer', order.kind === 'word' ? `${svg(answer, 44)}<span>${escapeHTML(nameOf(answer))}</span>` : `<strong style="font-size:28px">${answer}</strong>`, { className: 'secondary-btn answer-btn', data: { order: index, answer }, disabled: order.answered })).join('')}</div><p class="panel-notice" role="status">${escapeHTML(order.hint)}</p></article>`).join('')}</div>
+      <div class="order-options">${order.options.map((answer) => button('order-answer', order.kind === 'word' ? `${svg(answer, 44)}<span>${escapeHTML(nameOf(answer))}</span>` : `<strong style="font-size:28px">${answer}</strong>`, { className: 'secondary-btn answer-btn', data: { order: index, answer }, disabled: order.answered, pressed: order.picked === answer })).join('')}</div><p class="panel-notice" role="status">${escapeHTML(order.hint)}</p></article>`).join('')}</div>
       <details class="panel-details"><summary>给大人：这个练习如何简化</summary><p>“木”在这里读 mù；“目”等字也可以同音，要结合物品和词理解。数原料不是让答案变出材料，份数也不代表真实重量。</p></details>${button('close', '先去自由玩', { className: 'primary-btn' })}`;
   }
   function chestView() {
@@ -467,7 +468,7 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
     }).join('');
     const scale = band === 'older' ? '<p class="vista-scale">比例尺在地图下面。1 首歌大约是一小段。数字是游戏里的远近，不是真实公里。</p>' : '';
     const quiz = band === 'older' ? `<div class="vista-quiz"><p>${escapeHTML(VISTA_QUIZ.ask)}</p><div class="panel-row">${VISTA_QUIZ.options.map((opt) => button('vista-quiz', escapeHTML(opt.label), { className: 'secondary-btn', data: { choice: opt.id }, label: opt.label })).join('')}</div><p id="vista-quiz-note" role="status">${escapeHTML(vistaQuizNote)}</p><p class="panel-note">答错不扣东西。</p></div>` : '';
-    const star = game.state.travel?.story?.fogIntro ? `<div class="star-map-key"><p>星河图叠在海上。亮的一段是已经拿回的碎片，问号是还没拿回的。</p><div class="panel-row">${['ri', 'mei', 'xing'].map((id) => button('story-clue', id === 'ri' ? '日谷' : id === 'mei' ? '美谷' : '外星谷', { data: { realm: id }, label: `${id === 'ri' ? '日谷' : id === 'mei' ? '美谷' : '外星谷'}的线索` })).join('')}</div></div>` : '';
+    const star = game.state.travel?.story?.fogIntro ? `<div class="star-map-key"><p>金圈是已经拿到的星河碎片，空圈是还没有。日谷和美谷去渡口坐船，外星谷去坐热气球。</p><div class="panel-row">${['ri', 'mei', 'xing'].map((id) => button('story-clue', id === 'ri' ? '日谷' : id === 'mei' ? '美谷' : '外星谷', { data: { realm: id }, label: `${id === 'ri' ? '日谷' : id === 'mei' ? '美谷' : '外星谷'}的线索` })).join('')}${button('story-walk', '带我去', { className: 'primary-btn' })}</div></div>` : '';
     return `<canvas id="vista-map" width="320" height="240" aria-label="河谷在中间，海面盖着雾。发现以后会点亮。"></canvas>${scale}${lines}${quiz}${star}<p class="panel-note">实线是渡口的船，虚线是热气球。外星谷只有热气球，而且是想象的航线。没发现也能从渡口出发。</p>${readButton('河谷在中间。发现一个谷，地图就点亮它。坐船的线是实的，热气球的线是虚的。')}`;
   }
   function paintVistaCanvas() {
@@ -496,7 +497,7 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
     const hintsOff = game.state.travel?.story?.hintsOff === true;
     const away = (game.state.travel?.current || 'he') !== 'he';
     const ageOptions = [['', '不设置'], ...AGE_BANDS.map((item) => [item.id, item.label])].map(([id, label]) => `<option value="${id}" ${age === id ? 'selected' : ''}>${label}</option>`).join('');
-    return `<div class="panel-note">${svg('save', 32)}<span>${escapeHTML(saveInfo)}</span></div>${readButton(`${saveInfo}大人可以导出备份，也可以导入以前的存档。`)}<div class="panel-row">${button('save', '保存一下', { className: 'primary-btn' })}${button('close', '继续玩', { className: 'primary-btn' })}${away ? button('travel-home', '回家', { className: 'primary-btn', label: '回家' }) : ''}</div><p>画质。没选过就是流畅，选过会记住。</p><div class="panel-row">${button('quality-fast', '流畅', { className: game.state.settings?.quality === 'fine' ? 'secondary-btn' : 'primary-btn', label: '流畅画质' })}${button('quality-fine', '精美', { className: game.state.settings?.quality === 'fine' ? 'primary-btn' : 'secondary-btn', label: '精美画质' })}</div>${game.travelNotice ? `<p class="panel-notice" role="status">${escapeHTML(game.travelNotice)}</p>` : ''}<details class="panel-details" ${importPending ? 'open' : ''}><summary>给大人：备份与导入存档</summary><p>${game.accountId ? '已登录时，河谷存在这个账号下，换一台电脑登录也能回来。仍可以导出一份文件备份。' : guestDetail}</p><label>年龄档（不记录生日）<select id="age-band">${ageOptions}</select></label><p>这只是打开对话时的默认长短。孩子随时可以换，不会扣东西。6–8 岁和 9–12 岁两档。以前的 4–6 岁、7–9 岁会当作 6–8 岁，10–12 岁会当作 9–12 岁。</p><label>雾的画面<select id="story-fog"><option value="on" ${fogOff ? '' : 'selected'}>开</option><option value="off" ${fogOff ? 'selected' : ''}>关</option></select></label><label>故事提示<select id="story-hints"><option value="on" ${hintsOff ? '' : 'selected'}>开</option><option value="off" ${hintsOff ? 'selected' : ''}>关</option></select></label><div class="panel-row">${button('export', '下载存档 JSON')}${button('import-choose', '选择存档文件')}${backupBeforeImport ? button('export-backup', '下载导入前的备份') : ''}${game.getLegacyBackup?.()?button('export-legacy','下载升级前的备份'):''}${game.getTravelBackup?.()?button('export-travel','下载升级前的备份',{label:'下载旅行升级前的备份'}):''}${game.getMeiBackup?.()?button('export-mei','下载升级前的备份',{label:'下载美谷升级前的备份'}):''}${game.getMei3Backup?.()?button('export-mei3','下载升级前的备份',{label:'下载美谷片场升级前的备份'}):''}${game.getXingBackup?.()?button('export-xing','下载升级前的备份',{label:'下载外星谷升级前的备份'}):''}${game.getVistaBackup?.()?button('export-vista','下载升级前的备份',{label:'下载远眺升级前的备份'}):''}${game.getHoloBackup?.()?button('export-holo','下载升级前的备份',{label:'下载星网升级前的备份'}):''}${game.getXingShardBackup?.()?button('export-xing-shard','下载升级前的备份',{label:'下载星之片升级前的备份'}):''}${game.getStoryBackup?.()?button('export-story','下载升级前的备份',{label:'下载故事升级前的备份'}):''}${game.getRi3Backup?.()?button('export-ri3','下载升级前的备份',{label:'下载日谷升级前的备份'}):''}</div><input id="save-import-input" type="file" accept=".json,application/json" hidden>${importPending ? `<div class="panel-note warning">已选：${escapeHTML(importPending.name)}。导入会替换当前世界；系统会先保留备份并检查存档。${button('import-confirm', '确认导入', { className: 'primary-btn' })}${button('import-cancel', '取消')}</div>` : ''}</details>${studio.pauseSection()}<p class="panel-notice" role="status">${escapeHTML(pauseNotice)}</p>`;
+    return `<div class="panel-note">${svg('save', 32)}<span>${escapeHTML(saveInfo)}</span></div>${readButton(`${saveInfo}大人可以导出备份，也可以导入以前的存档。`)}<div class="panel-row">${button('save', '保存一下', { className: 'primary-btn' })}${button('close', '继续玩', { className: 'primary-btn' })}${away ? button('travel-home', '回家', { className: 'primary-btn', label: '回家' }) : ''}</div><p>画质。没选过就是流畅，选过会记住。</p><div class="panel-row">${button('quality-fast', '流畅', { className: game.state.settings?.quality === 'fine' ? 'secondary-btn' : 'primary-btn', label: '流畅画质' })}${button('quality-fine', '精美', { className: game.state.settings?.quality === 'fine' ? 'primary-btn' : 'secondary-btn', label: '精美画质' })}${button('look-open', '换个样子')}</div>${game.travelNotice ? `<p class="panel-notice" role="status">${escapeHTML(game.travelNotice)}</p>` : ''}<details class="panel-details" ${importPending ? 'open' : ''}><summary>给大人：备份与导入存档</summary><p>${game.accountId ? '已登录时，河谷存在这个账号下，换一台电脑登录也能回来。仍可以导出一份文件备份。' : guestDetail}</p><label>年龄档（不记录生日）<select id="age-band">${ageOptions}</select></label><p>这只是打开对话时的默认长短。孩子随时可以换，不会扣东西。6–8 岁和 9–12 岁两档。以前的 4–6 岁、7–9 岁会当作 6–8 岁，10–12 岁会当作 9–12 岁。</p><label>雾的画面<select id="story-fog"><option value="on" ${fogOff ? '' : 'selected'}>开</option><option value="off" ${fogOff ? 'selected' : ''}>关</option></select></label><label>故事提示<select id="story-hints"><option value="on" ${hintsOff ? '' : 'selected'}>开</option><option value="off" ${hintsOff ? 'selected' : ''}>关</option></select></label><div class="panel-row">${button('export', '下载存档 JSON')}${button('import-choose', '选择存档文件')}${backupBeforeImport ? button('export-backup', '下载导入前的备份') : ''}${game.getLegacyBackup?.()?button('export-legacy','下载升级前的备份'):''}${game.getTravelBackup?.()?button('export-travel','下载升级前的备份',{label:'下载旅行升级前的备份'}):''}${game.getMeiBackup?.()?button('export-mei','下载升级前的备份',{label:'下载美谷升级前的备份'}):''}${game.getMei3Backup?.()?button('export-mei3','下载升级前的备份',{label:'下载美谷片场升级前的备份'}):''}${game.getXingBackup?.()?button('export-xing','下载升级前的备份',{label:'下载外星谷升级前的备份'}):''}${game.getVistaBackup?.()?button('export-vista','下载升级前的备份',{label:'下载远眺升级前的备份'}):''}${game.getHoloBackup?.()?button('export-holo','下载升级前的备份',{label:'下载星网升级前的备份'}):''}${game.getXingShardBackup?.()?button('export-xing-shard','下载升级前的备份',{label:'下载星之片升级前的备份'}):''}${game.getStoryBackup?.()?button('export-story','下载升级前的备份',{label:'下载故事升级前的备份'}):''}${game.getRi3Backup?.()?button('export-ri3','下载升级前的备份',{label:'下载日谷升级前的备份'}):''}</div><input id="save-import-input" type="file" accept=".json,application/json" hidden>${importPending ? `<div class="panel-note warning">已选：${escapeHTML(importPending.name)}。导入会替换当前世界；系统会先保留备份并检查存档。${button('import-confirm', '确认导入', { className: 'primary-btn' })}${button('import-cancel', '取消')}</div>` : ''}</details>${studio.pauseSection()}<p class="panel-notice" role="status">${escapeHTML(pauseNotice)}</p>`;
   }
   function helpView() {
     const cards = [
@@ -514,7 +515,8 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
       ['kiln', '看条件', '制砖和种植会显示变化，真实时间被快进，原因可以点开看。'],
       ['save', '随时停下', game.localPlay ? '暂停会保存世界。本地游玩时，背包和建筑记在这台浏览器里。' : '暂停会保存世界。登录后，背包和建筑记在这个账号上，换一个人登录会进入自己的河谷。'],
     ];
-    return `<div class="panel-grid">${cards.map(([key, title, text]) => `<article class="help-card">${svg(key, 44)}<h3>${title}</h3><p>${text}</p>${readButton(text)}</article>`).join('')}</div><details class="panel-details"><summary>哪些是游戏约定？</summary><p>格子排列、原料份数、产量与建筑连接检查都是游戏约定。建筑连接检查不能判断现实房屋是否安全。加工和生长被快进；角色的软萌动作不改变实验物体的材料规律。</p><p>地图、图片和按钮足以操作，语音是可选帮助；设备不支持语音时也能继续玩。这里没有实时 AI 聊天，也不会为了答题延长家长设定的时间。</p></details><div class="panel-row">${button('open-inspiration', `${svg('book', 24)} 看看建筑点子卡`, { className: 'primary-btn' })}</div>`;
+    const helpCard = ([key, title, text]) => `<article class="help-card">${svg(key, 44)}<h3>${title}</h3><p>${text}</p>${readButton(text)}</article>`;
+    return `<div class="panel-grid">${cards.slice(0, 4).map(helpCard).join('')}</div><details class="panel-details"><summary>还有这些</summary><div class="panel-grid">${cards.slice(4).map(helpCard).join('')}</div></details><details class="panel-details"><summary>哪些是游戏约定？</summary><p>格子排列、原料份数、产量与建筑连接检查都是游戏约定。建筑连接检查不能判断现实房屋是否安全。加工和生长被快进；角色的软萌动作不改变实验物体的材料规律。</p><p>地图、图片和按钮足以操作，语音是可选帮助；设备不支持语音时也能继续玩。这里没有实时 AI 聊天，也不会为了答题延长家长设定的时间。</p></details><div class="panel-row">${button('open-inspiration', `${svg('book', 24)} 看看建筑点子卡`, { className: 'primary-btn' })}</div>`;
   }
   function miniMap(kind) {
     const tile = 20;
@@ -640,6 +642,8 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
   }
   function close() {
     if (!current) return;
+    const tell = tellClose;
+    tellClose = false;
     cancelCraftDrag();
     workshop?.dispose();
     workshop = null;
@@ -653,7 +657,7 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
     lastMarkup = '';
     document.body.style.overflow = previousOverflow;
     previousFocus?.focus?.({ preventScroll: true });
-    onClose();
+    onClose(tell);
   }
   function download(text, filename) {
     const blob = new Blob([text], { type: 'application/json' });
@@ -717,9 +721,14 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
     const target = event.target.closest('[data-action]');
     if (!target || !root.contains(target) || !current || target.disabled) return;
     const action = target.dataset.action;
-    if (action === 'backdrop') { if (event.target === target) close(); return; }
-    if (action === 'close') { close(); return; }
-    if (action === 'speak') { safeSpeak(target.dataset.text); return; }
+    if (action === 'backdrop') { if (event.target === target) { tellClose = true; close(); } return; }
+    if (action === 'close') { tellClose = true; close(); return; }
+    if (action === 'speak') {
+      document.querySelectorAll('.is-speaking').forEach((node) => node.classList.remove('is-speaking'));
+      target.classList.add('is-speaking');
+      safeSpeak(target.dataset.text || '');
+      return;
+    }
     if (handleMeiAction({ action, target, game, notifyResult, render })) return;
     if (studio.handle(action, target)) return;
     if (action === 'open-inspiration') { open('inspiration'); return; }
@@ -861,10 +870,11 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
       const answer = order.kind === 'word' ? target.dataset.answer : Number(target.dataset.answer);
       const correct = answer === order.answer;
       const result = game.rewardOrder(order.id, order.reward, correct);
+      order.picked = answer;
       if (correct && result.ok) { order.answered = true; order.hint = `仓库发给你 ${order.reward.count} 份${nameOf(order.reward.item)}。想走就可以走。`; onChanged(); toast(order.hint); }
       else if (correct) order.hint = result.message || '这份补给已经领取过啦。';
       else order.hint = order.kind === 'add' ? '看空位：已有的木料放好后，数一数还空着几个位置。' : (order.kind === 'subtract' ? '装走的先放一边，再数留在货架上的黏土。' : `你选的是${nameOf(answer)}。看木头的图，再听一遍：木，mù。`);
-      safeSpeak(order.hint);
+      if (!correct || !result?.ok) toast(order.hint);
       render(); return;
     }
     if (action === 'chest-deposit' || action === 'chest-withdraw') {
@@ -886,7 +896,9 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
     if(action==='export-xing-shard'){const text=game.getXingShardBackup?.();if(text)download(text,'我的河谷-星之片升级前备份.json');else toast('暂时没有星之片升级前的备份。');return;}
     if(action==='export-story'){const text=game.getStoryBackup?.();if(text)download(text,'我的河谷-故事升级前备份.json');else toast('暂时没有故事升级前的备份。');return;}
     if(action==='export-ri3'){const text=game.getRi3Backup?.();if(text)download(text,'我的河谷-日谷升级前备份.json');else toast('暂时没有日谷升级前的备份。');return;}
-    if(action==='story-clue'){const line=clueLine(target.dataset.realm, game.state.settings?.ageBand); toast(line); safeSpeak(line); return;}
+    if(action==='story-clue'){const line=clueLine(target.dataset.realm, game.state.settings?.ageBand); toast(line); return;}
+    if(action==='story-walk'){onWalkShard(target.dataset.realm || ''); tellClose = true; close(); return;}
+    if(action==='look-open'){onLook(); tellClose = false; close(); return;}
     if(action==='quality-fast'||action==='quality-fine'){const result=game.setQuality(action==='quality-fast'?'fast':'fine');pauseNotice=result.message||'画质已记住。';toast(pauseNotice);render();return;}
     if(action==='vista-quiz'){
       const before = JSON.stringify(game.state.inventory);
@@ -958,7 +970,7 @@ export function createPanels({ game, icon, toast = () => {}, speak = () => {}, o
   });
   document.addEventListener('keydown', (event) => {
     if (!current) return;
-    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); return; }
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); tellClose = true; close(); return; }
     if (event.key !== 'Tab') return;
     const focusables = [...root.querySelectorAll('button:not([disabled]), summary, select, input:not([hidden]), a[href], [tabindex="0"]')].filter((element) => element.getClientRects().length > 0);
     const first = focusables[0]; const last = focusables.at(-1);

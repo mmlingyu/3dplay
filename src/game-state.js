@@ -1,4 +1,5 @@
-import { ITEMS, RECIPES, COLLECTABLE_ITEMS, GARDEN_PLOTS, MAX_BUILD_HEIGHT, STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, MEI3_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY, HOLO_BACKUP_KEY, XING_SHARD_BACKUP_KEY, STORY_BACKUP_KEY, RI3_BACKUP_KEY, terrainHeight, isProtectedCell, roofSpan, roofWallAt } from './game-data.js';
+import { ITEMS, RECIPES, COLLECTABLE_ITEMS, GARDEN_PLOTS, MAX_BUILD_HEIGHT, STORAGE_KEY, DAMAGED_BACKUP_KEY, FIGURES_KEY, LIFE_BACKUP_KEY, LAND_BACKUP_KEY, TRAVEL_BACKUP_KEY, MEI_BACKUP_KEY, MEI3_BACKUP_KEY, XING_BACKUP_KEY, VISTA_BACKUP_KEY, HOLO_BACKUP_KEY, XING_SHARD_BACKUP_KEY, STORY_BACKUP_KEY, LOOK_BACKUP_KEY, RI3_BACKUP_KEY, terrainHeight, isProtectedCell, roofSpan, roofWallAt } from './game-data.js';
+import { defaultLook, normalizeLook } from './avatar-data.js';
 import { REALM_BLOCK_LIMIT, REALMS, SUPPLY_COOLDOWN, SUPPLY_COUNT, WASHI_STAGES, WASHI_TOTAL_SECONDS, arrivalFor, defaultTravel, emptyRealm, inVisitorYard, isDockCell, normalizeAgeBand, realmContains, realmTerrainHeight, washiStage } from './realm-data.js';
 import { TravelError, repairTravelRaw, validateTravel } from './travel-save.js';
 import { advanceMaple, attachMei } from './mei-state.js';
@@ -42,6 +43,7 @@ export function createInitialState() {
     land:createLand(),
     player: { x: -5, z: 5, y: 0 },
     settings: { sound: true, ageBand: null, quality: 'fast' },
+    look: defaultLook(),
     travel,
     stats: { gathered: 0, crafted: 0, built: 0, orders: 0 },
     garden: GARDEN_PLOTS.map(plot => ({ ...plot, planted: false, age: 0, moisture: 1, harvested: false, moistureElapsed: 0, drainElapsed: 0 })),
@@ -119,6 +121,8 @@ export function validateSave(value) {
   const quality = value.settings.quality;
   if (quality !== undefined && quality !== 'fast' && quality !== 'fine') throw new Error('存档中的画质不正确。');
   next.settings = { sound: value.settings.sound, ageBand, quality: quality === 'fine' ? 'fine' : 'fast' };
+  const played = (Number(value.stats?.built) || 0) + (Number(value.stats?.gathered) || 0) + (Number(value.stats?.crafted) || 0) > 0 || (Array.isArray(value.blocks) && value.blocks.length > 0);
+  next.look = normalizeLook(value.look, { played });
   if (!isRecord(value.stats)) throw new Error('存档中的记录不正确。');
   for (const stat of Object.keys(next.stats)) {
     if (!isCount(value.stats[stat])) throw new Error('存档中的记录数量不正确。');
@@ -318,6 +322,7 @@ export class GameState {
     this.holoSaveText=null;this.holoBackupKey=null;
     this.xingShardSaveText=null;this.xingShardBackupKey=null;
     this.storySaveText=null;this.storyBackupKey=null;
+    this.lookSaveText=null;this.lookBackupKey=null;
     this.ri3SaveText=null;this.ri3BackupKey=null;
     this.load();
   }
@@ -423,6 +428,12 @@ export class GameState {
         this.storySaveText=null;
       }catch{this.storageError='故事升级前的世界未能备份。请先导出存档。';return fail(this.storageError);}
     }
+    if(this.lookSaveText!==null){
+      try{
+        this.lookBackupKey=writeOriginalBackup(this.storage,LOOK_BACKUP_KEY,this.lookSaveText);
+        this.lookSaveText=null;
+      }catch{this.storageError='样子升级前的世界未能备份。请先导出存档。';return fail(this.storageError);}
+    }
     if(this.ri3SaveText!==null && ri3InState(this.state)){
       try{
         this.ri3BackupKey=writeOriginalBackup(this.storage,RI3_BACKUP_KEY,this.ri3SaveText);
@@ -499,6 +510,7 @@ export class GameState {
       const storyRaw = raw.travel?.story;
       const hasStory = isRecord(storyRaw) && Object.hasOwn(storyRaw, 'fogIntro') && Object.hasOwn(storyRaw, 'restored') && Object.hasOwn(storyRaw, 'fogOff');
       if(!hasStory) this.storySaveText=text;
+      if(!Object.hasOwn(raw, 'look')) this.lookSaveText=text;
       if(!rawHasRi3(raw)) this.ri3SaveText=text;
       this.legacySaveText=raw.clock===undefined||raw.flora===undefined||raw.land?.claimed===undefined?text:null;
       this.legacyBackupBase=raw.land?.claimed===undefined?LAND_BACKUP_KEY:LIFE_BACKUP_KEY;
@@ -565,6 +577,10 @@ export class GameState {
   getStoryBackup(){
     if(this.storySaveText!==null)return this.storySaveText;
     try{return this.storage?.getItem(this.storyBackupKey||STORY_BACKUP_KEY)??null;}catch{return null;}
+  }
+  getLookBackup(){
+    if(this.lookSaveText!==null)return this.lookSaveText;
+    try{return this.storage?.getItem(this.lookBackupKey||LOOK_BACKUP_KEY)??null;}catch{return null;}
   }
   getRi3Backup(){
     if(this.ri3SaveText!==null)return this.ri3SaveText;

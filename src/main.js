@@ -1,18 +1,21 @@
 import './style.css';
 import { icon } from './icons.js';
-import { ITEMS, GUEST_PLAYER_NAME, playerDisplayName, setTutorGuards, roofSpan } from './game-data.js';
+import { ITEMS, GUEST_PLAYER_NAME, resolvePlayerName, setTutorGuards, roofSpan, terrainHeight } from './game-data.js';
 import { GameState } from './game-state.js';
 import { createPanels } from './panels.js';
 import { RiverWorld } from './world.js';
 import { POOL, inPoolReservedArea } from './water-data.js';
 import { floraStage, realMoment } from './life-data.js';
 import { realAnalogClock } from './clock-ui.js';
-import { nearbyFrontiers, LAND_RULES } from './land-data.js';
+import { nearbyFrontiers, LAND_RULES, landBounds } from './land-data.js';
 import { accountSession } from './engine-client.js';
 import { markLocalPlayAccount, staticPreviewEnabled } from './static-preview.js';
 import { startValleySync } from './valley-sync.js';
-import { BOUNCE_ISLAND, PARK_NAME, PLAY_MODES, SKIP_STEPS, TIMES_TABLES, bounceInfo, inNumberPark, onBounceIsland, playMode } from './bounce-data.js';
-import { BALLOON_BASE, BALLOON_NAME, balloonBaseFor, onBalloonLawn } from './balloon-data.js';
+import { BOUNCE_ISLAND, PARK_NAME, PLAY_MODES, SKIP_STEPS, TIMES_TABLES, bounceInfo, inNumberPark, onBounceIsland, playMode, unlockedParkModes } from './bounce-data.js';
+import { BALLOON_BASE, BALLOON_CONTROL, BALLOON_NAME, balloonBaseFor, onBalloonLawn } from './balloon-data.js';
+import { LOOK_COLORS, LOOK_HATS, LOOK_SHAPES, NAME_PRESETS, lookColor, normalizeLook } from './avatar-data.js';
+import { yardPlankCount } from './yard-goal.js';
+import { nearestShard, shardNote } from './story-data.js';
 import { gradeQuestion, loadTutorPack, nextQuestion, primeTutorPack, tutorById, tutors, useTutorRealm } from './tutor-data.js';
 import { chooseDockSite, contentAgeBand, FERRY_NOTE, REALMS, VOYAGE_NOTE } from './realm-data.js';
 import { VISTAS } from './vista-data.js';
@@ -68,25 +71,53 @@ let balloonDriveOpen = false;
 const statusTimers = new WeakMap();
 const dismissedFrontiers=new Set();
 let playerName = GUEST_PLAYER_NAME;
+let accountUser = null;
+let balloonPanelOpen = false;
+let balloonPhaseSeen = '';
+let lastSpoken = { text: '', at: 0 };
 
 function setPlayerName(user) {
-  playerName = playerDisplayName(user);
+  accountUser = user || null;
+  refreshPlayerName();
+}
+function refreshPlayerName() {
+  playerName = resolvePlayerName(game.state.look, accountUser);
   game.playerName = playerName;
-  const welcome = $('welcome-player-note');
-  if (welcome) welcome.textContent = playerName;
   const map = $('minimap');
   if (map) map.setAttribute('aria-label', `河谷地图，绿色点是${playerName}的位置`);
+  paintLookStage();
 }
 
+function showCaption(text) {
+  const cap = $('voice-caption');
+  if (!cap) return;
+  cap.hidden = !text;
+  cap.textContent = text || '';
+  if (!text) return;
+  clearTimeout(showCaption.timer);
+  showCaption.timer = setTimeout(() => { if (cap.textContent === text) cap.hidden = true; }, 4200);
+}
 function toast(message, gain = false) {
   const el = document.createElement('div'); el.className = `toast${gain ? ' gain-toast' : ''}`;
   el.innerHTML = icon(gain ? 'sparkle' : 'leaf', 22);
   const text = document.createElement('span'); text.textContent = message; el.append(text);
   $('toast-root').replaceChildren(el);
-  setTimeout(() => { if (el.isConnected) el.remove(); }, 3400);
+  const ms = Math.max(4200, Math.min(8000, 1800 + String(message || '').length * 80));
+  setTimeout(() => { if (el.isConnected) el.remove(); }, ms);
+  speak(message);
 }
-function speak(text) {
+function speak(text, options = {}) {
   if (!game.state.settings.sound || !text) return;
+  const now = performance.now();
+  if (lastSpoken.text === text && now - lastSpoken.at < 500) return;
+  lastSpoken = { text, at: now };
+  const button = document.activeElement?.closest?.('.speak-btn, #wish-read, #story-talk-hear, #look-heart');
+  document.querySelectorAll('.is-speaking').forEach((node) => node.classList.remove('is-speaking'));
+  button?.classList.add('is-speaking');
+  // Toasts and scene lines already show their own words. A second caption
+  // only appears when the child asked to hear the current card.
+  if (options.caption || button) showCaption(text);
+  else showCaption('');
   clearTimeout(speechTimer);
   speakText(text, { enabled: () => game.state.settings.sound !== false });
 }
@@ -104,7 +135,19 @@ function paintParkHud(info) {
     modes.innerHTML = PLAY_MODES.map(mode => `<button type="button" class="bounce-chip" data-park="${mode.id}" aria-pressed="false">${mode.title}<small>${mode.ages}</small></button>`).join('');
     modes.dataset.ready = '1';
   }
-  for (const btn of modes.querySelectorAll('[data-park]')) btn.setAttribute('aria-pressed', btn.dataset.park === current ? 'true' : 'false');
+  const open = new Set(unlockedParkModes(game.state.settings?.ageBand));
+  for (const btn of modes.querySelectorAll('[data-park]')) {
+    const allowed = open.has(btn.dataset.park);
+    btn.hidden = !allowed;
+    btn.disabled = !allowed;
+    btn.setAttribute('aria-pressed', btn.dataset.park === current ? 'true' : 'false');
+  }
+  const ask = $('bounce-ask');
+  const question = world?.parkQuestion;
+  if (ask) {
+    ask.hidden = !question?.prompt;
+    ask.textContent = question?.prompt || '';
+  }
   if (current === 'skip') {
     picks.hidden = false;
     picks.innerHTML = SKIP_STEPS.map(step => `<button type="button" class="bounce-chip pick" data-skip="${step}" aria-pressed="${(info?.n ? world?.bounce?.step : world?.parkStep) === step ? 'true' : 'false'}">+${step}</button>`).join('');
@@ -138,7 +181,8 @@ function showBounce(info) {
 }
 function hideBounce() {
   const hud = $('bounce-hud');
-  if (hud) hud.hidden = true;
+  if (!hud) return;
+  hud.hidden = true;
 }
 function paintBalloonDrive(info) {
   const drive = $('balloon-drive');
@@ -152,14 +196,32 @@ function showBalloon(info) {
   const hud = $('balloon-hud');
   if (!hud || !info) return;
   hud.hidden = false;
+  const voyaging = info.phase === 'voyage';
+  if (voyaging && balloonPhaseSeen !== 'voyage') balloonPanelOpen = false;
+  balloonPhaseSeen = info.phase || '';
+  hud.classList.toggle('is-flight', voyaging);
+  hud.classList.toggle('is-chip', voyaging && !balloonPanelOpen);
+  const chip = $('balloon-chip');
+  const ride = world?.balloon;
+  const progress = voyaging ? Math.round(Math.min(1, (ride?.height || 0) / BALLOON_CONTROL.maxHeight) * 100) : 0;
+  if (chip) {
+    chip.hidden = !voyaging;
+    chip.textContent = `${info.title || '飞行中'} ${progress}%`;
+    chip.setAttribute('aria-expanded', String(balloonPanelOpen));
+  }
+  const panel = $('balloon-panel');
+  if (panel) panel.hidden = voyaging && !balloonPanelOpen;
   $('balloon-title').textContent = info.title || '热气球游览';
   $('balloon-note').textContent = info.note || '转一圈看河谷';
+  const landing = !!info.landing && !voyaging;
   const land = $('balloon-land');
   if (land) {
-    land.disabled = !!info.landing;
-    land.textContent = info.landing ? '正在降落' : '降落';
-    land.setAttribute('aria-label', info.landing ? '正在降落' : '降落到草坪基地');
+    land.disabled = landing;
+    land.textContent = landing ? '正在降落' : (voyaging ? '在这里降落' : '降落到草坪基地');
+    land.setAttribute('aria-label', landing ? '正在降落' : (voyaging ? '在这里降落' : '降落到草坪基地'));
   }
+  const reroute = $('balloon-reroute');
+  if (reroute) reroute.hidden = !voyaging || !balloonPanelOpen;
   paintBalloonDrive(info);
   const voyage = $('balloon-voyage');
   const voyageMei = $('balloon-voyage-mei');
@@ -173,12 +235,14 @@ function showBalloon(info) {
 }
 function hideBalloon() {
   balloonDriveOpen = false;
+  balloonPanelOpen = false;
+  balloonPhaseSeen = '';
   const hud = $('balloon-hud');
-  if (hud) hud.hidden = true;
+  if (hud) { hud.hidden = true; hud.classList.remove('is-flight', 'is-chip'); }
   const land = $('balloon-land');
   if (land) {
     land.disabled = false;
-    land.textContent = '降落';
+    land.textContent = '降落到草坪基地';
     land.setAttribute('aria-label', '降落到草坪基地');
   }
   paintBalloonDrive(null);
@@ -272,7 +336,8 @@ function showVistaCard(id) {
   if (!vista || !card) return;
   card.hidden = false;
   const line = $('vista-line');
-  if (line) line.textContent = vista.line;
+  const extra = shardNote(id, game.state.travel);
+  if (line) line.textContent = extra ? `${vista.line}${extra}` : vista.line;
   const mark = $('vista-icon');
   if (mark) mark.innerHTML = icon(vista.icon, 48);
   const look = $('vista-look');
@@ -281,7 +346,7 @@ function showVistaCard(id) {
   if (look) { look.hidden = false; look.setAttribute('aria-label', `看向${vista.name}`); }
   if (skip) skip.hidden = true;
   if (later) later.hidden = false;
-  speak(vista.line);
+  speak($('vista-line')?.textContent || vista.line);
 }
 function showVistaZoom(id) {
   const look = $('vista-look');
@@ -353,7 +418,7 @@ function hideStar() {
 function worldHooks() {
   return {
     tutors: tutors(),
-    onTap, onPick, onQuickPlace, onPreviewDrag: onTap,
+    onTap, onPick, onQuickPlace, onPreviewDrag: onTap, onAim,
     canDragPreview: () => started && mode === 'build' && !!buildCell && !!game.state.inventory[selectedItem] && !panels?.isOpen(),
     onBall: (message) => { if (started) { toast(message); save(); } },
     onWater: message => { if (started) toast(message); },
@@ -361,6 +426,24 @@ function worldHooks() {
     canFocusModel: () => started && mode !== 'build' && mode !== 'remove' && !panels?.isOpen() && (world?.realmId || 'he') === 'he',
     onBounce: info => { if (!started) return; showBounce(info); updateContext(); },
     onParkMode: info => { if (!started) return; if (world.bounce) showBounce(info); const modeName = playMode(info.mode); toast(`${modeName.title} · ${modeName.ages}`); updateContext(); },
+    onParkAsk: (question) => {
+      const ask = $('bounce-ask');
+      const hud = $('bounce-hud');
+      if (ask) { ask.hidden = !question?.prompt; ask.textContent = question?.prompt || ''; }
+      if (question?.prompt && started) speak(question.prompt);
+      if (!hud) return;
+      if (question?.prompt && !world?.bounce) {
+        hud.hidden = false;
+        const word = $('bounce-word');
+        if (word && !word.textContent) word.textContent = '？';
+      } else if (!question && !world?.bounce) hud.hidden = true;
+    },
+    onParkAnswer: ({ correct, prompt, answer }) => {
+      if (!started) return;
+      const line = correct ? '点亮啦。' : `${prompt}再试一次。对的是 ${answer}。`;
+      toast(line, correct);
+      if (correct) world?.celebrate?.(world.playerPosition, '#c6efb4');
+    },
     onBounceStop: () => { hideBounce(); const trampoline = world.targets.find(t => t.id === 'bounce-island'); if (trampoline) trampoline.action = '跳上去'; updateContext(); toast('停下来啦。走下来，再走上去，会重新从 1 开始。也可以先点一块玩法石。'); },
     onBalloonStart: info => { if (!started) return; hideBounce(); showBalloon(info); toast('坐稳，热气球起飞啦。转一圈看整个河谷。'); speak('坐上热气球，飞起来看整个河谷。'); updateContext(); },
     onBalloonLook: info => {
@@ -782,8 +865,14 @@ function feel(pattern = 12) {
   try { navigator.vibrate?.(pattern); } catch { /* 这台设备没有震动 */ }
 }
 function selectTarget(target) { chosenTarget = target; world.select(target); updateContext(); }
+function onAim(pick) {
+  if (!started || mode !== 'build' || panels?.isOpen() || buildCell || !pick?.cell) return;
+  buildCell = pick.cell;
+  updateContext();
+}
 function onPick(pick) {
   if (!started || !pick?.target) return;
+  if (mode === 'remove' && pick.target.type !== 'block') return;
   selectTarget(pick.target);
   const button = $('action-button');
   if (button) { button.classList.remove('attention'); void button.offsetWidth; button.classList.add('attention'); }
@@ -1152,6 +1241,7 @@ function placementIssue(cell) {
   if (selectedItem === 'ball') return null;
   const realm = game.state.travel?.current || 'he';
   if (realm === 'he' && world.pool && inPoolReservedArea(cell.x,cell.z,.5)) return '这里是公共泳池和入口，给大家留出空间。';
+  if (realm === 'he' && terrainHeight(cell.x, cell.z) < 0) return '这里是小溪，换一块干的草地吧。';
   if (realm === 'he' && inNumberPark(cell.x, cell.z, 0.6)) return `这里是${PARK_NAME}，给蹦床和玩法石留出空间。`;
   if (onBalloonLawn(cell.x, cell.z, 0.4, realm)) return realm === 'he' ? `这里是${BALLOON_NAME}，给热气球和草坪留出空间。` : '这里是热气球草坪，给降落留出空间。';
   const problem = game.placementProblem(selectedItem, { ...cell, rotation });
@@ -1225,7 +1315,7 @@ function updateUI() {
   updateSaveStatus(); updateWish();
 }
 function updateWish() {
-  const count = game.state.blocks.filter(b => b.item === 'plank' && b.y === 0 && b.x >= -7 && b.x <= -2 && b.z >= 4 && b.z <= 7).length;
+  const count = yardPlankCount(game.state.blocks);
   $('wish-progress').innerHTML = Array.from({ length: 6 }, (_, i) => icon(i < count ? 'check' : 'plank', 18)).join('') + `<span>${Math.min(count, 6)} / 6</span>`;
   if (count >= 6 && !completedWish) {
     completedWish = true;
@@ -1233,14 +1323,14 @@ function updateWish() {
     if (started) { toast('自己的小院，完成啦！', true); world.celebrate(world.playerPosition); }
   }
   if (count < 6 && completedWish) {
-    completedWish = false; $('wish-title').textContent = '铺一块自己的小院'; $('wish-description').textContent = '试着铺 6 格木地板。也可以先去逛逛。';
+    completedWish = false; $('wish-title').textContent = '铺一块自己的小院'; $('wish-description').textContent = '试着铺 6 格木板。也可以先去逛逛。';
   }
 }
 function updateContext() {
   if (!world) return;
   if ($('focus-exit')) $('focus-exit').hidden = !world.modelFocus;
   if (chosenTarget && !world.targets.some(t => t.id === chosenTarget.id)) chosenTarget = null;
-  const near = world.nearestTarget(2.8);
+  const near = world.nearestTarget(2.8, mode === 'remove' ? 'block' : null);
   const target = chosenTarget || near;
   $('placement-controls').hidden = !started || mode !== 'build' || panels?.isOpen();
   if (panels?.isOpen()) hideModelMenu();
@@ -1276,7 +1366,7 @@ function updateContext() {
       ? `正在靠近看${world.targets.find(t => t.id === focused.id)?.name || ''}。点「退出近看」，或再双击一次。`
       : modelMenu
       ? (world.modelFocus?.id === modelMenu.id ? '再双击，或点退出近看。' : '点旁边的菜单。双击靠近看，再双击或点退出近看。')
-      : target?.hint || '左边摇杆走一走 · 点地点标签前往 · 拖动画面转视角';
+      : target?.hint || (matchMedia('(pointer: coarse)').matches ? '点地面走过去，也可以用左下摇杆。' : 'WASD 或点地面走路，拖动画面转视角。');
     if (world.bounce) {
       const look = world.bounceLook() || bounceInfo(world.bounce.count);
       const trampoline = world.targets.find(t => t.id === 'bounce-island');
@@ -1338,9 +1428,19 @@ function updateContext() {
   updateLandGuidance();
   layoutOverlays();
 }
+function commitLook() {
+  const draft = normalizeLook(game.state.look);
+  const typed = $('look-name')?.value ?? draft.name;
+  draft.name = String(typed || '').replace(/\s+/g, '').slice(0, 8);
+  draft.ready = true;
+  game.state.look = draft;
+  refreshPlayerName();
+  world?.applyLook?.(draft);
+}
 function start() {
   if (!world) return;
-  started = true; $('welcome').hidden = true; resetInput(); save();
+  commitLook();
+  started = true; $('welcome').hidden = true; $('look-dialog').hidden = true; resetInput(); save();
   storyEnter();
   toast(touring ? '体验模式。右上角可以跳到下一章。孩子的存档不会被改。' : '去逛逛吧！左边摇杆走路，点材料，再点右边采集。');
   speak(touring ? '雾慢慢进来了。它不会伤害任何东西。' : '欢迎来到河谷。想去哪里，由你决定。');
@@ -1359,7 +1459,17 @@ async function bootValley() {
     onTravelHome: () => { panels?.close?.(); goHome(); },
     onAge: (ageBand) => { if (!tutorOpen()) tutorBand = ageBand || 'little'; },
     onChanged: () => { world?.sync(game.state); updateUI(); },
-    onClose: () => { panelType = null; resetInput(); save(); updateContext(); },
+    onClose: (told) => { panelType = null; resetInput(); save(); updateContext(); if (told) toast('收起来了'); },
+    onLook: () => openLookDialog(),
+    onWalkShard: (realm) => {
+      const pos = world?.playerPosition;
+      const near = nearestShard(game.state.travel, pos ? { x: pos.x, z: pos.z } : null);
+      const id = realm || near?.id || 'ri';
+      const spot = id === 'xing' ? BALLOON_BASE : { x: 4, z: 14 };
+      world?.walkTo?.(spot);
+      const item = id === 'xing' ? '星之片' : id === 'mei' ? '光之片' : '潮之片';
+      toast(id === 'xing' ? `去南边坐热气球，找${item}。` : `去渡口坐船，找${item}。`);
+    },
   });
   game.subscribe(() => {
     if (switching || !world || world.released) return;
@@ -1378,9 +1488,13 @@ async function bootValley() {
     onPaint: paintHoloChrome,
   });
   updateUI(); updateContext();
+  const boot = $('boot-screen');
+  if (boot) boot.hidden = true;
   } catch (error) {
     console.error('河谷启动失败', error);
     $('webgl-fallback').hidden = false; $('welcome').hidden = true;
+    const boot = $('boot-screen');
+    if (boot) boot.hidden = true;
   }
 }
 bootValley();
@@ -1496,9 +1610,27 @@ for (const [id, panel] of [['mei-maple', 'maple'], ['mei-project', 'project'], [
 }
 $('mei-stamps')?.addEventListener('click', () => { if (started) openPanel('stamps'); });
 $('balloon-land')?.addEventListener('click', () => {
-  if (!started || !world?.requestBalloonLand()) return;
+  if (!started || !world) return;
+  if (world.balloon?.phase === 'voyage') {
+    if (!world.landFromVoyage()) return;
+    balloonPanelOpen = false;
+    showBalloon(world.balloonLook());
+    toast('好，掉头飞回草坪。');
+    return;
+  }
+  if (!world.requestBalloonLand()) return;
   toast('好，热气球自己飞回草坪基地。');
-  speak('热气球飞回草坪基地。');
+});
+$('balloon-chip')?.addEventListener('click', () => {
+  if (!started || world?.balloon?.phase !== 'voyage') return;
+  balloonPanelOpen = !balloonPanelOpen;
+  showBalloon(world.balloonLook());
+});
+$('balloon-reroute')?.addEventListener('click', () => {
+  if (!started || !world?.rerouteVoyage()) return;
+  balloonPanelOpen = false;
+  showBalloon(world.balloonLook());
+  toast('可以改去日谷、美谷，或者飞向星星。');
 });
 $('vista-map-button')?.addEventListener('click', () => { if (started) openPanel('vista'); });
 $('vista-look')?.addEventListener('click', () => { if (started && world?.vistaGlance) world.zoomVista(world.vistaGlance.id); });
@@ -1530,7 +1662,10 @@ $('bounce-hud')?.addEventListener('click', event => {
   const park = event.target.closest('[data-park]')?.dataset.park;
   const skip = event.target.closest('[data-skip]')?.dataset.skip;
   const table = event.target.closest('[data-table]')?.dataset.table;
-  if (park) world.setParkMode(park);
+  if (park) {
+    if (!unlockedParkModes(game.state.settings?.ageBand).includes(park)) return;
+    world.setParkMode(park);
+  }
   else if (skip) world.setParkMode('skip', { step: Number(skip) });
   else if (table) world.setParkMode('times', { table: Number(table) });
 });
@@ -1571,6 +1706,104 @@ document.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
 window.addEventListener('blur', () => { resetInput(); if (started) save(); });
 document.addEventListener('visibilitychange', () => { resetInput(); lastFrame = performance.now(); if (started) save(); if(world)updateContext(); if (!document.hidden) refreshAccount(); });
 document.addEventListener('valley-account', () => refreshAccount());
+
+function currentLookDraft() {
+  const look = normalizeLook({ ...game.state.look, ready: game.state.look?.ready });
+  const typed = $('look-name');
+  if (typed) look.name = String(typed.value || '').replace(/\s+/g, '').slice(0, 8);
+  return look;
+}
+function paintLookStage() {
+  const stage = $('look-avatar');
+  if (!stage) return;
+  const look = currentLookDraft();
+  stage.dataset.shape = look.shape;
+  stage.dataset.hat = look.hat;
+  stage.style.setProperty('--look', lookColor(look));
+  if (world) world.applyLook(look);
+}
+function chooseLook(patch) {
+  const next = { ...currentLookDraft(), ...patch };
+  game.state.look = normalizeLook(next);
+  const input = $('look-name');
+  if (input && patch.name != null) input.value = next.name;
+  paintLookStage();
+  if (patch.name) speak(patch.name);
+  else speak(LOOK_SHAPES.find((item) => item.id === next.shape)?.label || LOOK_COLORS.find((item) => item.id === next.color)?.label || '换好了');
+}
+function fillLookRow(id, items, key, onPick) {
+  const row = $(id);
+  if (!row || row.dataset.ready) return;
+  row.dataset.ready = '1';
+  for (const item of items) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'look-choice';
+    button.textContent = item.label || item.name;
+    button.addEventListener('click', () => onPick(item));
+    row.append(button);
+  }
+}
+function mountLook() {
+  const maker = $('look-maker');
+  if (!maker) return;
+  if (game.state.look?.ready) maker.hidden = true;
+  const input = $('look-name');
+  if (input) {
+    input.value = game.state.look?.name || '';
+    input.addEventListener('input', () => {
+      game.state.look = { ...currentLookDraft(), name: input.value.replace(/\s+/g, '').slice(0, 8) };
+      paintLookStage();
+    });
+  }
+  fillLookRow('look-names', NAME_PRESETS, 'name', (item) => chooseLook({ name: item.name }));
+  fillLookRow('look-shapes', LOOK_SHAPES, 'shape', (item) => chooseLook({ shape: item.id }));
+  fillLookRow('look-colors', LOOK_COLORS, 'color', (item) => chooseLook({ color: item.id }));
+  fillLookRow('look-hats', LOOK_HATS, 'hat', (item) => chooseLook({ hat: item.id }));
+  $('look-heart')?.addEventListener('click', () => {
+    const name = currentLookDraft().name || GUEST_PLAYER_NAME;
+    world?.pulseHeart?.();
+    $('look-avatar')?.classList.add('is-heart');
+    setTimeout(() => $('look-avatar')?.classList.remove('is-heart'), 700);
+    speak(`${name}，就这个。`);
+  });
+  $('look-stage')?.addEventListener('pointermove', (event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / rect.width - 0.5;
+    const y = (event.clientY - rect.top) / rect.height - 0.5;
+    $('look-avatar')?.style.setProperty('--eye-x', `${x * 4}px`);
+    $('look-avatar')?.style.setProperty('--eye-y', `${y * 3}px`);
+  });
+  $('look-dialog-close')?.addEventListener('click', () => {
+    commitLook();
+    $('look-dialog').hidden = true;
+    save();
+    toast('样子记住了。');
+  });
+  $('minimap')?.addEventListener('click', (event) => {
+    if (!started || !world || panels?.isOpen()) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const bounds = landBounds(world.state?.land);
+    const x = (event.clientX - rect.left) / rect.width;
+    const z = (event.clientY - rect.top) / rect.height;
+    world.walkTo({
+      x: bounds.minX + x * (bounds.maxX - bounds.minX),
+      z: bounds.minZ + z * (bounds.maxZ - bounds.minZ),
+    });
+  });
+  paintLookStage();
+}
+function openLookDialog() {
+  const maker = $('look-maker');
+  const dialog = $('look-dialog');
+  const body = $('look-dialog-body');
+  if (!maker || !dialog || !body) return;
+  maker.hidden = false;
+  body.append(maker);
+  dialog.hidden = false;
+  paintLookStage();
+}
+mountLook();
 setPlayerName(null);
 refreshAccount();
 window.addEventListener('pagehide', () => {
