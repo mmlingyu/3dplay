@@ -493,7 +493,7 @@ export class RiWorld {
       this.camera.lookAt(this.lookAt);
     }
     if (!paused) this.stepMoodScale?.(dt);
-    this.renderer.render(this.scene, this.camera);
+    if (!this.holdPaint) this.renderer.render(this.scene, this.camera);
     this.positionLabels();
     return this.playerPosition;
   }

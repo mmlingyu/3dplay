@@ -283,6 +283,17 @@ function applyPlacement(el, box) {
   }
 }
 
+function pinJourneyCard(placements, safeTop, safeBottom) {
+  if (typeof document === 'undefined' || !document.documentElement.classList.contains('journey-on')) return;
+  const card = placements.find((box) => !box.parked && (box.id === 'travel-cutscene' || box.id === 'star-cutscene'));
+  if (!card) return;
+  card.y = Math.max(safeTop, safeBottom - card.height);
+  for (const box of placements) {
+    if (box === card || box.parked || box.id === 'balloon-hud') continue;
+    if (overlap(card, box, 4)) box.parked = true;
+  }
+}
+
 function safeEdges() {
   const topbar = document.querySelector('.topbar');
   let safeTop = 68;
@@ -419,6 +430,7 @@ export function layoutOverlays(root = document) {
       maxWidth: Math.min(560, window.innerWidth - 24),
       items,
     });
+    pinJourneyCard(plan.placements, safeTop, safeBottom);
     const map = root.querySelector('.minimap-card');
     if (map && shown(map)) {
       map.classList.remove('overlay-parked');
