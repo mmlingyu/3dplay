@@ -1942,7 +1942,8 @@ function paintLookStage() {
     stage.dataset.key = key;
     stage.innerHTML = lookMarkup({ shape: look.shape, color: lookColor(look), hat: look.hat, mood });
   }
-  if (world) world.applyLook(look);
+  // Each mounted world wears the look in its own way. A scene without the method still lets the button finish.
+  world?.applyLook?.(look);
 }
 function chooseLook(patch) {
   const next = { ...currentLookDraft(), ...patch };

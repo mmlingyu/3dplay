@@ -157,7 +157,9 @@ export class XingWorld {
 
   paintPlayer() {
     this.mesh(this.player, this.head, this.skin, [0, 1.35, 0]);
-    this.mesh(this.player, this.box, this.matColor('#f2d27a'), [0, 0.86, 0], [0.42, 0.48, 0.26]);
+    const shirt = this.mesh(this.player, this.box, this.matColor('#f2d27a'), [0, 0.86, 0], [0.42, 0.48, 0.26]);
+    shirt.userData.wearer = true;
+    this.player.userData.shirt = shirt;
   }
 
   buildScenery() {
@@ -639,6 +641,7 @@ export class XingWorld {
     if (!spot) return;
     const first = this.state !== state;
     this.state = state;
+    this.applyLook?.(state.look);
     if (first && spot.player && this.holo.phase === 'off') this.playerPosition.set(spot.player.x, spot.player.y || this.valleySurface(spot.player.x, spot.player.z), spot.player.z);
     const mode = resolveQuality(state.settings?.quality, this.deviceEnv);
     if (first || mode !== this.qualityMode) this.applyQuality(mode);
