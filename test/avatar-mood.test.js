@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { LOOK_HATS, LOOK_SHAPES } from '../src/avatar-data.js';
 import {
+  bindMood,
   createBlink,
   createMoodClock,
   lookMarkup,
+  paintOuterLook,
   pupilShift,
   setMood,
   shade,
@@ -76,6 +78,49 @@ test('眨眼会闭上再睁开，不会一直闭着', () => {
   assert.equal(sawShut, true);
   assert.equal(sawOpenAfter, true);
   assert.equal(blink.shutFor <= 0.1, true);
+});
+
+test('外谷能接住 applyLook，只换自己的衣服颜色，不改相机', () => {
+  const shared = { hex: '#f2d27a', set(next) { this.hex = next; } };
+  const material = {
+    color: shared,
+    clone() {
+      const color = { hex: shared.hex, set(next) { this.hex = next; } };
+      return { color };
+    },
+  };
+  const shirt = { material, userData: {} };
+  const camera = { yaw: 0.64, distance: 20, fov: 43 };
+  const host = {
+    player: { userData: { shirt }, scale: { set() {} } },
+    time: 0,
+    camera,
+    yaw: camera.yaw,
+    distance: camera.distance,
+  };
+  bindMood(host);
+  assert.equal(typeof host.applyLook, 'function');
+  host.applyLook({ color: 'sky' });
+  assert.equal(shirt.userData.ownMat.color.hex, '#7eb6d6');
+  assert.equal(shared.hex, '#f2d27a');
+  host.applyLook({ color: 'berry' });
+  assert.equal(shirt.userData.ownMat.color.hex, '#e07a8a');
+  host.applyLook(null);
+  assert.equal(shirt.userData.ownMat.color.hex, '#e07a8a');
+  const bare = { player: { userData: {} }, yaw: 0.2, distance: 16 };
+  paintOuterLook(bare, { color: 'sand' });
+  bindMood(bare);
+  bare.applyLook({ color: 'sand' });
+  host.setMood('happy');
+  host.time = 0.2;
+  const mood = host.stepMoodScale(0.05);
+  assert.equal(mood, 'happy');
+  assert.equal(camera.yaw, 0.64);
+  assert.equal(camera.distance, 20);
+  assert.equal(camera.fov, 43);
+  assert.equal(host.yaw, 0.64);
+  assert.equal(bare.yaw, 0.2);
+  assert.equal(bare.distance, 16);
 });
 
 test('瞳孔跟随有上限', () => {

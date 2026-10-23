@@ -3,7 +3,7 @@
  * There is no status console and no expression editor.
  */
 
-import { LOOK_HATS, LOOK_SHAPES } from './avatar-data.js';
+import { LOOK_HATS, LOOK_SHAPES, lookColor } from './avatar-data.js';
 
 export const MOODS = Object.freeze(['idle', 'happy', 'talking', 'curious', 'surprise', 'yawn']);
 
@@ -178,10 +178,24 @@ export function emitMood(name, options = {}) {
   target.dispatchEvent(new target.CustomEvent('valley-mood', { detail: { name, ...options } }));
 }
 
+/** Tints a marked shirt. Shared scenic materials stay untouched, and the camera is left alone. */
+export function paintOuterLook(host, look) {
+  const shirt = host?.player?.userData?.shirt;
+  const material = shirt?.material;
+  if (!look || !material || Array.isArray(material)) return;
+  if (!shirt.userData.ownMat) {
+    const next = typeof material.clone === 'function' ? material.clone() : material;
+    shirt.userData.ownMat = next;
+    shirt.material = next;
+  }
+  shirt.userData.ownMat.color?.set?.(lookColor(look));
+}
+
 /** Outer valleys only pulse the existing player group. No extra meshes. */
 export function bindMood(host) {
   host.moodClock = createMoodClock();
   host.setMood = (name, options) => setMood(host.moodClock, name, options);
+  host.applyLook = (look) => paintOuterLook(host, look);
   host.stepMoodScale = (dt) => {
     const name = stepMood(host.moodClock, dt || 0);
     const player = host.player;

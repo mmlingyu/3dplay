@@ -10,11 +10,12 @@ import { bindMood } from './avatar-mood.js';
 const RI = REALMS.ri;
 const LISTENER_COUNT = 6;
 
-function person(world, parent, { shirt = '#7eb6e0', hair = '#3a2a22', scale = 1, apron = null, scarf = null }) {
+function person(world, parent, { shirt = '#7eb6e0', hair = '#3a2a22', scale = 1, apron = null, scarf = null, wearer = false }) {
   const g = new THREE.Group();
   g.scale.setScalar(scale);
   world.mesh(g, world.head, world.skin, [0, 1.45, 0]);
-  world.mesh(g, world.box, world.matColor(shirt), [0, 0.92, 0], [0.46, 0.52, 0.28]);
+  const shirtMesh = world.mesh(g, world.box, world.matColor(shirt), [0, 0.92, 0], [0.46, 0.52, 0.28]);
+  if (wearer) shirtMesh.userData.wearer = true;
   world.mesh(g, world.box, world.matColor(hair), [0, 1.62, 0], [0.5, 0.22, 0.48]);
   world.mesh(g, world.eye, world.mats.dark, [-0.1, 1.48, 0.16], [1, 1, 1]);
   world.mesh(g, world.eye, world.mats.dark, [0.1, 1.48, 0.16], [1, 1, 1]);
@@ -77,7 +78,8 @@ export class RiWorld {
     this.mats.dark = this.matColor('#243028');
     this.previewMaterial = new THREE.MeshStandardMaterial({ color: '#fff0ae', transparent: true, opacity: 0.46, roughness: 0.9, depthWrite: false });
     this.player = new THREE.Group();
-    person(this, this.player, { shirt: '#f2d27a', hair: '#4a3428', scale: 0.92 });
+    const figure = person(this, this.player, { shirt: '#f2d27a', hair: '#4a3428', scale: 0.92, wearer: true });
+    figure.traverse((obj) => { if (obj.userData?.wearer) this.player.userData.shirt = obj; });
     bindMood(this);
     this.player.traverse((obj) => { if (obj.isMesh) obj.castShadow = true; });
     this.scene.add(this.player);
@@ -376,6 +378,7 @@ export class RiWorld {
     if (!spot) return;
     const first = this.state !== state;
     this.state = state;
+    this.applyLook?.(state.look);
     if (first && spot.player) this.playerPosition.set(spot.player.x, spot.player.y || 0, spot.player.z);
     if (this.flagCloth) {
       const fixed = spot.claimed?.includes('ri-flag-repaired');

@@ -16,12 +16,13 @@ import { bindMood } from './avatar-mood.js';
 const MEI = REALMS.mei;
 const LISTENER_COUNT = 6;
 
-function person(world, parent, { skin = '#f3d2b5', shirt = '#7eb6e0', hair = '#3a2a22', pants = '#3d4c63', scale = 1, extra = null, compact = false }) {
+function person(world, parent, { skin = '#f3d2b5', shirt = '#7eb6e0', hair = '#3a2a22', pants = '#3d4c63', scale = 1, extra = null, compact = false, wearer = false }) {
   const g = new THREE.Group();
   g.scale.setScalar(scale);
   world.mesh(g, world.box, world.matColor(pants), [-0.1, 0.34, 0], [0.14, 0.66, 0.14]);
   world.mesh(g, world.box, world.matColor(pants), [0.1, 0.34, 0], [0.14, 0.66, 0.14]);
-  world.mesh(g, world.box, world.matColor(shirt), [0, 0.92, 0], [0.38, 0.58, 0.2]);
+  const shirtMesh = world.mesh(g, world.box, world.matColor(shirt), [0, 0.92, 0], [0.38, 0.58, 0.2]);
+  if (wearer) shirtMesh.userData.wearer = true;
   world.mesh(g, world.head, world.matColor(skin), [0, 1.42, 0], [0.5, 0.5, 0.5]);
   world.mesh(g, world.box, world.matColor(hair), [0, 1.56, 0], [0.28, 0.1, 0.26]);
   world.mesh(g, world.eye, world.mats.dark, [-0.06, 1.44, 0.15], [1, 1, 1]);
@@ -77,7 +78,8 @@ export class MeiWorld {
     this.mats.dark = this.matColor('#243028');
     this.previewMaterial = new THREE.MeshStandardMaterial({ color: '#82c98c', transparent: true, opacity: 0.48, roughness: 0.9, depthWrite: false });
     this.player = new THREE.Group();
-    person(this, this.player, { shirt: '#f2d27a', hair: '#4a3428', scale: 0.92 });
+    const figure = person(this, this.player, { shirt: '#f2d27a', hair: '#4a3428', scale: 0.92, wearer: true });
+    figure.traverse((obj) => { if (obj.userData?.wearer) this.player.userData.shirt = obj; });
     bindMood(this);
     this.scene.add(this.player);
     this.selectionRing = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.63, 32), new THREE.MeshBasicMaterial({ color: '#fff3be', side: THREE.DoubleSide, transparent: true, opacity: 0.85, depthWrite: false }));
@@ -492,6 +494,7 @@ export class MeiWorld {
     if (!spot) return;
     const first = this.state !== state;
     this.state = state;
+    this.applyLook?.(state.look);
     if (first && spot.player) this.playerPosition.set(spot.player.x, spot.player.y || 0, spot.player.z);
     const ids = new Set((spot.blocks || []).map((block) => block.id));
     for (const [id, group] of this.buildGroups) {
