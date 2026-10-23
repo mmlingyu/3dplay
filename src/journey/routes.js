@@ -76,6 +76,24 @@ export function canLandRoute({ via, progress, active } = {}) {
   return Boolean(active) && via === 'balloon' && u > 0.08 && u < 0.9;
 }
 
+const DIVERT_ORDER = ['ri', 'mei', 'xing'];
+
+export function nextDivertRealm(current) {
+  const index = DIVERT_ORDER.indexOf(current);
+  if (index < 0) return null;
+  for (let step = 1; step < DIVERT_ORDER.length; step += 1) {
+    const id = DIVERT_ORDER[(index + step) % DIVERT_ORDER.length];
+    if (canDivertRoute({
+      via: 'balloon',
+      direction: 'out',
+      progress: 0.2,
+      routeId: routeId({ via: 'balloon', realm: current, direction: 'out' }),
+      nextRealm: id,
+    })) return id;
+  }
+  return null;
+}
+
 export function planJourney({ via = 'ferry', realm = 'ri', direction = 'out', age = 'junior', tour = false } = {}) {
   const id = routeId({ via, realm, direction });
   const route = ROUTES[id];

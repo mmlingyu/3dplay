@@ -22,7 +22,7 @@ import { VISTAS } from './vista-data.js';
 import { MEI_AUDIO, SHIP_NOTE, VOYAGE_MEI_NOTE } from './mei-data.js';
 import { projectBand } from './project-board.js';
 import { createCutscene } from './travel.js';
-import { createJourneyDirector, planJourney } from './journey/index.js';
+import { createJourneyDirector, nextDivertRealm, planJourney } from './journey/index.js';
 import { sceneStats } from './scene-stats.js';
 import { RI_AUDIO } from './ri-tutors.js';
 import { riBand } from './ri-story.js';
@@ -98,6 +98,8 @@ let playerName = GUEST_PLAYER_NAME;
 let accountUser = null;
 let balloonPanelOpen = false;
 let balloonPhaseSeen = '';
+let journeyChipOn = false;
+let journeyPanelFolded = true;
 let lastSpoken = { text: '', at: 0 };
 
 function setPlayerName(user) {
@@ -225,27 +227,38 @@ function showBalloon(info) {
   balloonPhaseSeen = info.phase || '';
   hud.classList.toggle('is-flight', voyaging);
   hud.classList.toggle('is-chip', voyaging && !balloonPanelOpen);
-  const chip = $('balloon-chip');
+  const rideStatus = journeyDirector.status();
+  const scenic = rideStatus.active && rideStatus.via === 'balloon';
   const ride = world?.balloon;
-  const progress = voyaging ? Math.round(Math.min(1, (ride?.height || 0) / BALLOON_CONTROL.maxHeight) * 100) : 0;
+  const progress = scenic
+    ? Math.round(rideStatus.progress * 100)
+    : (voyaging ? Math.round(Math.min(1, (ride?.height || 0) / BALLOON_CONTROL.maxHeight) * 100) : 0);
+  const chip = $('balloon-chip');
   if (chip) {
-    chip.hidden = !voyaging;
-    chip.textContent = `${info.title || '飞行中'} ${progress}%`;
+    chip.hidden = scenic ? false : !voyaging;
+    const name = scenic ? (rideStatus.destinationName || info.title || '飞行中') : (info.title || '飞行中');
+    chip.textContent = `${name} ${progress}%`;
     chip.setAttribute('aria-expanded', String(balloonPanelOpen));
+    chip.setAttribute('aria-label', scenic ? `${name}，路上进度 ${progress}%` : `${name} ${progress}%`);
   }
   const panel = $('balloon-panel');
-  if (panel) panel.hidden = voyaging && !balloonPanelOpen;
+  if (panel) panel.hidden = (voyaging || scenic) && !balloonPanelOpen;
   $('balloon-title').textContent = info.title || '热气球游览';
-  $('balloon-note').textContent = info.note || '转一圈看河谷';
-  const landing = !!info.landing && !voyaging;
+  const note = $('balloon-note');
+  if (note) {
+    note.textContent = info.note || '转一圈看河谷';
+    note.hidden = scenic;
+  }
+  const landing = !!info.landing && !voyaging && !scenic;
   const land = $('balloon-land');
   if (land) {
-    land.disabled = landing;
-    land.textContent = landing ? '正在降落' : (voyaging ? '在这里降落' : '降落到草坪基地');
-    land.setAttribute('aria-label', landing ? '正在降落' : (voyaging ? '在这里降落' : '降落到草坪基地'));
+    const here = voyaging || scenic;
+    land.disabled = scenic ? !rideStatus.canLand : landing;
+    land.textContent = landing ? '正在降落' : (here ? '在这里降落' : '降落到草坪基地');
+    land.setAttribute('aria-label', scenic ? (rideStatus.canLand ? '在这里降落' : '现在还不能降落') : (landing ? '正在降落' : (here ? '在这里降落' : '降落到草坪基地')));
   }
   const reroute = $('balloon-reroute');
-  if (reroute) reroute.hidden = !voyaging || !balloonPanelOpen;
+  if (reroute) reroute.hidden = scenic ? (!rideStatus.canDivert || !balloonPanelOpen) : (!voyaging || !balloonPanelOpen);
   paintBalloonDrive(info);
   const voyage = $('balloon-voyage');
   const voyageMei = $('balloon-voyage-mei');
@@ -460,10 +473,73 @@ function beginPlannedJourney(planned, kind) {
   journeyDirector.begin(planned, cutscene);
   return true;
 }
+function paintJourneyChip() {
+  const status = journeyDirector.status();
+  const scenic = status.active && status.via === 'balloon';
+  if (!scenic) {
+    journeyChipOn = false;
+    return;
+  }
+  const hud = $('balloon-hud');
+  const appeared = !journeyChipOn || hud?.hidden;
+  const folded = !balloonPanelOpen;
+  const foldChanged = journeyChipOn && folded !== journeyPanelFolded;
+  journeyChipOn = true;
+  journeyPanelFolded = folded;
+  if (hud) {
+    hud.hidden = false;
+    hud.classList.add('is-flight');
+    hud.classList.toggle('is-chip', !balloonPanelOpen);
+  }
+  const panel = $('balloon-panel');
+  if (panel && panel.hidden !== !balloonPanelOpen) panel.hidden = !balloonPanelOpen;
+  const pct = Math.round((status.progress || 0) * 100);
+  const name = status.destinationName || '飞行中';
+  const chip = $('balloon-chip');
+  if (chip) {
+    chip.hidden = false;
+    const label = `${name} ${pct}%`;
+    if (chip.textContent !== label) chip.textContent = label;
+    chip.setAttribute('aria-expanded', String(balloonPanelOpen));
+    chip.setAttribute('aria-label', `${name}，路上进度 ${pct}%`);
+  }
+  const land = $('balloon-land');
+  if (land) {
+    land.disabled = !status.canLand;
+    if (land.textContent !== '在这里降落') land.textContent = '在这里降落';
+    land.setAttribute('aria-label', status.canLand ? '在这里降落' : '现在还不能降落');
+  }
+  const reroute = $('balloon-reroute');
+  const hideReroute = !status.canDivert || !balloonPanelOpen;
+  if (reroute && reroute.hidden !== hideReroute) reroute.hidden = hideReroute;
+  const note = $('balloon-note');
+  if (note) note.hidden = true;
+  const steer = $('balloon-steer');
+  if (steer) steer.hidden = true;
+  const drive = $('balloon-drive');
+  if (drive) drive.hidden = true;
+  if (appeared || foldChanged) layoutOverlays();
+}
+function hideJourneyChip() {
+  journeyChipOn = false;
+  journeyPanelFolded = true;
+  balloonPanelOpen = false;
+  const chip = $('balloon-chip');
+  if (chip) chip.hidden = true;
+  const phase = world?.balloon?.phase;
+  if (phase === 'tour' || phase === 'lift') {
+    const hud = $('balloon-hud');
+    if (hud) hud.classList.remove('is-flight', 'is-chip');
+    if (world?.balloonLook) showBalloon(world.balloonLook());
+    return;
+  }
+  hideBalloon();
+}
 function abortScenicJourney() {
   if (finishingJourney || !cutscene) return;
   cutscene = null;
   journeyDirector.cancel();
+  hideJourneyChip();
   hideCutscene();
   hideStar();
 }
@@ -475,6 +551,7 @@ function tickScenic(dt) {
   const paused = !started || panelType === 'pause' || !!panels?.isOpen();
   const done = cutscene.tick(dt, { paused, hidden: false });
   journeyDirector.sync(cutscene, { paused });
+  paintJourneyChip();
   if (done) finishCutscene();
 }
 function worldHooks() {
@@ -722,6 +799,7 @@ async function finishCutscene() {
   const realmId = cutscene.realmId || 'ri';
   cutscene = null;
   journeyDirector.complete();
+  hideJourneyChip();
   hideCutscene();
   hideStar();
   try {
@@ -1705,6 +1783,14 @@ for (const [id, panel] of [['mei-maple', 'maple'], ['mei-project', 'project'], [
 $('mei-stamps')?.addEventListener('click', () => { if (started) openPanel('stamps'); });
 $('balloon-land')?.addEventListener('click', () => {
   if (!started || !world) return;
+  const ride = journeyDirector.status();
+  if (ride.active && ride.via === 'balloon') {
+    if (!ride.canLand || !journeyDirector.land()) return;
+    balloonPanelOpen = false;
+    paintJourneyChip();
+    toast('好，快要到了。');
+    return;
+  }
   if (world.balloon?.phase === 'voyage') {
     if (!world.landFromVoyage()) return;
     balloonPanelOpen = false;
@@ -1716,11 +1802,25 @@ $('balloon-land')?.addEventListener('click', () => {
   toast('好，热气球自己飞回草坪基地。');
 });
 $('balloon-chip')?.addEventListener('click', () => {
-  if (!started || world?.balloon?.phase !== 'voyage') return;
+  const ride = journeyDirector.status();
+  const scenic = ride.active && ride.via === 'balloon';
+  if (!started || (!scenic && world?.balloon?.phase !== 'voyage')) return;
   balloonPanelOpen = !balloonPanelOpen;
-  showBalloon(world.balloonLook());
+  if (world?.balloonLook && world.balloon) showBalloon(world.balloonLook());
+  paintJourneyChip();
 });
 $('balloon-reroute')?.addEventListener('click', () => {
+  const ride = journeyDirector.status();
+  if (ride.active && ride.via === 'balloon') {
+    const next = nextDivertRealm(ride.destination);
+    if (!ride.canDivert || !next) return;
+    balloonPanelOpen = false;
+    if (!journeyDirector.divert(next)) return;
+    if (world?.balloonLook && world.balloon) showBalloon(world.balloonLook());
+    paintJourneyChip();
+    toast(`改去${journeyDirector.status().destinationName}。`);
+    return;
+  }
   if (!started || !world?.rerouteVoyage()) return;
   balloonPanelOpen = false;
   showBalloon(world.balloonLook());

@@ -7,6 +7,7 @@ import { SHIP_NOTE, VOYAGE_MEI_NOTE } from '../src/mei-data.js';
 import {
   canDivertRoute,
   canLandRoute,
+  nextDivertRealm,
   journeyPhase,
   journeySeconds,
   noteTrip,
@@ -71,6 +72,10 @@ test('热气球可以在看见目的地之前改道，船不行，降落只在�
   assert.equal(canLandRoute({ via: 'balloon', progress: 0.4, active: true }), true);
   assert.equal(canLandRoute({ via: 'balloon', progress: 0.02, active: true }), false);
   assert.equal(canLandRoute({ via: 'ferry', progress: 0.4, active: true }), false);
+  assert.equal(nextDivertRealm('ri'), 'mei');
+  assert.equal(nextDivertRealm('mei'), 'xing');
+  assert.equal(nextDivertRealm('xing'), 'ri');
+  assert.equal(nextDivertRealm('he'), null);
 });
 
 test('同一条路记下一次之后，计划时长变短，但不写存档', () => {
