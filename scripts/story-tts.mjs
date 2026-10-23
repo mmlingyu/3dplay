@@ -15,6 +15,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, statSync, unlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { JOURNEY_CLIPS } from '../src/journey/lines.js';
 import { FINALE_LINE, LIBAI_FOG_LINE, VALLEY_CAST, restoreLine, valleyLine } from '../src/valley-tutors.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -45,6 +46,10 @@ for (const zone of ['water', 'light', 'sky', 'all']) {
 for (const person of VALLEY_CAST) {
   clips.push({ id: person.id, voice: VOICE[person.id], text: person.junior });
   clips.push({ id: `${person.id}-senior`, voice: VOICE[person.id], text: person.senior });
+}
+
+for (const clip of JOURNEY_CLIPS) {
+  clips.push({ id: clip.id, voice: VOICE[clip.voice], text: clip.text });
 }
 
 function edgeCommand() {

@@ -17,17 +17,18 @@ import { LOOK_COLORS, LOOK_HATS, LOOK_SHAPES, NAME_PRESETS, lookColor, normalize
 import { yardPlankCount } from './yard-goal.js';
 import { nearestShard, shardNote } from './story-data.js';
 import { gradeQuestion, loadTutorPack, nextQuestion, primeTutorPack, tutorById, tutors, useTutorRealm } from './tutor-data.js';
-import { chooseDockSite, contentAgeBand, FERRY_NOTE, REALMS, VOYAGE_NOTE } from './realm-data.js';
+import { chooseDockSite, contentAgeBand, FERRY_NOTE, normalizeAgeBand, REALMS, VOYAGE_NOTE } from './realm-data.js';
 import { VISTAS } from './vista-data.js';
 import { MEI_AUDIO, SHIP_NOTE, VOYAGE_MEI_NOTE } from './mei-data.js';
 import { projectBand } from './project-board.js';
 import { createCutscene } from './travel.js';
+import { createJourneyDirector, nextDivertRealm, planJourney } from './journey/index.js';
 import { sceneStats } from './scene-stats.js';
 import { RI_AUDIO } from './ri-tutors.js';
 import { riBand } from './ri-story.js';
 import { setRiSound, warmRiAudio } from './ri-audio.js';
 import { handleRiTap, playQuestionAudio, resetQuestionAudio, riSheetOpen } from './ri-ui.js';
-import { FANTASY_ROUTE, STAR_SECONDS, XING_AUDIO, XING_OPEN, starRouteVisible } from './xing-data.js';
+import { FANTASY_ROUTE, XING_AUDIO, XING_OPEN, starRouteVisible } from './xing-data.js';
 import { HOLO_AUDIO, WELCOME_LINE } from './holo-data.js';
 import { recordedIds } from './voice-lines.js';
 import { bindVoiceUnlock, speakPair, speakText, stopVoice, voiceReady } from './voice.js';
@@ -56,7 +57,7 @@ let world, panels, started = false, mode = 'gather', selectedItem = 'plank';
 let rotation = 0, buildCell = null, chosenTarget = null, modelMenu = null, panelType = null, savedTime = 0;
 let lastFrame = performance.now(), uiTime = 0, completedWish = false, speechTimer, vistaStampTimer;
 let tutorBand = game.state.settings.ageBand || 'little', tutorUsed = [], tutorCurrent = null, tutorPick = null, tutorStage = 'menu', tutorActivity = null, tutorPage = 0, tutorGreeted = new Set();
-let switching = false, cutscene = null, pendingHomeFlight = false, xingPuzzle = null, xingSheet = '', crystalMarkup = '';
+let switching = false, cutscene = null, finishingJourney = false, pendingHomeFlight = false, xingPuzzle = null, xingSheet = '', crystalMarkup = '';
 let holoUi = null;
 const missingAudio = new Set([...RI_AUDIO, ...MEI_AUDIO, ...XING_AUDIO, ...HOLO_AUDIO]);
 for (const id of recordedIds()) missingAudio.delete(id);
@@ -66,6 +67,29 @@ setRiSound(game.state.settings.sound);
 const riReady = import('./ri-world.js');
 const meiReady = import('./mei-world.js');
 const xingReady = import('./xing-world.js');
+function journeyAge() {
+  return normalizeAgeBand(game.state.settings?.ageBand) === 'senior' ? 'senior' : 'junior';
+}
+const journeyDirector = createJourneyDirector({
+  world: () => world,
+  age: journeyAge,
+  tour: () => touring,
+  sound: () => game.state.settings?.sound !== false,
+  quality: () => game.state.settings?.quality,
+  warm: (realm) => {
+    if (realm === 'mei') return meiReady;
+    if (realm === 'xing') return xingReady;
+    if (realm === 'ri') return riReady;
+    return Promise.resolve();
+  },
+  plan: (spec) => planJourney({ ...spec, age: journeyAge(), tour: touring }),
+  onDivert: (route) => presentJourney(route),
+});
+const journeyApi = {
+  status: () => journeyDirector.status(),
+  land: () => journeyDirector.land(),
+  divert: (realmId) => journeyDirector.divert(realmId),
+};
 let landHint=null;
 let balloonDriveOpen = false;
 const statusTimers = new WeakMap();
@@ -74,6 +98,8 @@ let playerName = GUEST_PLAYER_NAME;
 let accountUser = null;
 let balloonPanelOpen = false;
 let balloonPhaseSeen = '';
+let journeyChipOn = false;
+let journeyPanelFolded = true;
 let lastSpoken = { text: '', at: 0 };
 
 function setPlayerName(user) {
@@ -201,27 +227,38 @@ function showBalloon(info) {
   balloonPhaseSeen = info.phase || '';
   hud.classList.toggle('is-flight', voyaging);
   hud.classList.toggle('is-chip', voyaging && !balloonPanelOpen);
-  const chip = $('balloon-chip');
+  const rideStatus = journeyDirector.status();
+  const scenic = rideStatus.active && rideStatus.via === 'balloon';
   const ride = world?.balloon;
-  const progress = voyaging ? Math.round(Math.min(1, (ride?.height || 0) / BALLOON_CONTROL.maxHeight) * 100) : 0;
+  const progress = scenic
+    ? Math.round(rideStatus.progress * 100)
+    : (voyaging ? Math.round(Math.min(1, (ride?.height || 0) / BALLOON_CONTROL.maxHeight) * 100) : 0);
+  const chip = $('balloon-chip');
   if (chip) {
-    chip.hidden = !voyaging;
-    chip.textContent = `${info.title || '飞行中'} ${progress}%`;
+    chip.hidden = scenic ? false : !voyaging;
+    const name = scenic ? (rideStatus.destinationName || info.title || '飞行中') : (info.title || '飞行中');
+    chip.textContent = `${name} ${progress}%`;
     chip.setAttribute('aria-expanded', String(balloonPanelOpen));
+    chip.setAttribute('aria-label', scenic ? `${name}，路上进度 ${progress}%` : `${name} ${progress}%`);
   }
   const panel = $('balloon-panel');
-  if (panel) panel.hidden = voyaging && !balloonPanelOpen;
+  if (panel) panel.hidden = (voyaging || scenic) && !balloonPanelOpen;
   $('balloon-title').textContent = info.title || '热气球游览';
-  $('balloon-note').textContent = info.note || '转一圈看河谷';
-  const landing = !!info.landing && !voyaging;
+  const note = $('balloon-note');
+  if (note) {
+    note.textContent = info.note || '转一圈看河谷';
+    note.hidden = scenic;
+  }
+  const landing = !!info.landing && !voyaging && !scenic;
   const land = $('balloon-land');
   if (land) {
-    land.disabled = landing;
-    land.textContent = landing ? '正在降落' : (voyaging ? '在这里降落' : '降落到草坪基地');
-    land.setAttribute('aria-label', landing ? '正在降落' : (voyaging ? '在这里降落' : '降落到草坪基地'));
+    const here = voyaging || scenic;
+    land.disabled = scenic ? !rideStatus.canLand : landing;
+    land.textContent = landing ? '正在降落' : (here ? '在这里降落' : '降落到草坪基地');
+    land.setAttribute('aria-label', scenic ? (rideStatus.canLand ? '在这里降落' : '现在还不能降落') : (landing ? '正在降落' : (here ? '在这里降落' : '降落到草坪基地')));
   }
   const reroute = $('balloon-reroute');
-  if (reroute) reroute.hidden = !voyaging || !balloonPanelOpen;
+  if (reroute) reroute.hidden = scenic ? (!rideStatus.canDivert || !balloonPanelOpen) : (!voyaging || !balloonPanelOpen);
   paintBalloonDrive(info);
   const voyage = $('balloon-voyage');
   const voyageMei = $('balloon-voyage-mei');
@@ -269,12 +306,12 @@ function storePlayer() {
     }
   }
 }
-function showCutscene(text, realmId = 'ri') {
+function showCutscene(text, realmId = 'ri', ship = realmId === 'mei') {
   const box = $('travel-cutscene');
   if (!box) return;
   $('travel-cutscene-text').textContent = text;
-  box.classList.toggle('craft-ship', realmId === 'mei');
-  box.classList.toggle('craft-boat', realmId !== 'mei');
+  box.classList.toggle('craft-ship', ship === true);
+  box.classList.toggle('craft-boat', ship !== true);
   box.hidden = false;
 }
 function hideCutscene() {
@@ -394,7 +431,6 @@ function showStar(title = '飞向星星') {
   if (heading) heading.textContent = title;
   if (note) note.textContent = title === '飞回河谷' ? '热气球穿过云，回到家的草坪。' : FANTASY_ROUTE;
   if (box) box.hidden = false;
-  cutscene = createCutscene('stars', STAR_SECONDS);
 }
 function qualityEnv() {
   const shortSide = Math.min(window.innerWidth || 0, window.innerHeight || 0);
@@ -413,7 +449,110 @@ function paintHoloChrome() {
 function hideStar() {
   const box = $('star-cutscene');
   if (box) box.hidden = true;
-  if (cutscene?.kind === 'stars') cutscene = null;
+}
+function presentJourney(route) {
+  if (!route) return;
+  if (route.card === 'star') {
+    hideCutscene();
+    showStar(route.starTitle || (route.direction === 'return' ? '飞回河谷' : '飞向星星'));
+  } else {
+    hideStar();
+    showCutscene(route.note, route.realm, route.ship === true);
+  }
+  if (world?.balloon && route.direction === 'out') {
+    world.balloon.realmId = route.realm;
+    world.balloon.scripted = true;
+    showBalloon(world.balloonLook());
+  }
+}
+function beginPlannedJourney(planned, kind) {
+  if (!planned) return false;
+  cutscene = createCutscene(kind, planned.seconds);
+  cutscene.realmId = planned.route.direction === 'return' ? 'he' : planned.route.realm;
+  presentJourney(planned.route);
+  journeyDirector.begin(planned, cutscene);
+  return true;
+}
+function paintJourneyChip() {
+  const status = journeyDirector.status();
+  const scenic = status.active && status.via === 'balloon';
+  if (!scenic) {
+    journeyChipOn = false;
+    return;
+  }
+  const hud = $('balloon-hud');
+  const appeared = !journeyChipOn || hud?.hidden;
+  const folded = !balloonPanelOpen;
+  const foldChanged = journeyChipOn && folded !== journeyPanelFolded;
+  journeyChipOn = true;
+  journeyPanelFolded = folded;
+  if (hud) {
+    hud.hidden = false;
+    hud.classList.add('is-flight');
+    hud.classList.toggle('is-chip', !balloonPanelOpen);
+  }
+  const panel = $('balloon-panel');
+  if (panel && panel.hidden !== !balloonPanelOpen) panel.hidden = !balloonPanelOpen;
+  const pct = Math.round((status.progress || 0) * 100);
+  const name = status.destinationName || '飞行中';
+  const chip = $('balloon-chip');
+  if (chip) {
+    chip.hidden = false;
+    const label = `${name} ${pct}%`;
+    if (chip.textContent !== label) chip.textContent = label;
+    chip.setAttribute('aria-expanded', String(balloonPanelOpen));
+    chip.setAttribute('aria-label', `${name}，路上进度 ${pct}%`);
+  }
+  const land = $('balloon-land');
+  if (land) {
+    land.disabled = !status.canLand;
+    if (land.textContent !== '在这里降落') land.textContent = '在这里降落';
+    land.setAttribute('aria-label', status.canLand ? '在这里降落' : '现在还不能降落');
+  }
+  const reroute = $('balloon-reroute');
+  const hideReroute = !status.canDivert || !balloonPanelOpen;
+  if (reroute && reroute.hidden !== hideReroute) reroute.hidden = hideReroute;
+  const note = $('balloon-note');
+  if (note) note.hidden = true;
+  const steer = $('balloon-steer');
+  if (steer) steer.hidden = true;
+  const drive = $('balloon-drive');
+  if (drive) drive.hidden = true;
+  if (appeared || foldChanged) layoutOverlays();
+}
+function hideJourneyChip() {
+  journeyChipOn = false;
+  journeyPanelFolded = true;
+  balloonPanelOpen = false;
+  const chip = $('balloon-chip');
+  if (chip) chip.hidden = true;
+  const phase = world?.balloon?.phase;
+  if (phase === 'tour' || phase === 'lift') {
+    const hud = $('balloon-hud');
+    if (hud) hud.classList.remove('is-flight', 'is-chip');
+    if (world?.balloonLook) showBalloon(world.balloonLook());
+    return;
+  }
+  hideBalloon();
+}
+function abortScenicJourney() {
+  if (finishingJourney || !cutscene) return;
+  cutscene = null;
+  journeyDirector.cancel();
+  hideJourneyChip();
+  hideCutscene();
+  hideStar();
+}
+function scenicKind(kind = cutscene?.kind) {
+  return kind === 'ferry' || kind === 'voyage' || kind === 'stars' || kind === 'return';
+}
+function tickScenic(dt) {
+  if (!scenicKind()) return;
+  const paused = !started || panelType === 'pause' || !!panels?.isOpen();
+  const done = cutscene.tick(dt, { paused, hidden: false });
+  journeyDirector.sync(cutscene, { paused });
+  paintJourneyChip();
+  if (done) finishCutscene();
 }
 function worldHooks() {
   return {
@@ -452,7 +591,7 @@ function worldHooks() {
       updateContext();
       if (pendingHomeFlight && info.phase === 'tour' && (game.state.travel?.current || 'he') === 'xing' && world.startVoyage('he')) {
         pendingHomeFlight = false;
-        showStar('飞回河谷');
+        beginStarReturn();
       }
     },
     onBalloonStop: (info) => { hideBalloon(); hideVistaCard(); if (info?.silent) return; toast('已经降落。想再看，再点乘坐。'); updateContext(); },
@@ -541,6 +680,7 @@ async function mountWorld(realm, mod, options = {}) {
 async function goXing() {
   if (switching) return;
   pendingHomeFlight = false;
+  abortScenicJourney();
   hideCutscene();
   hideStar();
   const fromHome = (game.state.travel?.current || 'he') === 'he';
@@ -575,6 +715,7 @@ async function goRealm(via = 'ferry', realmId = 'ri') {
   if (realmId === 'xing') return goXing();
   if (switching || (game.state.travel?.current || 'he') !== 'he') return;
   const id = REALMS[realmId]?.playable && realmId !== 'he' ? realmId : 'ri';
+  abortScenicJourney();
   hideCutscene();
   try {
     const mod = id === 'mei' ? await meiReady : await riReady;
@@ -600,6 +741,7 @@ async function goRealm(via = 'ferry', realmId = 'ri') {
 async function goHome() {
   if (switching || (game.state.travel?.current || 'he') === 'he') return;
   pendingHomeFlight = false;
+  abortScenicJourney();
   holoUi?.close();
   hideBalloon();
   hideCutscene();
@@ -618,19 +760,55 @@ async function goHome() {
 function startFerry(realmId = 'ri') {
   if (cutscene || switching || (game.state.travel?.current || 'he') !== 'he') return;
   const id = realmId === 'mei' && REALMS.mei?.playable ? 'mei' : 'ri';
-  cutscene = createCutscene('ferry', 3);
-  cutscene.realmId = id;
-  showCutscene(id === 'mei' ? SHIP_NOTE : FERRY_NOTE, id);
+  const planned = planJourney({ via: 'ferry', realm: id, direction: 'out', age: journeyAge(), tour: touring });
+  beginPlannedJourney(planned, 'ferry');
   paintTravel();
 }
+function startBalloonJourney(realmId) {
+  if (!started || cutscene || switching || !world?.startVoyage?.(realmId)) return false;
+  world.balloon.scripted = true;
+  const planned = planJourney({ via: 'balloon', realm: realmId, direction: 'out', age: journeyAge(), tour: touring });
+  beginPlannedJourney(planned, realmId === 'xing' ? 'stars' : 'voyage');
+  showBalloon(world.balloonLook());
+  storePlayer();
+  return true;
+}
+function beginStarReturn() {
+  if (!world?.balloon) return false;
+  world.balloon.scripted = true;
+  const planned = planJourney({ via: 'balloon', realm: 'xing', direction: 'return', age: journeyAge(), tour: touring });
+  beginPlannedJourney(planned, 'stars');
+  showBalloon(world.balloonLook());
+  return true;
+}
+function startReturnJourney() {
+  if (!started || cutscene || switching) return false;
+  const realm = game.state.travel?.current || 'he';
+  if (realm === 'he') return false;
+  const via = realm === 'xing' || game.state.travel?.via === 'balloon' ? 'balloon' : 'ferry';
+  const planned = planJourney({ via, realm, direction: 'return', age: journeyAge(), tour: touring });
+  if (world?.balloon) world.balloon.scripted = true;
+  beginPlannedJourney(planned, 'return');
+  paintTravel();
+  return true;
+}
 async function finishCutscene() {
-  const kind = cutscene?.kind;
-  const realmId = cutscene?.realmId || 'ri';
+  if (finishingJourney || !cutscene) return;
+  finishingJourney = true;
+  const kind = cutscene.kind;
+  const realmId = cutscene.realmId || 'ri';
   cutscene = null;
+  journeyDirector.complete();
+  hideJourneyChip();
   hideCutscene();
   hideStar();
-  if (kind === 'ferry') await goRealm('ferry', realmId);
-  if (kind === 'voyage' || kind === 'stars') world?.completeVoyage?.();
+  try {
+    if (kind === 'ferry') await goRealm('ferry', realmId);
+    else if (kind === 'return') await goHome();
+    else if (kind === 'voyage' || kind === 'stars') world?.completeVoyage?.();
+  } finally {
+    finishingJourney = false;
+  }
 }
 function save() {
   try { if (sessionStorage.getItem('xing-inject')) return; } catch { /* still save */ }
@@ -1545,10 +1723,10 @@ $('placement-confirm').addEventListener('click', () => { if (started && !panels.
 $('placement-cancel').addEventListener('click', () => changeMode('gather'));
 $('jump-button').addEventListener('click', () => { if (started && !panels.isOpen()) world.jump(); });
 $('bounce-stop').addEventListener('click', () => { if (started) world.stopBounce(); });
-$('travel-home')?.addEventListener('click', () => { if (started) goHome(); });
+$('travel-home')?.addEventListener('click', () => { if (started && !startReturnJourney()) goHome(); });
 $('travel-go')?.addEventListener('click', () => { if (started && !panels?.isOpen()) startFerry(); });
 $('travel-skip')?.addEventListener('click', () => {
-  if (cutscene?.kind === 'ferry') finishCutscene();
+  if (scenicKind()) finishCutscene();
   else if (world?.balloon?.phase === 'voyage') { hideCutscene(); world.completeVoyage(); }
 });
 $('letter-close')?.addEventListener('click', () => { const card = $('letter-card'); if (card) card.hidden = true; });
@@ -1571,23 +1749,18 @@ $('ri-flag')?.addEventListener('click', () => {
   toast(result.message, result.ok);
   world?.sync(game.state);
 });
-$('balloon-voyage')?.addEventListener('click', () => {
-  if (!started || !world?.startVoyage?.('ri')) return;
-  showCutscene(VOYAGE_NOTE, 'ri');
-  showBalloon(world.balloonLook());
-});
+$('balloon-voyage')?.addEventListener('click', () => { startBalloonJourney('ri'); });
 $('balloon-stars')?.addEventListener('click', () => {
-  if (!started || !XING_OPEN || !world?.startVoyage?.('xing')) return;
-  showStar('飞向星星');
-  showBalloon(world.balloonLook());
+  if (!XING_OPEN) return;
+  startBalloonJourney('xing');
 });
 $('balloon-return')?.addEventListener('click', () => {
   if (!started || (game.state.travel?.current || 'he') !== 'xing') return;
   if (!world.balloon) { pendingHomeFlight = true; world.startBalloon(); return; }
   if (world.balloon.phase === 'lift') { pendingHomeFlight = true; return; }
-  if (world.balloon.phase === 'tour' && world.startVoyage('he')) showStar('飞回河谷');
+  if (world.balloon.phase === 'tour' && world.startVoyage('he')) beginStarReturn();
 });
-$('star-skip')?.addEventListener('click', () => { if (cutscene?.kind === 'stars') finishCutscene(); });
+$('star-skip')?.addEventListener('click', () => { if (scenicKind()) finishCutscene(); });
 $('xing-lab')?.addEventListener('click', () => { if (started) openXing('lab'); });
 $('xing-crystal')?.addEventListener('click', () => { if (started) openXing('crystal'); });
 $('xing-gugu')?.addEventListener('click', () => { if (started) openXing('gugu'); });
@@ -1599,9 +1772,8 @@ $('xing-case')?.addEventListener('click', () => {
 $('xing-stamps')?.addEventListener('click', () => openPanel('stamps'));
 $('xing-sheet')?.addEventListener('click', handleXingSheet);
 $('balloon-voyage-mei')?.addEventListener('click', () => {
-  if (!started || !REALMS.mei?.playable || !world?.startVoyage?.('mei')) return;
-  showCutscene(VOYAGE_MEI_NOTE, 'mei');
-  showBalloon(world.balloonLook());
+  if (!REALMS.mei?.playable) return;
+  startBalloonJourney('mei');
 });
 $('travel-go-mei')?.addEventListener('click', () => { if (started && !panels?.isOpen()) startFerry('mei'); });
 $('mei-letter-close')?.addEventListener('click', () => { const card = $('mei-letter'); if (card) card.hidden = true; });
@@ -1611,6 +1783,14 @@ for (const [id, panel] of [['mei-maple', 'maple'], ['mei-project', 'project'], [
 $('mei-stamps')?.addEventListener('click', () => { if (started) openPanel('stamps'); });
 $('balloon-land')?.addEventListener('click', () => {
   if (!started || !world) return;
+  const ride = journeyDirector.status();
+  if (ride.active && ride.via === 'balloon') {
+    if (!ride.canLand || !journeyDirector.land()) return;
+    balloonPanelOpen = false;
+    paintJourneyChip();
+    toast('好，快要到了。');
+    return;
+  }
   if (world.balloon?.phase === 'voyage') {
     if (!world.landFromVoyage()) return;
     balloonPanelOpen = false;
@@ -1622,11 +1802,25 @@ $('balloon-land')?.addEventListener('click', () => {
   toast('好，热气球自己飞回草坪基地。');
 });
 $('balloon-chip')?.addEventListener('click', () => {
-  if (!started || world?.balloon?.phase !== 'voyage') return;
+  const ride = journeyDirector.status();
+  const scenic = ride.active && ride.via === 'balloon';
+  if (!started || (!scenic && world?.balloon?.phase !== 'voyage')) return;
   balloonPanelOpen = !balloonPanelOpen;
-  showBalloon(world.balloonLook());
+  if (world?.balloonLook && world.balloon) showBalloon(world.balloonLook());
+  paintJourneyChip();
 });
 $('balloon-reroute')?.addEventListener('click', () => {
+  const ride = journeyDirector.status();
+  if (ride.active && ride.via === 'balloon') {
+    const next = nextDivertRealm(ride.destination);
+    if (!ride.canDivert || !next) return;
+    balloonPanelOpen = false;
+    if (!journeyDirector.divert(next)) return;
+    if (world?.balloonLook && world.balloon) showBalloon(world.balloonLook());
+    paintJourneyChip();
+    toast(`改去${journeyDirector.status().destinationName}。`);
+    return;
+  }
   if (!started || !world?.rerouteVoyage()) return;
   balloonPanelOpen = false;
   showBalloon(world.balloonLook());
@@ -1816,14 +2010,12 @@ function frame(now) {
   const dt = Math.min(elapsed, .05); lastFrame = now;
   if (world && !document.hidden && !switching) {
     const input = { x: joystick.x + (keys.has('d') || keys.has('arrowright') ? 1 : 0) - (keys.has('a') || keys.has('arrowleft') ? 1 : 0), z: joystick.z + (keys.has('s') || keys.has('arrowdown') ? 1 : 0) - (keys.has('w') || keys.has('arrowup') ? 1 : 0) };
-    const holding = !!cutscene && cutscene.kind === 'ferry';
+    const holding = scenicKind();
     const sheet = riSheetOpen();
     setRiSound(game.state.settings.sound);
+    if (holding) world.holdPaint = true;
     world.update(dt, sheet ? { x: 0, z: 0 } : input, !started || panels.isOpen() || holding); storePlayer();
-    if (cutscene?.kind === 'ferry' || cutscene?.kind === 'stars') {
-      const done = cutscene.tick(dt, { paused: !started || panelType === 'pause' || panels.isOpen(), hidden: false });
-      if (done) finishCutscene();
-    }
+    tickScenic(dt);
     paintVistaHud();
     if (started && panelType !== 'pause') game.tick(elapsed);
     uiTime += dt; savedTime += dt;
@@ -1837,7 +2029,7 @@ bindOverlayLayout();
 requestAnimationFrame(frame);
 
 // The browser checks inspect state and exercise the same actions used by the UI.
-window.__valley = { game, toast, get world() { return world; }, get panels() { return panels; }, get story() { return storyApi(); }, touring, start, openPanel, selectItem, changeMode, interact, goHome, goRealm, goXing, openXing, closeXing, startFerry, sceneStats, missingAudio: () => [...missingAudio], voiceReady, playerName: () => playerName, setBuildCell: cell => { buildCell = cell; updateContext(); }, gravityCompare, advanceCrystal: (seconds, flags = {}) => { if (flags?.paused || flags?.hidden) return game.crystalStatus(); game.tick(seconds); return game.crystalStatus(); }, setAge: (band) => { const known = ['little', 'bigger', 'older', 'junior', 'senior']; tutorBand = known.includes(band) ? band : 'little'; }, step(dt = 0.05) { if (!world || world.released || switching) return { realm: game.state.travel?.current || 'he', phase: null, holo: null }; world.update(dt, { x: 0, z: 0 }, false); if (cutscene?.kind === 'stars' || cutscene?.kind === 'ferry') { const done = cutscene.tick(dt, { paused: panelType === 'pause' || !!panels?.isOpen(), hidden: false }); if (done) finishCutscene(); } paintTravel(); return { realm: game.state.travel?.current || 'he', phase: world.balloon?.phase || null, cutscene: cutscene?.kind || null, holo: world.holo?.phase || null }; }, enterHolo() { return world?.beginHolo?.() || false; }, skipHolo() { return world?.skipHolo?.() || false; }, leaveHolo() { return world?.leaveHolo?.() || false; }, holoPhase() { return world?.holo?.phase || 'off'; }, openHoloStage(id) { holoUi?.openStage(id); }, peekStage() { return holoUi?.peek?.() || null; }, setNight(value) { if (world) world.nightOverride = value; if (world) world.vistaMomentOverride = value ? { period: '晚上' } : null; }, sampleStats() { return world?.sampleStats?.() || null; }, quality() { return world?.qualityMode || game.state.settings?.quality || null; } };
+window.__valley = { game, toast, get world() { return world; }, get panels() { return panels; }, get story() { return storyApi(); }, touring, start, openPanel, selectItem, changeMode, interact, goHome, goRealm, goXing, openXing, closeXing, startFerry, journey: journeyApi, sceneStats, missingAudio: () => [...missingAudio], voiceReady, playerName: () => playerName, setBuildCell: cell => { buildCell = cell; updateContext(); }, gravityCompare, advanceCrystal: (seconds, flags = {}) => { if (flags?.paused || flags?.hidden) return game.crystalStatus(); game.tick(seconds); return game.crystalStatus(); }, setAge: (band) => { const known = ['little', 'bigger', 'older', 'junior', 'senior']; tutorBand = known.includes(band) ? band : 'little'; }, step(dt = 0.05) { if (!world || world.released || switching) return { realm: game.state.travel?.current || 'he', phase: null, holo: null }; const holding = scenicKind(); if (holding) world.holdPaint = true; world.update(dt, { x: 0, z: 0 }, holding); tickScenic(dt); paintTravel(); return { realm: game.state.travel?.current || 'he', phase: world.balloon?.phase || null, cutscene: cutscene?.kind || null, holo: world.holo?.phase || null, journey: journeyDirector.status() }; }, enterHolo() { return world?.beginHolo?.() || false; }, skipHolo() { return world?.skipHolo?.() || false; }, leaveHolo() { return world?.leaveHolo?.() || false; }, holoPhase() { return world?.holo?.phase || 'off'; }, openHoloStage(id) { holoUi?.openStage(id); }, peekStage() { return holoUi?.peek?.() || null; }, setNight(value) { if (world) world.nightOverride = value; if (world) world.vistaMomentOverride = value ? { period: '晚上' } : null; }, sampleStats() { return world?.sampleStats?.() || null; }, quality() { return world?.qualityMode || game.state.settings?.quality || null; } };
 window.render_game_to_text = () => JSON.stringify({
   coords: 'world x/east, y/up, z/south; integer building grid',
   started, mode, selectedItem, rotation, buildCell, panel: panels?.type() ?? null,

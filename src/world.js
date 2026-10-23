@@ -1596,7 +1596,7 @@ export class RiverWorld {
     this.storyFrame?.(dt, paused);
     if (this.fastDirty) rebuildFastBatch(this);
     refreshFastLive(this);
-    this.renderer.render(this.scene,this.camera);this.positionLabels();if(Math.floor(this.time*5)!==this.lastMapTime){this.lastMapTime=Math.floor(this.time*5);this.drawMinimap();}
+    if (!this.holdPaint) this.renderer.render(this.scene, this.camera); this.positionLabels(); if (Math.floor(this.time * 5) !== this.lastMapTime) { this.lastMapTime = Math.floor(this.time * 5); this.drawMinimap(); }
     return this.playerPosition;
   }
   resize(){const w=this.canvas.clientWidth,h=this.canvas.clientHeight;if(!w||!h)return;const cap=this.pictureQuality==='fine'?1.8:(this.pictureQuality==='fast'?1.15:1.8);this.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,cap));this.renderer.setSize(w,h,false);this.camera.aspect=w/h;this.camera.updateProjectionMatrix();if(w<600)this.distance=Math.min(this.distance,18);}
